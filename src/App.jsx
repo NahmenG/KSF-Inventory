@@ -5,7 +5,8 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
-  Download, Plus, Database, AlertCircle, Calendar, Clock
+  Download, Plus, Database, AlertCircle, Calendar, Clock, 
+  Pencil, Trash2, X
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -13,7 +14,6 @@ import { supabase } from './supabaseClient';
 const DataService = {
   async getStock(isGuest) {
     if (isGuest) return JSON.parse(localStorage.getItem('ksf_stock') || '[]');
-    // Fetch ALL rolls (both stock and dispatched)
     const { data, error } = await supabase.from('rolls').select('*').order('created_at', { ascending: false });
     return error ? [] : data;
   },
@@ -41,6 +41,16 @@ const DataService = {
       return;
     }
     await supabase.from('rolls').update(updates).eq('id', id);
+  },
+
+  async deleteRoll(id, isGuest) {
+    if (isGuest) {
+      let stock = await this.getStock(true);
+      stock = stock.filter(r => r.id !== id);
+      localStorage.setItem('ksf_stock', JSON.stringify(stock));
+      return;
+    }
+    await supabase.from('rolls').delete().eq('id', id);
   },
 
   async getRawMaterials(isGuest) {
@@ -174,7 +184,51 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => {
   );
 };
 
-const StockView = ({ rolls, onPrint, onExport }) => {
+const EditModal = ({ roll, onClose, onSave }) => {
+    const [editData, setEditData] = useState({ ...roll });
+
+    return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white p-5 rounded-xl max-w-lg w-full">
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                        <Pencil size={18} className="text-blue-600"/> Edit Details
+                    </h2>
+                    <button onClick={onClose}><X size={24} className="text-gray-400 hover:text-red-500"/></button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="col-span-2">
+                         <label className="text-xs font-bold text-gray-500 uppercase">Customer</label>
+                         <input className="w-full border p-2 rounded" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} />
+                    </div>
+                    <div>
+                         <label className="text-xs font-bold text-gray-500 uppercase">Quality</label>
+                         <input className="w-full border p-2 rounded" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})} />
+                    </div>
+                    <div>
+                         <label className="text-xs font-bold text-gray-500 uppercase">Color</label>
+                         <input className="w-full border p-2 rounded" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} />
+                    </div>
+                    <div>
+                         <label className="text-xs font-bold text-gray-500 uppercase">Net Weight</label>
+                         <input type="number" className="w-full border p-2 rounded font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} />
+                    </div>
+                     <div>
+                         <label className="text-xs font-bold text-gray-500 uppercase">Gross Weight</label>
+                         <input type="number" className="w-full border p-2 rounded" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} />
+                    </div>
+                </div>
+
+                <button onClick={() => onSave(editData)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold">
+                    Save Changes
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const StockView = ({ rolls, onPrint, onExport, onEdit, onDelete }) => {
   const [filter, setFilter] = useState('');
   const filtered = rolls.filter(r => r.status === 'in_stock' && (
       (r.product_id || '').toLowerCase().includes(filter.toLowerCase()) || 
@@ -196,22 +250,34 @@ const StockView = ({ rolls, onPrint, onExport }) => {
 
           <div className="flex-1 overflow-y-auto pb-20">
             {filtered.map(r => (
-                <div key={r.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span>
-                            <span className="text-xs font-bold text-gray-500 uppercase">{r.quality}</span>
+                <div key={r.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span>
+                                <span className="text-xs font-bold text-gray-500 uppercase">{r.quality}</span>
+                            </div>
+                            <div className="text-gray-900 font-medium">
+                                {r.color} • {r.width_inches}" • {r.gsm} GSM
+                            </div>
+                            <div className="text-sm text-gray-500 mt-1">
+                                Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m
+                            </div>
                         </div>
-                        <div className="text-gray-900 font-medium">
-                            {r.color} • {r.width_inches}" • {r.gsm} GSM
-                        </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                            Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m
-                        </div>
+                        <button onClick={() => onPrint(r)} className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg">
+                            <Printer size={20}/>
+                        </button>
                     </div>
-                    <button onClick={() => onPrint(r)} className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg">
-                        <Printer size={20}/>
-                    </button>
+
+                    {/* Edit/Delete Actions */}
+                    <div className="flex gap-2 border-t pt-2 mt-1">
+                        <button onClick={() => onEdit(r)} className="flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium text-slate-700 bg-slate-50 rounded-lg hover:bg-slate-100">
+                            <Pencil size={16}/> Edit
+                        </button>
+                        <button onClick={() => onDelete(r.id)} className="flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
+                            <Trash2 size={16}/> Delete
+                        </button>
+                    </div>
                 </div>
             ))}
             {filtered.length === 0 && <div className="text-center text-gray-400 py-10">No Stock Found</div>}
@@ -221,7 +287,6 @@ const StockView = ({ rolls, onPrint, onExport }) => {
 };
 
 const HistoryView = ({ rolls }) => {
-    // Filter only dispatched items and sort by dispatched date
     const history = rolls
         .filter(r => r.status === 'dispatched')
         .sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
@@ -230,7 +295,6 @@ const HistoryView = ({ rolls }) => {
 
     return (
         <div className="space-y-4 h-full flex flex-col">
-            {/* Summary Card */}
             <div className="bg-slate-800 text-white p-5 rounded-xl shadow-md">
                 <div className="flex items-center gap-2 mb-2 text-slate-300 text-sm uppercase font-bold tracking-wider">
                     <Clock size={16}/> Dispatch Log
@@ -247,7 +311,6 @@ const HistoryView = ({ rolls }) => {
                 </div>
             </div>
 
-            {/* List */}
             <div className="flex-1 overflow-y-auto pb-20">
                 {history.map(r => (
                     <div key={r.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 relative">
@@ -425,7 +488,10 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [rolls, setRolls] = useState([]);
   const [materials, setMaterials] = useState([]);
+  
+  // Modals state
   const [printData, setPrintData] = useState(null);
+  const [editRoll, setEditRoll] = useState(null);
   
   const [formData, setFormData] = useState({
     customer_name: '', quality: '', gsm: '', color: '', 
@@ -506,6 +572,19 @@ export default function App() {
       fetchData(isGuest);
   };
 
+  const handleDeleteRoll = async (id) => {
+      if(window.confirm("Are you sure you want to delete this roll permanently?")) {
+          await DataService.deleteRoll(id, isGuest);
+          fetchData(isGuest);
+      }
+  };
+
+  const handleEditRoll = async (updates) => {
+      await DataService.updateRoll(updates.id, updates, isGuest);
+      setEditRoll(null);
+      fetchData(isGuest);
+  };
+
   const handleMaterialUpdate = async (id, qty, isAdd) => {
       await DataService.updateRawMaterial(id, qty, isAdd, isGuest);
       fetchData(isGuest);
@@ -550,7 +629,13 @@ export default function App() {
                     <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />
                 )}
                 {activeTab === 'stock' && (
-                    <StockView rolls={rolls} onPrint={setPrintData} onExport={handleExport} />
+                    <StockView 
+                        rolls={rolls} 
+                        onPrint={setPrintData} 
+                        onExport={handleExport} 
+                        onEdit={setEditRoll}
+                        onDelete={handleDeleteRoll}
+                    />
                 )}
                 {activeTab === 'dispatch' && (
                     <DispatchView rolls={rolls} onDispatch={handleDispatch} />
@@ -565,7 +650,9 @@ export default function App() {
         )}
       </main>
 
+      {/* Modals */}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
+      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={handleEditRoll} />}
     </div>
   );
 }
