@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Barcode from 'react-barcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X
+  Pencil, Trash2, X, Camera, EyeOff, Eye
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -57,6 +57,17 @@ const DataService = {
     if (isGuest) return JSON.parse(localStorage.getItem('ksf_materials') || '[]'); 
     const { data, error } = await supabase.from('raw_materials').select('*').order('name');
     return error ? [] : data;
+  },
+
+  async addRawMaterial(name, isGuest) {
+      const newMat = { name, stock_quantity: 0, unit: 'kg' };
+      if (isGuest) {
+          let mats = await this.getRawMaterials(true);
+          mats.push({ ...newMat, id: crypto.randomUUID() });
+          localStorage.setItem('ksf_materials', JSON.stringify(mats));
+          return;
+      }
+      await supabase.from('raw_materials').insert([newMat]);
   },
 
   async updateRawMaterial(id, qty, isAddition, isGuest) {
@@ -184,51 +195,100 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => {
   );
 };
 
-const EditModal = ({ roll, onClose, onSave }) => {
-    const [editData, setEditData] = useState({ ...roll });
+// --- SCANNER COMPONENT ---
+const BarcodeScanner = ({ onScan }) => {
+    useEffect(() => {
+        const scanner = new Html5QrcodeScanner("reader", { 
+            fps: 10, 
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0
+        }, false);
+
+        scanner.render((text) => {
+            scanner.clear();
+            onScan(text);
+        }, (error) => {
+            console.warn(error);
+        });
+
+        return () => {
+            scanner.clear().catch(error => console.error("Failed to clear scanner", error));
+        };
+    }, [onScan]);
 
     return (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-            <div className="bg-white p-5 rounded-xl max-w-lg w-full">
-                <div className="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 className="text-lg font-bold flex items-center gap-2">
-                        <Pencil size={18} className="text-blue-600"/> Edit Details
-                    </h2>
-                    <button onClick={onClose}><X size={24} className="text-gray-400 hover:text-red-500"/></button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="col-span-2">
-                         <label className="text-xs font-bold text-gray-500 uppercase">Customer</label>
-                         <input className="w-full border p-2 rounded" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} />
-                    </div>
-                    <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase">Quality</label>
-                         <input className="w-full border p-2 rounded" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})} />
-                    </div>
-                    <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase">Color</label>
-                         <input className="w-full border p-2 rounded" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} />
-                    </div>
-                    <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase">Net Weight</label>
-                         <input type="number" className="w-full border p-2 rounded font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} />
-                    </div>
-                     <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase">Gross Weight</label>
-                         <input type="number" className="w-full border p-2 rounded" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} />
-                    </div>
-                </div>
-
-                <button onClick={() => onSave(editData)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold">
-                    Save Changes
-                </button>
+        <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-white rounded-xl overflow-hidden p-4">
+                 <h3 className="text-center font-bold mb-2">Scan Roll Barcode</h3>
+                 <div id="reader" className="w-full"></div>
+                 <button onClick={() => onScan(null)} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Cancel</button>
             </div>
         </div>
     );
 };
 
-const StockView = ({ rolls, onPrint, onExport, onEdit, onDelete }) => {
+const EditModal = ({ roll, onClose, onSave, onDelete }) => {
+    const [editData, setEditData] = useState({ ...roll });
+
+    const handleDelete = () => {
+        if(window.confirm("PERMANENTLY DELETE this roll?")) {
+            onDelete(roll.id);
+            onClose();
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white p-5 rounded-xl max-w-lg w-full animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                        <Package size={18} className="text-blue-600"/> Roll Details
+                    </h2>
+                    <button onClick={onClose}><X size={24} className="text-gray-400 hover:text-red-500"/></button>
+                </div>
+
+                <div className="bg-blue-50 p-3 rounded-lg mb-4 text-center">
+                    <div className="text-xs text-blue-600 uppercase font-bold">Product ID</div>
+                    <div className="text-xl font-mono font-black text-blue-900">{roll.product_id}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="col-span-2">
+                         <label className="text-xs font-bold text-gray-500 uppercase">Customer</label>
+                         <input className="w-full border p-2.5 rounded-lg bg-gray-50" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} />
+                    </div>
+                    <div>
+                         <label className="text-xs font-bold text-gray-500 uppercase">Quality</label>
+                         <input className="w-full border p-2.5 rounded-lg" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})} />
+                    </div>
+                    <div>
+                         <label className="text-xs font-bold text-gray-500 uppercase">Color</label>
+                         <input className="w-full border p-2.5 rounded-lg" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} />
+                    </div>
+                    <div>
+                         <label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label>
+                         <input type="number" className="w-full border p-2.5 rounded-lg font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} />
+                    </div>
+                     <div>
+                         <label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label>
+                         <input type="number" className="w-full border p-2.5 rounded-lg" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} />
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <button onClick={() => onSave(editData)} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-blue-200">
+                        Save Changes
+                    </button>
+                    <button onClick={handleDelete} className="w-full bg-white border border-red-200 text-red-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50">
+                        <Trash2 size={18}/> Delete Roll
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   const [filter, setFilter] = useState('');
   const filtered = rolls.filter(r => r.status === 'in_stock' && (
       (r.product_id || '').toLowerCase().includes(filter.toLowerCase()) || 
@@ -250,34 +310,23 @@ const StockView = ({ rolls, onPrint, onExport, onEdit, onDelete }) => {
 
           <div className="flex-1 overflow-y-auto pb-20">
             {filtered.map(r => (
-                <div key={r.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex flex-col gap-3">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <div className="flex items-center gap-2 mb-1">
-                                <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span>
-                                <span className="text-xs font-bold text-gray-500 uppercase">{r.quality}</span>
-                            </div>
-                            <div className="text-gray-900 font-medium">
-                                {r.color} • {r.width_inches}" • {r.gsm} GSM
-                            </div>
-                            <div className="text-sm text-gray-500 mt-1">
-                                Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m
-                            </div>
+                <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center active:bg-blue-50 transition-colors cursor-pointer">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span>
+                            <span className="text-xs font-bold text-gray-500 uppercase">{r.quality}</span>
                         </div>
-                        <button onClick={() => onPrint(r)} className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg">
-                            <Printer size={20}/>
-                        </button>
+                        <div className="text-gray-900 font-medium">
+                            {r.color} • {r.width_inches}" • {r.gsm} GSM
+                        </div>
+                        <div className="text-sm text-gray-500 mt-1">
+                            Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m
+                        </div>
                     </div>
-
-                    {/* Edit/Delete Actions */}
-                    <div className="flex gap-2 border-t pt-2 mt-1">
-                        <button onClick={() => onEdit(r)} className="flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium text-slate-700 bg-slate-50 rounded-lg hover:bg-slate-100">
-                            <Pencil size={16}/> Edit
-                        </button>
-                        <button onClick={() => onDelete(r.id)} className="flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
-                            <Trash2 size={16}/> Delete
-                        </button>
-                    </div>
+                    {/* StopPropagation prevents opening the edit modal when clicking print */}
+                    <button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="p-3 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg">
+                        <Printer size={20}/>
+                    </button>
                 </div>
             ))}
             {filtered.length === 0 && <div className="text-center text-gray-400 py-10">No Stock Found</div>}
@@ -377,28 +426,42 @@ const Dashboard = ({ rolls, materials }) => {
 const DispatchView = ({ rolls, onDispatch }) => {
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
+    const [showScanner, setShowScanner] = useState(false);
 
-    const handleSearch = () => {
-        const roll = rolls.find(r => r.product_id === scanId && r.status === 'in_stock');
-        if (roll) setFoundRoll(roll);
+    const handleSearch = (idOverride) => {
+        const query = idOverride || scanId;
+        const roll = rolls.find(r => r.product_id === query && r.status === 'in_stock');
+        if (roll) {
+            setFoundRoll(roll);
+            setScanId(query);
+            setShowScanner(false);
+        }
         else alert('Roll not found or already dispatched.');
     };
 
     return (
         <div className="max-w-xl mx-auto space-y-4">
+            {showScanner && <BarcodeScanner onScan={(text) => { if(text) handleSearch(text); else setShowScanner(false); }} />}
+            
             <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center">
                 <div className="mb-4">
                     <h2 className="text-lg font-bold mb-2 text-gray-800">Scan Barcode</h2>
                     <input 
                         className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" 
-                        placeholder="TAP TO SCAN" 
+                        placeholder="Type or Scan" 
                         value={scanId}
                         onChange={(e) => setScanId(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                        autoFocus
                     />
                 </div>
-                <button onClick={handleSearch} className="w-full bg-gray-900 text-white py-3.5 rounded-xl font-bold">Find Product</button>
+                <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
+                        <Camera size={20}/> Camera
+                    </button>
+                    <button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">
+                        Search
+                    </button>
+                </div>
             </div>
 
             {foundRoll && (
@@ -418,7 +481,7 @@ const DispatchView = ({ rolls, onDispatch }) => {
     );
 };
 
-const MaterialsView = ({ materials, onUpdate }) => {
+const MaterialsView = ({ materials, onUpdate, onAdd }) => {
     const handleUpdate = (id, type) => {
         const qty = prompt(`Enter quantity to ${type} (Kg):`);
         if (qty && !isNaN(qty)) {
@@ -426,36 +489,51 @@ const MaterialsView = ({ materials, onUpdate }) => {
         }
     };
 
+    const handleAdd = () => {
+        const name = prompt("Enter Material Name (e.g. Vistamaxx, Omega, Red MB):");
+        if(name) onAdd(name);
+    };
+
     return (
-        <div className="grid grid-cols-1 gap-3 pb-20">
-            {materials.map(m => (
-                <div key={m.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-                    <div>
-                        <h3 className="font-bold text-gray-700 text-sm">{m.name}</h3>
-                        <div className="text-2xl font-black text-gray-900">{m.stock_quantity} <span className="text-xs font-medium text-gray-400">{m.unit}</span></div>
+        <div className="pb-20">
+            <button onClick={handleAdd} className="w-full bg-white border-2 border-dashed border-gray-300 text-gray-500 py-3 rounded-xl font-bold mb-4 hover:border-blue-400 hover:text-blue-500 transition-colors">
+                + Add New Material
+            </button>
+            <div className="grid grid-cols-1 gap-3">
+                {materials.map(m => (
+                    <div key={m.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                        <div>
+                            <h3 className="font-bold text-gray-700 text-sm">{m.name}</h3>
+                            <div className="text-2xl font-black text-gray-900">{m.stock_quantity} <span className="text-xs font-medium text-gray-400">{m.unit}</span></div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => handleUpdate(m.id, 'issue')} className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-bold border border-red-100">-</button>
+                            <button onClick={() => handleUpdate(m.id, 'add')} className="w-10 h-10 flex items-center justify-center bg-green-50 text-green-600 rounded-lg font-bold border border-green-100">+</button>
+                        </div>
                     </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => handleUpdate(m.id, 'issue')} className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-bold border border-red-100">-</button>
-                        <button onClick={() => handleUpdate(m.id, 'add')} className="w-10 h-10 flex items-center justify-center bg-green-50 text-green-600 rounded-lg font-bold border border-green-100">+</button>
-                    </div>
-                </div>
-            ))}
+                ))}
+            </div>
         </div>
     );
 };
 
 const LabelPrint = ({ data, onClose }) => {
+  const [showLogo, setShowLogo] = useState(true);
   if (!data) return null;
   const handlePrint = () => window.print();
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
       <div className="bg-white p-6 rounded-xl max-w-md w-full">
-        <div id="print-area" className="border-4 border-black p-4 mb-4 text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-                <img src="/logo.png" className="h-8 object-contain" alt="KSF" />
-                <h2 className="text-2xl font-bold">KSF Non-Woven</h2>
-            </div>
+        
+        {/* Print Preview Area */}
+        <div id="print-area" className="border-4 border-black p-4 mb-4 text-center bg-white">
+            {showLogo && (
+                <div className="flex items-center justify-center gap-2 mb-2">
+                    <img src="/logo.png" className="h-8 object-contain" alt="KSF" />
+                    <h2 className="text-2xl font-bold">KSF Non-Woven</h2>
+                </div>
+            )}
             <div className="grid grid-cols-2 text-left gap-y-1 text-sm border-t-2 border-black pt-2 mb-2 font-mono">
                 <div><strong>Quality:</strong> {data.quality}</div>
                 <div><strong>GSM:</strong> {data.gsm}</div>
@@ -469,11 +547,20 @@ const LabelPrint = ({ data, onClose }) => {
                 <Barcode value={data.product_id} width={2} height={50} fontSize={14} />
             </div>
         </div>
+
+        {/* Controls */}
+        <div className="mb-4 flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+             <span className="text-sm font-bold text-gray-600">Include Logo?</span>
+             <button onClick={() => setShowLogo(!showLogo)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${showLogo ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                 {showLogo ? 'YES' : 'NO'}
+             </button>
+        </div>
+
         <div className="flex gap-3 no-print">
-          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-2 rounded-lg flex items-center justify-center gap-2">
-            <Printer size={20} /> Print Label
+          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200">
+            <Printer size={20} /> Print
           </button>
-          <button onClick={onClose} className="flex-1 bg-gray-200 py-2 rounded-lg">Close</button>
+          <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold">Close</button>
         </div>
       </div>
     </div>
@@ -573,10 +660,8 @@ export default function App() {
   };
 
   const handleDeleteRoll = async (id) => {
-      if(window.confirm("Are you sure you want to delete this roll permanently?")) {
-          await DataService.deleteRoll(id, isGuest);
-          fetchData(isGuest);
-      }
+      await DataService.deleteRoll(id, isGuest);
+      fetchData(isGuest);
   };
 
   const handleEditRoll = async (updates) => {
@@ -587,6 +672,11 @@ export default function App() {
 
   const handleMaterialUpdate = async (id, qty, isAdd) => {
       await DataService.updateRawMaterial(id, qty, isAdd, isGuest);
+      fetchData(isGuest);
+  };
+
+  const handleAddMaterial = async (name) => {
+      await DataService.addRawMaterial(name, isGuest);
       fetchData(isGuest);
   };
 
@@ -633,8 +723,7 @@ export default function App() {
                         rolls={rolls} 
                         onPrint={setPrintData} 
                         onExport={handleExport} 
-                        onEdit={setEditRoll}
-                        onDelete={handleDeleteRoll}
+                        onSelectRoll={setEditRoll}
                     />
                 )}
                 {activeTab === 'dispatch' && (
@@ -644,7 +733,11 @@ export default function App() {
                     <HistoryView rolls={rolls} />
                 )}
                 {activeTab === 'materials' && (
-                    <MaterialsView materials={materials} onUpdate={handleMaterialUpdate} />
+                    <MaterialsView 
+                        materials={materials} 
+                        onUpdate={handleMaterialUpdate} 
+                        onAdd={handleAddMaterial}
+                    />
                 )}
             </>
         )}
@@ -652,7 +745,7 @@ export default function App() {
 
       {/* Modals */}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
-      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={handleEditRoll} />}
+      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
   );
 }
