@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import JsBarcode from 'jsbarcode';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -120,46 +120,63 @@ const DeviceNameModal = ({ onSave }) => {
     );
 };
 
-// --- FIXED CAMERA COMPONENT ---
-const BarcodeScanner = ({ onScan }) => {
+// --- FIXED CAMERA COMPONENT (ROBUST) ---
+const BarcodeScanner = ({ onScan, onClose }) => {
+    const [errorMsg, setErrorMsg] = useState('');
+    const scannerRef = useRef(null);
+
     useEffect(() => {
-        // Safety timeout to ensure DOM is ready and prevent double-render crash
-        const timer = setTimeout(() => {
-            const scanner = new Html5QrcodeScanner("reader", { 
-                fps: 10, 
-                qrbox: { width: 250, height: 250 }, 
-                aspectRatio: 1.0,
-                showTorchButtonIfSupported: true
-            }, false);
+        const html5QrCode = new Html5Qrcode("reader");
+        scannerRef.current = html5QrCode;
 
-            scanner.render((text) => {
-                scanner.clear();
-                onScan(text);
-            }, (error) => {
-                // Ignore scanning errors, they happen every frame if no code found
-            });
+        const startConfig = { fps: 10, qrbox: { width: 250, height: 250 } };
+        
+        html5QrCode.start(
+            { facingMode: "environment" }, 
+            startConfig,
+            (decodedText) => {
+                // Success
+                html5QrCode.stop().then(() => {
+                     onScan(decodedText);
+                }).catch(err => console.error("Stop failed", err));
+            },
+            (errorMessage) => {
+                // scanning, no code found yet (ignore)
+            }
+        ).catch(err => {
+            console.error(err);
+            setErrorMsg("Camera Error: " + err);
+        });
 
-            // Cleanup function to properly stop camera when component closes
-            return () => {
-                scanner.clear().catch(err => console.warn("Scanner clear error", err));
-            };
-        }, 500); // 500ms delay to let modal animation finish
-
-        return () => clearTimeout(timer);
+        return () => {
+            if(html5QrCode.isScanning) {
+                html5QrCode.stop().catch(err => console.error("Cleanup stop failed", err));
+            }
+            html5QrCode.clear();
+        };
     }, [onScan]);
 
     return (
         <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-sm bg-white rounded-xl overflow-hidden p-4">
                  <h3 className="text-center font-bold mb-2">Scan Roll Barcode</h3>
+                 
+                 {/* The ID must match the one used in new Html5Qrcode("reader") */}
                  <div id="reader" className="w-full bg-black min-h-[300px]"></div>
-                 <button onClick={() => onScan(null)} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Cancel</button>
+
+                 {errorMsg && (
+                    <div className="mt-2 bg-red-100 text-red-700 p-2 text-xs rounded text-center font-bold">
+                        {errorMsg}. Check permissions!
+                    </div>
+                 )}
+
+                 <button onClick={onClose} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Cancel</button>
             </div>
         </div>
     );
 };
 
-// --- FIXED LABEL PRINT COMPONENT ---
+// --- LABEL PRINT COMPONENT ---
 const LabelPrint = ({ data, onClose }) => {
   const [showLogo, setShowLogo] = useState(true);
   const canvasRef = useRef(null);
@@ -194,7 +211,6 @@ const LabelPrint = ({ data, onClose }) => {
                 <div><strong>Length:</strong> {data.length_meters}m</div><div><strong>Net Wt:</strong> {data.net_weight}kg</div>
                 <div><strong>Gross Wt:</strong> {data.gross_weight}kg</div>
             </div>
-            {/* Switched to Canvas for stability */}
             <div className="flex justify-center py-2">
                 <canvas ref={canvasRef}></canvas>
             </div>
@@ -310,7 +326,7 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch }) => {
     };
     return (
         <div className="max-w-xl mx-auto space-y-4">
-            {showScanner && <BarcodeScanner onScan={(text) => { if(text) handleSearch(text); else setShowScanner(false); }} />}
+            {showScanner && <BarcodeScanner onScan={(text) => { if(text) handleSearch(text); else setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
             <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center"><div className="mb-4"><h2 className="text-lg font-bold mb-2 text-gray-800">Scan Barcode</h2><input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Type or Scan" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/></div><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button><button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button></div></div>
             {foundRoll && (<div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4"><h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Ready to Dispatch</h3><div className="bg-white/50 p-3 rounded-lg grid grid-cols-2 gap-y-2 text-sm mb-4"><div className="text-gray-500">ID</div><div className="font-mono font-bold">{foundRoll.product_id}</div><div className="text-gray-500">Quality</div><div className="font-bold">{foundRoll.quality}</div><div className="text-gray-500">Weight</div><div className="font-bold">{foundRoll.net_weight} kg</div></div>{isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (<button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200">CONFIRM DISPATCH</button>)}</div>)}
             {!isGuest && sessionList.length > 0 && (<div className="bg-blue-50 border border-blue-200 p-5 rounded-xl mt-6"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-blue-900 flex items-center gap-2"><FileText size={20}/> Gate Pass Generator</h3><span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{sessionList.length} Items</span></div><input className="w-full border p-2 mb-2 rounded" placeholder="Buyer Name" value={challanDetails.buyer} onChange={e => setChallanDetails({...challanDetails, buyer: e.target.value})} /><input className="w-full border p-2 mb-4 rounded" placeholder="Vehicle No (e.g. UP 27 ...)" value={challanDetails.vehicle} onChange={e => setChallanDetails({...challanDetails, vehicle: e.target.value})} /><button onClick={handlePrintChallan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><Printer size={18}/> Download Gate Pass PDF</button></div>)}
