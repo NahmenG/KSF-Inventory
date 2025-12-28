@@ -190,12 +190,11 @@ const LabelPrint = ({ data, onClose }) => {
   // State initialization with fallbacks
   const [showLogo, setShowLogo] = useState(savedDesign.showLogo ?? true);
   const [labelSize, setLabelSize] = useState(savedDesign.labelSize || '4in-3in');
-  // Base font size for the whole label, scales everything
   const [baseFontSize, setBaseFontSize] = useState(savedDesign.baseFontSize || 16); 
   const [logoSize, setLogoSize] = useState(savedDesign.logoSize || 60);
   const [barcodeScale, setBarcodeScale] = useState(savedDesign.barcodeScale || 50);
 
-  // Content State (Labels remembered, Values from data)
+  // Content State
   const [content, setContent] = useState({
       qualityLabel: savedLabels.qualityLabel || 'QUALITY', qualityVal: data.quality,
       gsmLabel: savedLabels.gsmLabel || 'GSM', gsmVal: data.gsm,
@@ -207,7 +206,6 @@ const LabelPrint = ({ data, onClose }) => {
 
   const canvasRef = useRef(null);
 
-  // --- Auto-Save Effect ---
   useEffect(() => {
       const designSettings = { showLogo, labelSize, baseFontSize, logoSize, barcodeScale };
       const labelSettings = { 
@@ -225,7 +223,7 @@ const LabelPrint = ({ data, onClose }) => {
                   format: "CODE128", 
                   width: 2.5, 
                   height: barcodeScale, 
-                  displayValue: false, // Hide default text, we will add custom text below
+                  displayValue: false, 
                   margin: 0,
               }); 
           } catch (e) { console.error(e); }
@@ -239,7 +237,7 @@ const LabelPrint = ({ data, onClose }) => {
 
   const [width, height] = labelSize.split('-');
 
-  // --- DYNAMIC STYLES based on baseFontSize ---
+  // --- DYNAMIC STYLES ---
   const labelStyle = {
       background: 'transparent', border: 'none', width: '100%', outline: 'none', padding: 0, margin: 0,
       color: '#555', fontSize: `${baseFontSize * 0.7}px`, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em'
@@ -248,11 +246,10 @@ const LabelPrint = ({ data, onClose }) => {
       background: 'transparent', border: 'none', width: '100%', outline: 'none', padding: 0, margin: 0,
       color: '#000', fontSize: `${baseFontSize * 1.3}px`, fontWeight: '900', lineHeight: '1.1'
   };
-    const smallValueStyle = {
+  const smallValueStyle = {
       background: 'transparent', border: 'none', width: '100%', outline: 'none', padding: 0, margin: 0,
       color: '#000', fontSize: `${baseFontSize * 1.1}px`, fontWeight: '900', lineHeight: '1.1'
   };
-
 
   const printStyle = {
       width: width, height: height, backgroundColor: 'white', overflow: 'hidden',
@@ -260,7 +257,7 @@ const LabelPrint = ({ data, onClose }) => {
       padding: '8px', border: '4px solid black', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif'
   };
 
-  const section Border = { borderBottom: '2px solid black', paddingBottom: '4px', marginBottom: '4px' };
+  const sectionBorder = { borderBottom: '2px solid black', paddingBottom: '4px', marginBottom: '4px' };
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 overflow-y-auto">
@@ -304,13 +301,13 @@ const LabelPrint = ({ data, onClose }) => {
                 {/* Header: Logo centered */}
                 <div className="w-full flex justify-center pb-1" style={sectionBorder}>
                     {showLogo && <img src="/logo.png" style={{ height: `${logoSize}px`, objectFit: 'contain' }} alt="Logo" />}
-                    {!showLogo && <div style={{height: '10px'}}></div>} {/* Spacer if no logo */}
+                    {!showLogo && <div style={{height: '10px'}}></div>} 
                 </div>
 
-                {/* Main Body: Professional Block Layout */}
+                {/* Main Body */}
                 <div className="flex-1 flex flex-col justify-start">
                     
-                    {/* Primary Data Block (Quality / GSM / Size) */}
+                    {/* Primary Data Block */}
                     <div style={sectionBorder} className="grid grid-cols-3 gap-2">
                         <div className="col-span-2">
                              <input style={labelStyle} value={content.qualityLabel} onChange={e => handleChange('qualityLabel', e.target.value)} />
@@ -326,7 +323,7 @@ const LabelPrint = ({ data, onClose }) => {
                         </div>
                     </div>
 
-                     {/* Secondary Data Block (Weights & Color) - Split with dividers */}
+                     {/* Secondary Data Block */}
                     <div className="grid grid-cols-3 gap-2 mt-1" style={{...sectionBorder, borderBottom: 'none'}}>
                         <div style={{ borderRight: '2px solid #ccc', paddingRight: '4px' }}>
                             <input style={labelStyle} value={content.netLabel} onChange={e => handleChange('netLabel', e.target.value)} />
@@ -346,7 +343,6 @@ const LabelPrint = ({ data, onClose }) => {
                 {/* Footer: Barcode & ID */}
                 <div className="w-full flex flex-col items-center justify-end mt-2 pt-1 border-t-4 border-black">
                     <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
-                    {/* Human Readable ID below barcode */}
                     <div style={{ fontWeight: '900', fontSize: `${baseFontSize * 1.1}px`, fontFamily: 'monospace', marginTop: '-2px' }}>
                         {data.product_id}
                     </div>
@@ -355,7 +351,7 @@ const LabelPrint = ({ data, onClose }) => {
         </div>
 
         <div id="print-controls" className="flex gap-3 w-full mt-4">
-          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print</button>
+          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print Label</button>
           <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close</button>
         </div>
 
@@ -510,90 +506,46 @@ export default function App() {
   const [materials, setMaterials] = useState([]);
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
-  
-  // MODAL STATES
-  const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
-
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
 
-  const fetchDataRef = useRef();
-
-  const fetchData = useCallback(async (isBackground = false) => {
-      if (!isBackground) setLoading(true);
-      const r = await DataService.getStock();
-      const m = await DataService.getRawMaterials();
-      setRolls(r || []);
-      setMaterials(m || []);
-      if (!isBackground) setLoading(false);
+  useEffect(() => {
+    const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } };
+    checkSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session) { setIsGuest(false); fetchData(); } });
+    return () => subscription.unsubscribe();
   }, []);
 
-  fetchDataRef.current = fetchData;
-
-  useEffect(() => {
-    const checkSession = async () => { 
-        const { data: { session } } = await supabase.auth.getSession(); 
-        if (session) { setUser(session.user); setIsGuest(false); fetchData(); } 
-    };
-    checkSession();
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { 
-        setUser(session?.user ?? null); 
-        if (session && !user) { setIsGuest(false); fetchData(); } 
-    });
-    
-    const interval = setInterval(() => { 
-        if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); 
-    }, 10000);
-
-    return () => { subscription.unsubscribe(); clearInterval(interval); };
-  }, [fetchData]);
-
-  // Force open modal if device name is missing on login
-  useEffect(() => {
-      if(user && !isGuest && !deviceName) {
-          setDeviceModalOpen(true);
-      }
-  }, [user, isGuest, deviceName]);
-
+  const fetchData = async () => { setLoading(true); const r = await DataService.getStock(); const m = await DataService.getRawMaterials(); setRolls(r || []); setMaterials(m || []); setLoading(false); };
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
   const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
-  
-  const handleSaveDeviceName = (name) => { 
-      localStorage.setItem('ksf_device_name', name); 
-      setDeviceName(name); 
-      setDeviceModalOpen(false); 
-  };
-
+  const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); };
   const handleSaveRoll = async (e) => { e.preventDefault(); const id = `KSF-${Math.floor(Math.random() * 1000000)}`; const newRoll = { ...formData, product_id: id, status: 'in_stock' }; try { await DataService.addRoll(newRoll, deviceName); setPrintData(newRoll); fetchData(); setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); } catch (err) { alert('Error: ' + err.message); } };
-  const handleDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
+  const handleDispatch = async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(); };
   const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
-  const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
+  const handleEditRoll = async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(); };
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
   const handleAddMaterial = async (name) => { await DataService.addRawMaterial(name); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
 
   if (!user && !isGuest) { return (<div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6"><div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100"><img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" /><h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1><p className="text-gray-500 mb-8">Manage your factory floor efficiently.</p><button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200">Login with Google</button><button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold hover:bg-gray-50 transition border border-gray-200 flex items-center justify-center gap-2"><Eye size={20}/> Monitor Only (Guest)</button></div></div>); }
+  if (user && !deviceName && !isGuest) { return <DeviceNameModal onSave={handleSaveDeviceName} />; }
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pb-10">
-      <Header user={user} isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} onEditDeviceName={() => setDeviceModalOpen(true)} />
+      <Header user={user} isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading ? ( <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div> ) : (
             <>
                 {activeTab === 'dashboard' && <Dashboard rolls={rolls} materials={materials} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
-                {/* Ensure onUpdateRoll is passed to DispatchView */}
-                {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUpdateRoll={handleEditRoll} />}
+                {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={setEditRoll} onExport={handleExport} />}
                 {activeTab === 'materials' && <MaterialsView materials={materials} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
             </>
         )}
       </main>
-      
-      {/* MODALS RENDERED HERE TO AVOID BLOCKING UI */}
-      {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
       {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
