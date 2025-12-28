@@ -11,7 +11,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -120,10 +120,12 @@ const DeviceNameModal = ({ onSave }) => {
     );
 };
 
-// --- STABLE BARCODE SCANNER (WASM ENGINE) ---
+// --- ZOOM-ENABLED BARCODE SCANNER ---
 const BarcodeScanner = ({ onScan, onClose }) => {
     const scannerRef = useRef(null);
     const [isMounted, setIsMounted] = useState(true);
+    const [zoom, setZoom] = useState(1);
+    const [capabilities, setCapabilities] = useState(null);
 
     useEffect(() => {
         setIsMounted(true);
@@ -133,29 +135,25 @@ const BarcodeScanner = ({ onScan, onClose }) => {
             const html5QrCode = new Html5Qrcode("reader");
             scannerRef.current = html5QrCode;
 
-            // CONFIG: Faster FPS, Lower Res (Better for scanning), Specific Formats
             const config = { 
-                fps: 20, // Fast scanning
-                qrbox: { width: 300, height: 150 },
+                fps: 15, 
+                qrbox: { width: 280, height: 180 }, // Wide box
                 aspectRatio: 1.0,
-                // Removed 'experimentalFeatures' to ensure stability
-                formatsToSupport: [
-                    Html5QrcodeSupportedFormats.CODE_128,
-                    Html5QrcodeSupportedFormats.CODE_39,
-                    Html5QrcodeSupportedFormats.EAN_13,
-                    Html5QrcodeSupportedFormats.QR_CODE
-                ]
+                formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128 ]
             };
             
-            // Standard Camera Config (Back Camera)
             html5QrCode.start(
                 { facingMode: "environment" }, 
                 config,
-                (decodedText) => {
-                    if (isMounted) onScan(decodedText);
-                },
-                () => {} // Ignore errors
-            ).catch(err => console.log("Camera Error", err));
+                (decodedText) => { if (isMounted) onScan(decodedText); },
+                () => {} 
+            ).then(() => {
+                // Get Camera Capabilities for Zoom
+                const track = html5QrCode.getRunningTrackCameraCapabilities();
+                if(track && track.zoomFeature()) {
+                    setCapabilities(track);
+                }
+            }).catch(err => console.log("Camera Error", err));
         }, 300);
 
         return () => {
@@ -163,21 +161,47 @@ const BarcodeScanner = ({ onScan, onClose }) => {
             clearTimeout(initTimer);
             if (scannerRef.current) {
                 try {
-                    scannerRef.current.stop().then(() => {
-                        scannerRef.current.clear();
-                    }).catch(err => console.log("Stop Error", err));
-                } catch (e) {
-                    console.log("Cleanup Error", e);
-                }
+                    scannerRef.current.stop().then(() => scannerRef.current.clear()).catch(e => console.log(e));
+                } catch (e) { console.log(e); }
             }
         };
     }, [onScan]);
+
+    const handleZoomChange = (e) => {
+        const newZoom = Number(e.target.value);
+        setZoom(newZoom);
+        if(scannerRef.current && capabilities) {
+            scannerRef.current.applyVideoConstraints({
+                focusMode: "continuous",
+                advanced: [{ zoom: newZoom }]
+            });
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-sm bg-white rounded-xl overflow-hidden p-4">
                  <h3 className="text-center font-bold mb-2">Scan Roll Barcode</h3>
                  <div id="reader" className="w-full bg-black min-h-[300px]"></div>
+                 
+                 {/* ZOOM CONTROL */}
+                 {capabilities && (
+                     <div className="mt-4 px-2">
+                        <div className="flex justify-between text-xs font-bold text-gray-500 mb-1">
+                            <span>1x</span> <span className="flex items-center gap-1"><ZoomIn size={12}/> Zoom</span> <span>Max</span>
+                        </div>
+                        <input 
+                            type="range" 
+                            min={capabilities.zoomFeature().min()} 
+                            max={capabilities.zoomFeature().max()} 
+                            step="0.1" 
+                            value={zoom} 
+                            onChange={handleZoomChange}
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                     </div>
+                 )}
+
                  <button onClick={onClose} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Close Scanner</button>
             </div>
         </div>
@@ -299,11 +323,11 @@ const Dashboard = ({ rolls, materials }) => {
     );
 };
 
-// --- UPDATED DISPATCH VIEW (EDITABLE FIELDS) ---
+// --- DISPATCH VIEW (EDITABLE) ---
 const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) => {
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
-    const [editedRoll, setEditedRoll] = useState(null); // Local state for editing
+    const [editedRoll, setEditedRoll] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
     const [sessionList, setSessionList] = useState([]);
     const [challanDetails, setChallanDetails] = useState({ vehicle: '', buyer: '' });
@@ -313,7 +337,7 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
         const roll = rolls.find(r => r.product_id === query && r.status === 'in_stock');
         if (roll) { 
             setFoundRoll(roll); 
-            setEditedRoll({ ...roll }); // Create copy for editing
+            setEditedRoll({ ...roll });
             setScanId(query); 
             setShowScanner(false); 
         } else {
@@ -322,17 +346,11 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
     };
 
     const handleConfirmDispatch = async () => {
-        // 1. Update the roll details in DB first (in case weight changed)
         if (editedRoll.net_weight !== foundRoll.net_weight || editedRoll.customer_name !== foundRoll.customer_name) {
             await onUpdateRoll(editedRoll); 
         }
-        // 2. Dispatch it
         onDispatch(editedRoll.id);
-        
-        // 3. Add to session list for Challan
         setSessionList([...sessionList, editedRoll]);
-        
-        // 4. Reset
         setFoundRoll(null);
         setEditedRoll(null);
         setScanId('');
@@ -362,50 +380,20 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
             {foundRoll && editedRoll && (
                 <div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4">
                     <h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Ready to Dispatch</h3>
-                    
-                    {/* EDITABLE FIELDS SECTION */}
                     <div className="bg-white/70 p-4 rounded-lg grid grid-cols-2 gap-3 text-sm mb-4 border border-green-100">
-                        <div className="col-span-2 text-center border-b pb-2 mb-1">
-                            <span className="text-gray-500 text-xs">ID:</span> <span className="font-mono font-bold text-lg">{foundRoll.product_id}</span>
-                        </div>
-                        
-                        <div>
-                            <label className="text-xs text-gray-500 font-bold uppercase">Customer</label>
-                            <input className="w-full border p-2 rounded bg-white" value={editedRoll.customer_name || ''} onChange={e => setEditedRoll({...editedRoll, customer_name: e.target.value})} />
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-500 font-bold uppercase">Weight (Kg)</label>
-                            <input type="number" className="w-full border p-2 rounded bg-white font-bold text-green-800" value={editedRoll.net_weight} onChange={e => setEditedRoll({...editedRoll, net_weight: e.target.value})} />
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-500 font-bold uppercase">Quality</label>
-                            <input className="w-full border p-2 rounded bg-white" value={editedRoll.quality} onChange={e => setEditedRoll({...editedRoll, quality: e.target.value})} />
-                        </div>
-                         <div>
-                            <label className="text-xs text-gray-500 font-bold uppercase">Color</label>
-                            <input className="w-full border p-2 rounded bg-white" value={editedRoll.color} onChange={e => setEditedRoll({...editedRoll, color: e.target.value})} />
-                        </div>
+                        <div className="col-span-2 text-center border-b pb-2 mb-1"><span className="text-gray-500 text-xs">ID:</span> <span className="font-mono font-bold text-lg">{foundRoll.product_id}</span></div>
+                        <div><label className="text-xs text-gray-500 font-bold uppercase">Customer</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.customer_name || ''} onChange={e => setEditedRoll({...editedRoll, customer_name: e.target.value})} /></div>
+                        <div><label className="text-xs text-gray-500 font-bold uppercase">Weight (Kg)</label><input type="number" className="w-full border p-2 rounded bg-white font-bold text-green-800" value={editedRoll.net_weight} onChange={e => setEditedRoll({...editedRoll, net_weight: e.target.value})} /></div>
+                        <div><label className="text-xs text-gray-500 font-bold uppercase">Quality</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.quality} onChange={e => setEditedRoll({...editedRoll, quality: e.target.value})} /></div>
+                         <div><label className="text-xs text-gray-500 font-bold uppercase">Color</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.color} onChange={e => setEditedRoll({...editedRoll, color: e.target.value})} /></div>
                     </div>
-
-                    {isGuest ? (
-                        <div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>
-                    ) : (
-                        <button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200 flex items-center justify-center gap-2">
-                            <CheckCircle size={20}/> CONFIRM & DISPATCH
-                        </button>
-                    )}
+                    {isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (<button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200 flex items-center justify-center gap-2"><CheckCircle size={20}/> CONFIRM & DISPATCH</button>)}
                 </div>
             )}
 
             {!isGuest && sessionList.length > 0 && (
                 <div className="bg-blue-50 border border-blue-200 p-5 rounded-xl mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                         <h3 className="font-bold text-blue-900 flex items-center gap-2"><FileText size={20}/> Gate Pass Generator</h3>
-                         <span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{sessionList.length} Items</span>
-                    </div>
-                    <input className="w-full border p-2 mb-2 rounded" placeholder="Buyer Name" value={challanDetails.buyer} onChange={e => setChallanDetails({...challanDetails, buyer: e.target.value})} />
-                    <input className="w-full border p-2 mb-4 rounded" placeholder="Vehicle No (e.g. UP 27 ...)" value={challanDetails.vehicle} onChange={e => setChallanDetails({...challanDetails, vehicle: e.target.value})} />
-                    <button onClick={handlePrintChallan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><Printer size={18}/> Download Gate Pass PDF</button>
+                    <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-blue-900 flex items-center gap-2"><FileText size={20}/> Gate Pass Generator</h3><span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{sessionList.length} Items</span></div><input className="w-full border p-2 mb-2 rounded" placeholder="Buyer Name" value={challanDetails.buyer} onChange={e => setChallanDetails({...challanDetails, buyer: e.target.value})} /><input className="w-full border p-2 mb-4 rounded" placeholder="Vehicle No (e.g. UP 27 ...)" value={challanDetails.vehicle} onChange={e => setChallanDetails({...challanDetails, vehicle: e.target.value})} /><button onClick={handlePrintChallan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><Printer size={18}/> Download Gate Pass PDF</button>
                 </div>
             )}
         </div>
@@ -459,7 +447,7 @@ export default function App() {
                 {activeTab === 'dashboard' && <Dashboard rolls={rolls} materials={materials} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
-                {/* Updated DispatchView now accepts onUpdateRoll for instant editing */}
+                {/* Ensure onUpdateRoll is passed to DispatchView */}
                 {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUpdateRoll={handleEditRoll} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={setEditRoll} onExport={handleExport} />}
                 {activeTab === 'materials' && <MaterialsView materials={materials} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
