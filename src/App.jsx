@@ -6,38 +6,29 @@ import * as XLSX from 'xlsx';
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, Shield
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 // --- DATA SERVICE ---
 const DataService = {
   async getStock() {
-    // Fetch stock sorted by most recently updated
     const { data, error } = await supabase
         .from('rolls')
         .select('*')
-        .order('updated_at', { ascending: false }); // Shows recent changes first
+        .order('updated_at', { ascending: false });
     return error ? [] : data;
   },
 
   async addRoll(roll, deviceName) {
-    const rollWithDevice = { 
-        ...roll, 
-        device_name: deviceName,
-        updated_at: new Date()
-    };
+    const rollWithDevice = { ...roll, device_name: deviceName, updated_at: new Date() };
     const { data, error } = await supabase.from('rolls').insert([rollWithDevice]).select();
     if (error) throw error;
     return data[0];
   },
 
   async updateRoll(id, updates, deviceName) {
-    const updatesWithDevice = {
-        ...updates,
-        device_name: deviceName,
-        updated_at: new Date()
-    };
+    const updatesWithDevice = { ...updates, device_name: deviceName, updated_at: new Date() };
     await supabase.from('rolls').update(updatesWithDevice).eq('id', id);
   },
 
@@ -59,17 +50,13 @@ const DataService = {
     const { data } = await supabase.from('raw_materials').select('stock_quantity').eq('id', id).single();
     const currentQty = data ? parseFloat(data.stock_quantity) : 0;
     const newQty = currentQty + (isAddition ? parseFloat(qty) : -parseFloat(qty));
-    
-    await supabase.from('raw_materials').update({ 
-        stock_quantity: newQty,
-        last_updated_by: deviceName 
-    }).eq('id', id);
+    await supabase.from('raw_materials').update({ stock_quantity: newQty, last_updated_by: deviceName }).eq('id', id);
   }
 };
 
 // --- COMPONENTS ---
 
-const Header = ({ user, deviceName, onLogout, setTab, activeTab }) => (
+const Header = ({ user, isGuest, deviceName, onLogout, setTab, activeTab }) => (
   <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm safe-area-inset-top">
     <div className="flex justify-between items-center px-4 py-2 max-w-7xl mx-auto h-16">
       <div className="flex items-center gap-3 cursor-pointer" onClick={() => setTab('dashboard')}>
@@ -82,8 +69,16 @@ const Header = ({ user, deviceName, onLogout, setTab, activeTab }) => (
       
       <div className="flex items-center gap-3">
         <div className="text-right hidden md:block">
-            <div className="text-xs font-bold text-gray-900">{deviceName}</div>
-            <div className="text-[10px] text-gray-500">{user?.email}</div>
+            {isGuest ? (
+                <div className="flex items-center gap-1 text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
+                    <Eye size={12}/> View Only
+                </div>
+            ) : (
+                <>
+                    <div className="text-xs font-bold text-gray-900">{deviceName}</div>
+                    <div className="text-[10px] text-gray-500">{user?.email}</div>
+                </>
+            )}
         </div>
         <button onClick={onLogout} className="p-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
           <LogOut size={20} />
@@ -94,12 +89,13 @@ const Header = ({ user, deviceName, onLogout, setTab, activeTab }) => (
     <nav className="flex gap-1 px-2 overflow-x-auto no-scrollbar max-w-7xl mx-auto border-t border-gray-100 md:border-none">
       {[
         { id: 'dashboard', icon: Database, label: 'Dash' },
-        { id: 'entry', icon: Plus, label: 'New' },
+        // Hide Entry tab for guests
+        !isGuest && { id: 'entry', icon: Plus, label: 'New' },
         { id: 'stock', icon: Package, label: 'Stock' },
         { id: 'dispatch', icon: Truck, label: 'Dispatch' },
         { id: 'history', icon: Calendar, label: 'History' },
         { id: 'materials', icon: Layers, label: 'Materials' },
-      ].map(tab => (
+      ].filter(Boolean).map(tab => (
         <button
           key={tab.id}
           onClick={() => setTab(tab.id)}
@@ -125,71 +121,32 @@ const DeviceNameModal = ({ onSave }) => {
                 <Smartphone size={48} className="mx-auto text-blue-600 mb-4"/>
                 <h2 className="text-2xl font-bold mb-2">Name this Device</h2>
                 <p className="text-gray-500 mb-6">e.g., "Production Line 1", "Gate Phone", "Office PC"</p>
-                <input 
-                    className="w-full border-2 border-gray-300 p-3 rounded-xl text-lg mb-4 text-center focus:border-blue-600 outline-none"
-                    placeholder="Enter Device Name"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                />
-                <button 
-                    disabled={!name}
-                    onClick={() => onSave(name)} 
-                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-lg disabled:opacity-50"
-                >
-                    Save & Continue
-                </button>
+                <input className="w-full border-2 border-gray-300 p-3 rounded-xl text-lg mb-4 text-center focus:border-blue-600 outline-none" placeholder="Enter Device Name" value={name} onChange={e => setName(e.target.value)} />
+                <button disabled={!name} onClick={() => onSave(name)} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-lg disabled:opacity-50">Save & Continue</button>
             </div>
         </div>
     );
 };
 
-// ... (Existing NewProductView, BarcodeScanner, EditModal components remain the same) ...
+// ... (NewProductView, BarcodeScanner remain same) ...
 const NewProductView = ({ formData, setFormData, onSubmit }) => {
   return (
     <div className="max-w-xl mx-auto bg-white p-5 rounded-xl shadow-sm border border-gray-100 mt-2">
-      <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800 border-b pb-2">
-          <Plus className="text-blue-600" size={20}/> New Roll Entry
-      </h2>
+      <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800 border-b pb-2"><Plus className="text-blue-600" size={20}/> New Roll Entry</h2>
       <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3">
-        <div className="col-span-2">
-            <label className="text-xs font-bold text-gray-500 uppercase ml-1">Customer</label>
-            <input placeholder="Internal Name" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} />
-        </div>
-        <div>
-            <label className="text-xs font-bold text-gray-500 uppercase ml-1">Quality</label>
-            <input placeholder="Type" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.quality} onChange={e => setFormData({...formData, quality: e.target.value})} />
-        </div>
-        <div>
-            <label className="text-xs font-bold text-gray-500 uppercase ml-1">Color</label>
-            <input placeholder="Color" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} />
-        </div>
+        <div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Customer</label><input placeholder="Internal Name" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} /></div>
+        <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Quality</label><input placeholder="Type" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.quality} onChange={e => setFormData({...formData, quality: e.target.value})} /></div>
+        <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Color</label><input placeholder="Color" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} /></div>
         <div className="col-span-2 grid grid-cols-3 gap-3">
-            <div>
-                <label className="text-xs font-bold text-gray-500 uppercase ml-1">GSM</label>
-                <input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.gsm} onChange={e => setFormData({...formData, gsm: e.target.value})} />
-            </div>
-            <div>
-                <label className="text-xs font-bold text-gray-500 uppercase ml-1">Width (In)</label>
-                <input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.width_inches} onChange={e => setFormData({...formData, width_inches: e.target.value})} />
-            </div>
-            <div>
-                <label className="text-xs font-bold text-gray-500 uppercase ml-1">Length (m)</label>
-                <input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.length_meters} onChange={e => setFormData({...formData, length_meters: e.target.value})} />
-            </div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">GSM</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.gsm} onChange={e => setFormData({...formData, gsm: e.target.value})} /></div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Width (In)</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.width_inches} onChange={e => setFormData({...formData, width_inches: e.target.value})} /></div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Length (m)</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.length_meters} onChange={e => setFormData({...formData, length_meters: e.target.value})} /></div>
         </div>
         <div className="col-span-2 grid grid-cols-2 gap-3 bg-blue-50 p-3 rounded-lg border border-blue-100">
-             <div>
-                <label className="text-xs font-bold text-blue-800 uppercase ml-1">Net Kg</label>
-                <input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg font-bold text-blue-900" value={formData.net_weight} onChange={e => setFormData({...formData, net_weight: e.target.value})} />
-            </div>
-             <div>
-                <label className="text-xs font-bold text-blue-800 uppercase ml-1">Gross Kg</label>
-                <input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg" value={formData.gross_weight} onChange={e => setFormData({...formData, gross_weight: e.target.value})} />
-            </div>
+             <div><label className="text-xs font-bold text-blue-800 uppercase ml-1">Net Kg</label><input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg font-bold text-blue-900" value={formData.net_weight} onChange={e => setFormData({...formData, net_weight: e.target.value})} /></div>
+             <div><label className="text-xs font-bold text-blue-800 uppercase ml-1">Gross Kg</label><input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg" value={formData.gross_weight} onChange={e => setFormData({...formData, gross_weight: e.target.value})} /></div>
         </div>
-        <button type="submit" className="col-span-2 mt-2 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-blue-200">
-          Save & Print Label
-        </button>
+        <button type="submit" className="col-span-2 mt-2 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-blue-200">Save & Print Label</button>
       </form>
     </div>
   );
@@ -201,7 +158,6 @@ const BarcodeScanner = ({ onScan }) => {
         scanner.render((text) => { scanner.clear(); onScan(text); }, (error) => { console.warn(error); });
         return () => { scanner.clear().catch(error => console.error("Failed to clear scanner", error)); };
     }, [onScan]);
-
     return (
         <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-sm bg-white rounded-xl overflow-hidden p-4">
@@ -213,7 +169,7 @@ const BarcodeScanner = ({ onScan }) => {
     );
 };
 
-const EditModal = ({ roll, onClose, onSave, onDelete }) => {
+const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("PERMANENTLY DELETE this roll?")) { onDelete(roll.id); onClose(); } };
 
@@ -224,6 +180,9 @@ const EditModal = ({ roll, onClose, onSave, onDelete }) => {
                     <h2 className="text-lg font-bold flex items-center gap-2"><Package size={18} className="text-blue-600"/> Roll Details</h2>
                     <button onClick={onClose}><X size={24} className="text-gray-400 hover:text-red-500"/></button>
                 </div>
+                
+                {isGuest && <div className="bg-orange-50 text-orange-700 text-sm font-bold p-2 text-center rounded mb-4">Read Only Mode</div>}
+
                 <div className="bg-blue-50 p-3 rounded-lg mb-4 text-center">
                     <div className="text-xs text-blue-600 uppercase font-bold">Product ID</div>
                     <div className="text-xl font-mono font-black text-blue-900">{roll.product_id}</div>
@@ -231,23 +190,24 @@ const EditModal = ({ roll, onClose, onSave, onDelete }) => {
                 <div className="grid grid-cols-2 gap-3 mb-6">
                     <div className="col-span-2">
                          <label className="text-xs font-bold text-gray-500 uppercase">Customer</label>
-                         <input className="w-full border p-2.5 rounded-lg bg-gray-50" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} />
+                         <input disabled={isGuest} className="w-full border p-2.5 rounded-lg bg-gray-50" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} />
                     </div>
-                    <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><input className="w-full border p-2.5 rounded-lg" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><input className="w-full border p-2.5 rounded-lg" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border p-2.5 rounded-lg font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-2.5 rounded-lg" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><input disabled={isGuest} className="w-full border p-2.5 rounded-lg" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><input disabled={isGuest} className="w-full border p-2.5 rounded-lg" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input disabled={isGuest} type="number" className="w-full border p-2.5 rounded-lg font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input disabled={isGuest} type="number" className="w-full border p-2.5 rounded-lg" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} /></div>
                 </div>
-                <div className="flex flex-col gap-3">
-                    <button onClick={() => onSave(editData)} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-blue-200">Save Changes</button>
-                    <button onClick={handleDelete} className="w-full bg-white border border-red-200 text-red-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50"><Trash2 size={18}/> Delete Roll</button>
-                </div>
+                
+                {!isGuest && (
+                    <div className="flex flex-col gap-3">
+                        <button onClick={() => onSave(editData)} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-blue-200">Save Changes</button>
+                        <button onClick={handleDelete} className="w-full bg-white border border-red-200 text-red-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50"><Trash2 size={18}/> Delete Roll</button>
+                    </div>
+                )}
             </div>
         </div>
     );
 };
-
-// ... (Existing StockView, HistoryView, DispatchView, MaterialsView, LabelPrint - No major logic changes, just ensuring they use passed props) ...
 
 const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   const [filter, setFilter] = useState('');
@@ -287,10 +247,10 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   );
 };
 
+// ... (HistoryView, Dashboard remain same as previous version) ...
 const HistoryView = ({ rolls }) => {
     const history = rolls.filter(r => r.status === 'dispatched').sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
     const totalDispatchedWeight = history.reduce((acc, curr) => acc + parseFloat(curr.net_weight || 0), 0);
-
     return (
         <div className="space-y-4 h-full flex flex-col">
             <div className="bg-slate-800 text-white p-5 rounded-xl shadow-md">
@@ -322,9 +282,7 @@ const HistoryView = ({ rolls }) => {
 const Dashboard = ({ rolls, materials }) => {
     const totalRolls = rolls.filter(r => r.status === 'in_stock').length;
     const totalWeight = rolls.filter(r => r.status === 'in_stock').reduce((acc, curr) => acc + parseFloat(curr.net_weight || 0), 0);
-    // Recent Activity Logic (First 5 items)
     const recentActivity = rolls.slice(0, 5);
-    
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -339,7 +297,6 @@ const Dashboard = ({ rolls, materials }) => {
                     <div className="text-purple-200 text-xs mt-1">Kilograms</div>
                 </div>
             </div>
-
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                 <div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><Activity size={18} className="text-blue-500"/> Recent Activity</div>
                 <div className="space-y-3">
@@ -354,7 +311,6 @@ const Dashboard = ({ rolls, materials }) => {
                     ))}
                 </div>
             </div>
-
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                 <div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> Low Material Alerts</div>
                 <div className="space-y-2">
@@ -374,11 +330,10 @@ const Dashboard = ({ rolls, materials }) => {
     );
 };
 
-const DispatchView = ({ rolls, onDispatch }) => {
+const DispatchView = ({ rolls, isGuest, onDispatch }) => {
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
-
     const handleSearch = (idOverride) => {
         const query = idOverride || scanId;
         const roll = rolls.find(r => r.product_id === query && r.status === 'in_stock');
@@ -407,14 +362,18 @@ const DispatchView = ({ rolls, onDispatch }) => {
                         <div className="text-gray-500">Quality</div><div className="font-bold">{foundRoll.quality}</div>
                         <div className="text-gray-500">Weight</div><div className="font-bold">{foundRoll.net_weight} kg</div>
                     </div>
-                    <button onClick={() => { onDispatch(foundRoll.id); setFoundRoll(null); setScanId(''); }} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200">CONFIRM DISPATCH</button>
+                    {isGuest ? (
+                        <div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>
+                    ) : (
+                        <button onClick={() => { onDispatch(foundRoll.id); setFoundRoll(null); setScanId(''); }} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200">CONFIRM DISPATCH</button>
+                    )}
                 </div>
             )}
         </div>
     );
 };
 
-const MaterialsView = ({ materials, onUpdate, onAdd }) => {
+const MaterialsView = ({ materials, isGuest, onUpdate, onAdd }) => {
     const handleUpdate = (id, type) => {
         const qty = prompt(`Enter quantity to ${type} (Kg):`);
         if (qty && !isNaN(qty)) onUpdate(id, qty, type === 'add');
@@ -423,7 +382,9 @@ const MaterialsView = ({ materials, onUpdate, onAdd }) => {
 
     return (
         <div className="pb-20">
-            <button onClick={handleAdd} className="w-full bg-white border-2 border-dashed border-gray-300 text-gray-500 py-3 rounded-xl font-bold mb-4 hover:border-blue-400 hover:text-blue-500 transition-colors">+ Add New Material</button>
+            {!isGuest && (
+                <button onClick={handleAdd} className="w-full bg-white border-2 border-dashed border-gray-300 text-gray-500 py-3 rounded-xl font-bold mb-4 hover:border-blue-400 hover:text-blue-500 transition-colors">+ Add New Material</button>
+            )}
             <div className="grid grid-cols-1 gap-3">
                 {materials.map(m => (
                     <div key={m.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
@@ -432,10 +393,12 @@ const MaterialsView = ({ materials, onUpdate, onAdd }) => {
                             <div className="text-2xl font-black text-gray-900">{m.stock_quantity} <span className="text-xs font-medium text-gray-400">{m.unit}</span></div>
                             {m.last_updated_by && <div className="text-[9px] text-gray-400 mt-1">Updated by: {m.last_updated_by}</div>}
                         </div>
-                        <div className="flex gap-2">
-                            <button onClick={() => handleUpdate(m.id, 'issue')} className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-bold border border-red-100">-</button>
-                            <button onClick={() => handleUpdate(m.id, 'add')} className="w-10 h-10 flex items-center justify-center bg-green-50 text-green-600 rounded-lg font-bold border border-green-100">+</button>
-                        </div>
+                        {!isGuest && (
+                            <div className="flex gap-2">
+                                <button onClick={() => handleUpdate(m.id, 'issue')} className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-bold border border-red-100">-</button>
+                                <button onClick={() => handleUpdate(m.id, 'add')} className="w-10 h-10 flex items-center justify-center bg-green-50 text-green-600 rounded-lg font-bold border border-green-100">+</button>
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
@@ -443,6 +406,7 @@ const MaterialsView = ({ materials, onUpdate, onAdd }) => {
     );
 };
 
+// ... (LabelPrint remains same) ...
 const LabelPrint = ({ data, onClose }) => {
   const [showLogo, setShowLogo] = useState(true);
   if (!data) return null;
@@ -471,6 +435,7 @@ const LabelPrint = ({ data, onClose }) => {
 // --- MAIN APP ---
 export default function App() {
   const [user, setUser] = useState(null);
+  const [isGuest, setIsGuest] = useState(false);
   const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || '');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
@@ -485,12 +450,12 @@ export default function App() {
   useEffect(() => {
     const checkSession = async () => {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) { setUser(session.user); fetchData(); }
+        if (session) { setUser(session.user); setIsGuest(false); fetchData(); }
     };
     checkSession();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user ?? null);
-        if (session) fetchData();
+        if (session) { setIsGuest(false); fetchData(); }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -505,7 +470,8 @@ export default function App() {
   };
 
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setRolls([]); };
+  const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
+  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); };
 
   const handleSaveRoll = async (e) => {
@@ -525,7 +491,7 @@ export default function App() {
   const handleEditRoll = async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(); };
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
   const handleAddMaterial = async (name) => { await DataService.addRawMaterial(name); fetchData(); };
-
+  
   const handleExport = () => {
     const ws = XLSX.utils.json_to_sheet(rolls);
     const wb = XLSX.utils.book_new();
@@ -533,7 +499,7 @@ export default function App() {
     XLSX.writeFile(wb, "KSF_Stock_Report.xlsx");
   };
 
-  if (!user) {
+  if (!user && !isGuest) {
     return (
         <div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6">
             <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100">
@@ -541,31 +507,31 @@ export default function App() {
                 <h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1>
                 <p className="text-gray-500 mb-8">Manage your factory floor efficiently.</p>
                 <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200">Login with Google</button>
+                <button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold hover:bg-gray-50 transition border border-gray-200 flex items-center justify-center gap-2"><Eye size={20}/> Monitor Only (Guest)</button>
             </div>
         </div>
     );
   }
 
-  // Ask for device name if logged in but name not set
-  if (user && !deviceName) { return <DeviceNameModal onSave={handleSaveDeviceName} />; }
+  if (user && !deviceName && !isGuest) { return <DeviceNameModal onSave={handleSaveDeviceName} />; }
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pb-10">
-      <Header user={user} deviceName={deviceName} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} />
+      <Header user={user} isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading ? ( <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div> ) : (
             <>
                 {activeTab === 'dashboard' && <Dashboard rolls={rolls} materials={materials} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onExport={handleExport} onSelectRoll={setEditRoll} />}
-                {activeTab === 'dispatch' && <DispatchView rolls={rolls} onDispatch={handleDispatch} />}
+                {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} onDispatch={handleDispatch} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls} />}
-                {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
+                {activeTab === 'materials' && <MaterialsView materials={materials} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
             </>
         )}
       </main>
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
-      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
+      {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
   );
 }
