@@ -181,31 +181,44 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- POWERPOINT-STYLE EDITABLE LABEL COMPONENT ---
+// --- LABEL PRINT COMPONENT (Split Layout + Memory) ---
 const LabelPrint = ({ data, onClose }) => {
-  const [showLogo, setShowLogo] = useState(true);
-  const [labelSize, setLabelSize] = useState('4in-2in');
-  
-  // Design State
-  const [fontSize, setFontSize] = useState(12);
-  const [logoSize, setLogoSize] = useState(50);
-  const [barcodeScale, setBarcodeScale] = useState(40);
-  const [isBold, setIsBold] = useState(true);
-  const [textAlign, setTextAlign] = useState('left');
+  // --- Load Settings from Memory ---
+  const savedDesign = JSON.parse(localStorage.getItem('ksf_label_design') || '{}');
+  const savedLabels = JSON.parse(localStorage.getItem('ksf_label_labels') || '{}');
 
-  // Editable Content State (Init from data)
+  // State initialization with fallbacks
+  const [showLogo, setShowLogo] = useState(savedDesign.showLogo ?? true);
+  const [labelSize, setLabelSize] = useState(savedDesign.labelSize || '4in-2in');
+  const [fontSize, setFontSize] = useState(savedDesign.fontSize || 12);
+  const [logoSize, setLogoSize] = useState(savedDesign.logoSize || 50);
+  const [barcodeScale, setBarcodeScale] = useState(savedDesign.barcodeScale || 40);
+  const [isBold, setIsBold] = useState(savedDesign.isBold ?? true);
+  const [textAlign, setTextAlign] = useState(savedDesign.textAlign || 'left');
+
+  // Content State (Labels are remembered, Values come from current data)
   const [content, setContent] = useState({
-      qualityLabel: 'Quality:', qualityVal: data.quality,
-      gsmLabel: 'GSM:', gsmVal: data.gsm,
-      colorLabel: 'Color:', colorVal: data.color,
-      sizeLabel: 'Size:', sizeVal: `${data.width_inches}" / ${data.length_meters}m`,
-      netLabel: 'Net Wt:', netVal: `${data.net_weight} kg`,
-      grossLabel: 'Gross Wt:', grossVal: `${data.gross_weight} kg`
+      qualityLabel: savedLabels.qualityLabel || 'Quality:', qualityVal: data.quality,
+      gsmLabel: savedLabels.gsmLabel || 'GSM:', gsmVal: data.gsm,
+      colorLabel: savedLabels.colorLabel || 'Color:', colorVal: data.color,
+      sizeLabel: savedLabels.sizeLabel || 'Size:', sizeVal: `${data.width_inches}" / ${data.length_meters}m`,
+      netLabel: savedLabels.netLabel || 'Net Wt:', netVal: `${data.net_weight} kg`,
+      grossLabel: savedLabels.grossLabel || 'Gross Wt:', grossVal: `${data.gross_weight} kg`
   });
 
   const canvasRef = useRef(null);
 
-  // Barcode Render
+  // --- Auto-Save Effect ---
+  useEffect(() => {
+      const designSettings = { showLogo, labelSize, fontSize, logoSize, barcodeScale, isBold, textAlign };
+      const labelSettings = { 
+          qualityLabel: content.qualityLabel, gsmLabel: content.gsmLabel, colorLabel: content.colorLabel,
+          sizeLabel: content.sizeLabel, netLabel: content.netLabel, grossLabel: content.grossLabel
+      };
+      localStorage.setItem('ksf_label_design', JSON.stringify(designSettings));
+      localStorage.setItem('ksf_label_labels', JSON.stringify(labelSettings));
+  }, [showLogo, labelSize, fontSize, logoSize, barcodeScale, isBold, textAlign, content]);
+
   useEffect(() => {
       if (data && canvasRef.current) {
           try { 
@@ -229,7 +242,7 @@ const LabelPrint = ({ data, onClose }) => {
 
   const [width, height] = labelSize.split('-');
 
-  // The CSS for the inputs to make them look like text
+  // CSS for editable text inputs
   const inputStyle = {
       background: 'transparent',
       border: 'none',
@@ -276,12 +289,11 @@ const LabelPrint = ({ data, onClose }) => {
                 </select>
             </div>
             
-            {/* Formatting Tools */}
             <div className="flex gap-2 justify-between items-center border-t border-slate-200 pt-2">
                 <div className="flex gap-1 bg-white p-1 rounded border">
                     <button onClick={() => setFontSize(f => Math.max(8, f-1))} className="p-1 hover:bg-slate-100 rounded"><Minus size={14}/></button>
                     <span className="text-xs font-bold w-6 text-center pt-0.5">{fontSize}</span>
-                    <button onClick={() => setFontSize(f => Math.min(24, f+1))} className="p-1 hover:bg-slate-100 rounded"><PlusIcon size={14}/></button>
+                    <button onClick={() => setFontSize(f => Math.min(32, f+1))} className="p-1 hover:bg-slate-100 rounded"><PlusIcon size={14}/></button>
                 </div>
                 <button onClick={() => setIsBold(!isBold)} className={`p-1.5 rounded border ${isBold ? 'bg-blue-100 border-blue-300 text-blue-600' : 'bg-white'}`}><Bold size={14}/></button>
                 <div className="flex gap-0.5 bg-white p-1 rounded border">
@@ -291,7 +303,6 @@ const LabelPrint = ({ data, onClose }) => {
                 </div>
             </div>
 
-            {/* Sliders */}
             <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
                     <label className="text-[10px] font-bold text-slate-400">Logo Size</label>
@@ -320,42 +331,50 @@ const LabelPrint = ({ data, onClose }) => {
                     </div>
                 )}
 
-                {/* EDITABLE GRID */}
-                <div className="w-full grid grid-cols-2 gap-x-1 gap-y-0.5 font-mono leading-tight">
-                    {/* Row 1 */}
-                    <input style={inputStyle} value={content.qualityLabel} onChange={e => handleChange('qualityLabel', e.target.value)} />
-                    <input style={inputStyle} value={content.qualityVal} onChange={e => handleChange('qualityVal', e.target.value)} />
-                    
-                    {/* Row 2 */}
-                    <input style={inputStyle} value={content.gsmLabel} onChange={e => handleChange('gsmLabel', e.target.value)} />
-                    <input style={inputStyle} value={content.gsmVal} onChange={e => handleChange('gsmVal', e.target.value)} />
+                {/* SPLIT LAYOUT (LEFT / RIGHT) */}
+                <div className="flex w-full h-full">
+                    {/* LEFT COLUMN */}
+                    <div className="w-1/2 flex flex-col justify-start pr-1" style={{ borderRight: '1px dashed #ccc' }}>
+                        <input style={inputStyle} value={content.qualityLabel} onChange={e => handleChange('qualityLabel', e.target.value)} />
+                        <input style={inputStyle} value={content.qualityVal} onChange={e => handleChange('qualityVal', e.target.value)} />
+                        
+                        <div className="h-1"></div> {/* Spacer */}
 
-                    {/* Row 3 */}
-                    <input style={inputStyle} value={content.colorLabel} onChange={e => handleChange('colorLabel', e.target.value)} />
-                    <input style={inputStyle} value={content.colorVal} onChange={e => handleChange('colorVal', e.target.value)} />
+                        <input style={inputStyle} value={content.gsmLabel} onChange={e => handleChange('gsmLabel', e.target.value)} />
+                        <input style={inputStyle} value={content.gsmVal} onChange={e => handleChange('gsmVal', e.target.value)} />
 
-                    {/* Row 4 */}
-                    <input style={inputStyle} value={content.sizeLabel} onChange={e => handleChange('sizeLabel', e.target.value)} />
-                    <input style={inputStyle} value={content.sizeVal} onChange={e => handleChange('sizeVal', e.target.value)} />
+                        <div className="h-1"></div>
 
-                    {/* Row 5 */}
-                    <input style={inputStyle} value={content.netLabel} onChange={e => handleChange('netLabel', e.target.value)} />
-                    <input style={inputStyle} value={content.netVal} onChange={e => handleChange('netVal', e.target.value)} />
+                        <input style={inputStyle} value={content.colorLabel} onChange={e => handleChange('colorLabel', e.target.value)} />
+                        <input style={inputStyle} value={content.colorVal} onChange={e => handleChange('colorVal', e.target.value)} />
+                    </div>
 
-                    {/* Row 6 */}
-                    <input style={inputStyle} value={content.grossLabel} onChange={e => handleChange('grossLabel', e.target.value)} />
-                    <input style={inputStyle} value={content.grossVal} onChange={e => handleChange('grossVal', e.target.value)} />
+                    {/* RIGHT COLUMN */}
+                    <div className="w-1/2 flex flex-col justify-start pl-1">
+                        <input style={inputStyle} value={content.sizeLabel} onChange={e => handleChange('sizeLabel', e.target.value)} />
+                        <input style={inputStyle} value={content.sizeVal} onChange={e => handleChange('sizeVal', e.target.value)} />
+
+                        <div className="h-1"></div>
+
+                        <input style={inputStyle} value={content.netLabel} onChange={e => handleChange('netLabel', e.target.value)} />
+                        <input style={inputStyle} value={content.netVal} onChange={e => handleChange('netVal', e.target.value)} />
+
+                        <div className="h-1"></div>
+
+                        <input style={inputStyle} value={content.grossLabel} onChange={e => handleChange('grossLabel', e.target.value)} />
+                        <input style={inputStyle} value={content.grossVal} onChange={e => handleChange('grossVal', e.target.value)} />
+                    </div>
                 </div>
 
                 {/* Barcode */}
-                <div className="w-full flex justify-center overflow-hidden flex-1 items-end mt-1">
+                <div className="w-full flex justify-center overflow-hidden flex-1 items-end mt-1 pt-1 border-t border-black">
                     <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
                 </div>
             </div>
         </div>
 
         <div id="print-controls" className="flex gap-3 w-full mt-4">
-          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print</button>
+          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print Label</button>
           <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close</button>
         </div>
 
