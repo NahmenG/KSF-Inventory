@@ -11,7 +11,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3, Settings
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -98,9 +98,7 @@ const Header = React.memo(({ user, isGuest, deviceName, onLogout, setTab, active
       </div>
       <div className="flex items-center gap-3">
         <div className="text-right hidden md:block">
-            {isGuest ? (
-                <div className="flex items-center gap-1 text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full"><Eye size={12}/> View Only</div>
-            ) : (
+            {isGuest ? (<div className="flex items-center gap-1 text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full"><Eye size={12}/> View Only</div>) : (
                 <>
                     <div className="flex items-center justify-end gap-1 group cursor-pointer" onClick={onEditDeviceName} title="Edit Device Name">
                         <div className="text-xs font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{deviceName}</div>
@@ -133,20 +131,13 @@ const DeviceNameModal = ({ onSave, initialName, onClose }) => {
                 <Smartphone size={48} className="mx-auto text-blue-600 mb-4"/>
                 <h2 className="text-2xl font-bold mb-2">Name this Device</h2>
                 <p className="text-gray-500 mb-6 text-sm">This name will appear in the activity logs.<br/>e.g., "Production Line 1", "Owner's iPhone"</p>
-                <input 
-                    className="w-full border-2 border-gray-300 p-4 rounded-xl text-lg mb-4 text-center focus:border-blue-600 outline-none font-bold text-gray-800" 
-                    placeholder="Enter Device Name" 
-                    value={name} 
-                    onChange={e => setName(e.target.value)} 
-                    autoFocus
-                />
+                <input className="w-full border-2 border-gray-300 p-4 rounded-xl text-lg mb-4 text-center focus:border-blue-600 outline-none font-bold text-gray-800" placeholder="Enter Device Name" value={name} onChange={e => setName(e.target.value)} autoFocus />
                 <button disabled={!name} onClick={() => onSave(name)} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">Save Device Name</button>
             </div>
         </div>
     );
 };
 
-// --- ZOOM-ENABLED BARCODE SCANNER ---
 const BarcodeScanner = ({ onScan, onClose }) => {
     const scannerRef = useRef(null);
     const [isMounted, setIsMounted] = useState(true);
@@ -190,32 +181,136 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
+// --- UPDATED LABEL PRINT COMPONENT (CUSTOMIZABLE) ---
 const LabelPrint = ({ data, onClose }) => {
   const [showLogo, setShowLogo] = useState(true);
+  const [labelSize, setLabelSize] = useState('4in-2in'); // Default 4x2 inches
   const canvasRef = useRef(null);
+
   useEffect(() => {
       if (data && canvasRef.current) {
-          try { JsBarcode(canvasRef.current, data.product_id, { format: "CODE128", width: 2, height: 50, displayValue: true, margin: 10 }); } 
+          try { 
+              JsBarcode(canvasRef.current, data.product_id, { 
+                  format: "CODE128", 
+                  width: 2, 
+                  height: 40, // Adjusted for better fit 
+                  displayValue: true, 
+                  margin: 5 
+              }); 
+          } 
           catch (e) { console.error("Barcode rendering failed", e); }
       }
-  }, [data]);
+  }, [data, labelSize]);
+
   const handlePrint = () => window.print();
+
   if (!data) return null;
+
+  // Split dimensions
+  const [width, height] = labelSize.split('-');
+
+  // Dynamic style for the printable area
+  const printStyle = {
+      width: width,
+      height: height,
+      backgroundColor: 'white',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: '5px',
+      border: '1px solid #000' // Visual border for screen, can remove for print
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white p-6 rounded-xl max-w-md w-full">
-        <div id="print-area" className="border-4 border-black p-4 mb-4 text-center bg-white">
-            {showLogo && <div className="flex items-center justify-center gap-2 mb-2"><img src="/logo.png" className="h-8 object-contain" alt="KSF" /><h2 className="text-2xl font-bold">KSF Non-Woven</h2></div>}
-            <div className="grid grid-cols-2 text-left gap-y-1 text-sm border-t-2 border-black pt-2 mb-2 font-mono">
-                <div><strong>Quality:</strong> {data.quality}</div><div><strong>GSM:</strong> {data.gsm}</div>
-                <div><strong>Color:</strong> {data.color}</div><div><strong>Width:</strong> {data.width_inches}"</div>
-                <div><strong>Length:</strong> {data.length_meters}m</div><div><strong>Net Wt:</strong> {data.net_weight}kg</div>
-                <div><strong>Gross Wt:</strong> {data.gross_weight}kg</div>
+      {/* Styles to force print view */}
+      <style>
+        {`
+            @media print {
+                body * { visibility: hidden; }
+                #print-wrapper, #print-wrapper * { visibility: visible; }
+                #print-wrapper { 
+                    position: absolute; 
+                    top: 0; 
+                    left: 0; 
+                    margin: 0; 
+                    padding: 0;
+                    width: auto;
+                    height: auto;
+                    border: none !important;
+                }
+                #print-controls { display: none !important; }
+                /* Hide the border on the printout */
+                #print-area { border: none !important; }
+            }
+        `}
+      </style>
+
+      <div className="bg-white p-6 rounded-xl max-w-lg w-full flex flex-col items-center">
+        
+        {/* PRINT CONTROLS (Hidden during print) */}
+        <div id="print-controls" className="w-full mb-4 space-y-3">
+            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                <span className="font-bold text-sm text-gray-600 flex items-center gap-2"><Settings size={16}/> Label Size</span>
+                <select 
+                    className="border border-gray-300 rounded p-1 text-sm font-bold text-gray-700"
+                    value={labelSize}
+                    onChange={(e) => setLabelSize(e.target.value)}
+                >
+                    <option value="4in-2in">4" x 2" (Standard)</option>
+                    <option value="4in-3in">4" x 3" (Landscape)</option>
+                    <option value="2in-2in">2" x 2" (Square)</option>
+                    <option value="2in-3in">2" x 3" (Vertical)</option>
+                    <option value="2in-4in">2" x 4" (Long Vertical)</option>
+                </select>
             </div>
-            <div className="flex justify-center py-2 overflow-hidden"><canvas ref={canvasRef} className="max-w-full"></canvas></div>
+
+            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                <span className="font-bold text-sm text-gray-600">Include Logo?</span>
+                <button onClick={() => setShowLogo(!showLogo)} className={`px-4 py-1 rounded text-xs font-bold transition-colors ${showLogo ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                    {showLogo ? 'YES' : 'NO'}
+                </button>
+            </div>
         </div>
-        <div className="mb-4 flex items-center justify-between bg-gray-50 p-3 rounded-lg"><span className="text-sm font-bold text-gray-600">Include Logo?</span><button onClick={() => setShowLogo(!showLogo)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${showLogo ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{showLogo ? 'YES' : 'NO'}</button></div>
-        <div className="flex gap-3 no-print"><button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200"><Printer size={20} /> Print</button><button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold">Close</button></div>
+
+        {/* PRINT AREA WRAPPER */}
+        <div id="print-wrapper" className="flex items-center justify-center bg-gray-200 p-4 rounded-lg border border-dashed border-gray-400">
+            <div id="print-area" style={printStyle}>
+                
+                {/* Logo Section (Centered, No Text) */}
+                {showLogo && (
+                    <div className="mb-2 w-full flex justify-center">
+                        <img src="/logo.png" className="object-contain" style={{ maxHeight: '30px', maxWidth: '80%' }} alt="Logo" />
+                    </div>
+                )}
+
+                {/* Info Grid - Compact Text for small labels */}
+                <div className="w-full grid grid-cols-2 gap-x-2 gap-y-0.5 text-left font-mono leading-tight" style={{ fontSize: width.startsWith('2') ? '9px' : '11px' }}>
+                    <div><strong>Q:</strong> {data.quality}</div>
+                    <div><strong>G:</strong> {data.gsm}</div>
+                    <div><strong>C:</strong> {data.color}</div>
+                    <div><strong>S:</strong> {data.width_inches}" / {data.length_meters}m</div>
+                    <div><strong>Net:</strong> {data.net_weight}kg</div>
+                    <div><strong>Grs:</strong> {data.gross_weight}kg</div>
+                </div>
+
+                {/* Barcode Canvas */}
+                <div className="mt-1 w-full flex justify-center overflow-hidden">
+                    <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
+                </div>
+            </div>
+        </div>
+
+        {/* ACTION BUTTONS (Hidden during print) */}
+        <div id="print-controls" className="flex gap-3 w-full mt-4">
+          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors">
+            <Printer size={20} /> Print Label
+          </button>
+          <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close</button>
+        </div>
+
       </div>
     </div>
   );
@@ -264,15 +359,7 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   const uniqueGSM = ['All', ...new Set(rolls.map(r => r.gsm).filter(Boolean))];
   const filtered = rolls.filter(r => {
       const term = search.toLowerCase();
-      const matchSearch = r.status === 'in_stock' && (
-          (r.product_id || '').toLowerCase().includes(term) || 
-          (r.customer_name || '').toLowerCase().includes(term) ||
-          (r.quality || '').toLowerCase().includes(term) || 
-          (r.color || '').toLowerCase().includes(term) ||
-          String(r.gsm || '').toLowerCase().includes(term) ||
-          String(r.width_inches || '').toLowerCase().includes(term) ||
-          String(r.net_weight || '').toLowerCase().includes(term)
-      );
+      const matchSearch = r.status === 'in_stock' && ((r.product_id || '').toLowerCase().includes(term) || (r.customer_name || '').toLowerCase().includes(term) || (r.quality || '').toLowerCase().includes(term) || (r.color || '').toLowerCase().includes(term) || String(r.gsm || '').toLowerCase().includes(term) || String(r.width_inches || '').toLowerCase().includes(term) || String(r.net_weight || '').toLowerCase().includes(term));
       const matchColor = filters.color === 'All' || r.color === filters.color;
       const matchQuality = filters.quality === 'All' || r.quality === filters.quality;
       const matchGSM = filters.gsm === 'All' || r.gsm == filters.gsm;
@@ -282,19 +369,7 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   return (
       <div className="space-y-4 h-full flex flex-col">
           <div className="sticky top-0 bg-slate-50 z-10 pb-2 space-y-2"><div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-3 text-gray-400" size={18}/><input className="w-full pl-10 p-2.5 bg-white border-gray-200 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Search (Cust, ID, Wt...)" value={search} onChange={e => setSearch(e.target.value)} /></div><button onClick={onExport} className="bg-white border border-green-200 text-green-700 p-2.5 rounded-xl shadow-sm"><Download size={20} /></button></div><div className="flex gap-2 overflow-x-auto no-scrollbar"><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.color} onChange={e => setFilters({...filters, color: e.target.value})}>{uniqueColors.map(c => <option key={c} value={c}>Color: {c}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.quality} onChange={e => setFilters({...filters, quality: e.target.value})}>{uniqueQualities.map(q => <option key={q} value={q}>Qual: {q}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[80px]" value={filters.gsm} onChange={e => setFilters({...filters, gsm: e.target.value})}>{uniqueGSM.map(g => <option key={g} value={g}>GSM: {g}</option>)}</select></div></div>
-          <div className="flex-1 overflow-y-auto pb-20">{filtered.map(r => (
-            <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center active:bg-blue-50 transition-colors cursor-pointer">
-                <div>
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span>
-                        <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide">{r.customer_name}</span>
-                    </div>
-                    <div className="text-gray-900 font-medium text-sm">{r.quality} • {r.color} • {r.width_inches}" • {r.gsm} GSM</div>
-                    <div className="text-sm text-gray-500 mt-1">Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m</div>
-                </div>
-                <button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="p-3 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg"><Printer size={20}/></button>
-            </div>
-          ))}{filtered.length === 0 && <div className="text-center text-gray-400 py-10">No Stock Found</div>}</div>
+          <div className="flex-1 overflow-y-auto pb-20">{filtered.map(r => (<div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center active:bg-blue-50 transition-colors cursor-pointer"><div><div className="flex flex-wrap items-center gap-2 mb-1"><span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span><span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide">{r.customer_name}</span></div><div className="text-gray-900 font-medium text-sm">{r.quality} • {r.color} • {r.width_inches}" • {r.gsm} GSM</div><div className="text-sm text-gray-500 mt-1">Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m</div></div><button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="p-3 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg"><Printer size={20}/></button></div>))}{filtered.length === 0 && <div className="text-center text-gray-400 py-10">No Stock Found</div>}</div>
       </div>
   );
 };
@@ -323,27 +398,10 @@ const Dashboard = ({ rolls, materials }) => {
     const totalRolls = rolls.filter(r => r.status === 'in_stock').length;
     const totalWeight = rolls.filter(r => r.status === 'in_stock').reduce((acc, curr) => acc + parseFloat(curr.net_weight || 0), 0);
     const recentActivity = rolls.slice(0, 5);
-
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4"><div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-5 rounded-2xl shadow-lg shadow-blue-200"><div className="text-blue-100 text-xs font-bold uppercase tracking-wide mb-1">Total Stock</div><div className="text-3xl font-black">{totalRolls}</div><div className="text-blue-200 text-xs mt-1">Rolls Available</div></div><div className="bg-gradient-to-br from-purple-600 to-purple-700 text-white p-5 rounded-2xl shadow-lg shadow-purple-200"><div className="text-purple-100 text-xs font-bold uppercase tracking-wide mb-1">Total Weight</div><div className="text-3xl font-black">{totalWeight.toLocaleString()}</div><div className="text-purple-200 text-xs mt-1">Kilograms</div></div></div>
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                <div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><Activity size={18} className="text-blue-500"/> Recent Activity (Live)</div>
-                <div className="space-y-3">
-                    {recentActivity.map(r => (
-                        <div key={r.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-0">
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-bold text-gray-700">{r.product_id}</span> 
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${r.status === 'dispatched' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{r.status === 'in_stock' ? 'Added/Edited' : 'Dispatched'}</span>
-                                </div>
-                                <div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1"><Smartphone size={10}/> {r.device_name || 'Unknown Device'}</div>
-                            </div>
-                            <div className="text-xs text-gray-400 font-mono">{new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                        </div>
-                    ))}
-                </div>
-            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100"><div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><Activity size={18} className="text-blue-500"/> Recent Activity (Live)</div><div className="space-y-3">{recentActivity.map(r => (<div key={r.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-0"><div><div className="flex items-center gap-2"><span className="font-bold text-gray-700">{r.product_id}</span> <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${r.status === 'dispatched' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{r.status === 'in_stock' ? 'Added/Edited' : 'Dispatched'}</span></div><div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1"><Smartphone size={10}/> {r.device_name || 'Unknown Device'}</div></div><div className="text-xs text-gray-400 font-mono">{new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div></div>))}</div></div>
             <AnalyticsDashboard rolls={rolls} />
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100"><div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> Low Material Alerts</div><div className="space-y-2">{materials.filter(m => m.stock_quantity < 100).length > 0 ? (materials.filter(m => m.stock_quantity < 100).map(m => (<div key={m.id} className="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-100"><span className="text-red-900 font-medium text-sm">{m.name}</span><span className="text-red-700 font-bold text-sm">{m.stock_quantity} kg</span></div>))) : <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100 text-center">All materials sufficient</div>}</div></div>
         </div>
