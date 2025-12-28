@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Barcode from 'react-barcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -6,98 +6,74 @@ import * as XLSX from 'xlsx';
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, EyeOff, Eye
+  Pencil, Trash2, X, Camera, Smartphone, Activity
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 // --- DATA SERVICE ---
 const DataService = {
-  async getStock(isGuest) {
-    if (isGuest) return JSON.parse(localStorage.getItem('ksf_stock') || '[]');
-    const { data, error } = await supabase.from('rolls').select('*').order('created_at', { ascending: false });
+  async getStock() {
+    // Fetch stock sorted by most recently updated
+    const { data, error } = await supabase
+        .from('rolls')
+        .select('*')
+        .order('updated_at', { ascending: false }); // Shows recent changes first
     return error ? [] : data;
   },
 
-  async addRoll(roll, isGuest) {
-    if (isGuest) {
-      const stock = await this.getStock(true);
-      stock.push(roll);
-      localStorage.setItem('ksf_stock', JSON.stringify(stock));
-      return roll;
-    }
-    const { data, error } = await supabase.from('rolls').insert([roll]).select();
+  async addRoll(roll, deviceName) {
+    const rollWithDevice = { 
+        ...roll, 
+        device_name: deviceName,
+        updated_at: new Date()
+    };
+    const { data, error } = await supabase.from('rolls').insert([rollWithDevice]).select();
     if (error) throw error;
     return data[0];
   },
 
-  async updateRoll(id, updates, isGuest) {
-    if (isGuest) {
-      let stock = await this.getStock(true);
-      const index = stock.findIndex(r => r.id === id);
-      if (index !== -1) {
-        stock[index] = { ...stock[index], ...updates };
-        localStorage.setItem('ksf_stock', JSON.stringify(stock));
-      }
-      return;
-    }
-    await supabase.from('rolls').update(updates).eq('id', id);
+  async updateRoll(id, updates, deviceName) {
+    const updatesWithDevice = {
+        ...updates,
+        device_name: deviceName,
+        updated_at: new Date()
+    };
+    await supabase.from('rolls').update(updatesWithDevice).eq('id', id);
   },
 
-  async deleteRoll(id, isGuest) {
-    if (isGuest) {
-      let stock = await this.getStock(true);
-      stock = stock.filter(r => r.id !== id);
-      localStorage.setItem('ksf_stock', JSON.stringify(stock));
-      return;
-    }
+  async deleteRoll(id) {
     await supabase.from('rolls').delete().eq('id', id);
   },
 
-  async getRawMaterials(isGuest) {
-    if (isGuest) return JSON.parse(localStorage.getItem('ksf_materials') || '[]'); 
+  async getRawMaterials() {
     const { data, error } = await supabase.from('raw_materials').select('*').order('name');
     return error ? [] : data;
   },
 
-  async addRawMaterial(name, isGuest) {
+  async addRawMaterial(name) {
       const newMat = { name, stock_quantity: 0, unit: 'kg' };
-      if (isGuest) {
-          let mats = await this.getRawMaterials(true);
-          mats.push({ ...newMat, id: crypto.randomUUID() });
-          localStorage.setItem('ksf_materials', JSON.stringify(mats));
-          return;
-      }
       await supabase.from('raw_materials').insert([newMat]);
   },
 
-  async updateRawMaterial(id, qty, isAddition, isGuest) {
-    if (isGuest) {
-        let mats = await this.getRawMaterials(true);
-        const idx = mats.findIndex(m => m.id === id);
-        if (idx >= 0) {
-            mats[idx].stock_quantity = parseFloat(mats[idx].stock_quantity) + (isAddition ? parseFloat(qty) : -parseFloat(qty));
-            localStorage.setItem('ksf_materials', JSON.stringify(mats));
-        }
-        return;
-    }
+  async updateRawMaterial(id, qty, isAddition, deviceName) {
     const { data } = await supabase.from('raw_materials').select('stock_quantity').eq('id', id).single();
     const currentQty = data ? parseFloat(data.stock_quantity) : 0;
     const newQty = currentQty + (isAddition ? parseFloat(qty) : -parseFloat(qty));
-    await supabase.from('raw_materials').update({ stock_quantity: newQty }).eq('id', id);
+    
+    await supabase.from('raw_materials').update({ 
+        stock_quantity: newQty,
+        last_updated_by: deviceName 
+    }).eq('id', id);
   }
 };
 
 // --- COMPONENTS ---
 
-const Header = ({ user, onLogout, setTab, activeTab }) => (
+const Header = ({ user, deviceName, onLogout, setTab, activeTab }) => (
   <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm safe-area-inset-top">
     <div className="flex justify-between items-center px-4 py-2 max-w-7xl mx-auto h-16">
       <div className="flex items-center gap-3 cursor-pointer" onClick={() => setTab('dashboard')}>
-        <img 
-            src="/logo.png" 
-            alt="KSF Logo" 
-            className="h-12 w-auto object-contain flex-shrink-0" 
-        />
+        <img src="/logo.png" alt="KSF Logo" className="h-12 w-auto object-contain flex-shrink-0" />
         <div className="hidden sm:block leading-tight">
           <h1 className="text-lg font-bold text-gray-900">KSF Non-Woven</h1>
           <p className="text-[10px] text-gray-500 uppercase tracking-wider">Inventory System</p>
@@ -105,9 +81,10 @@ const Header = ({ user, onLogout, setTab, activeTab }) => (
       </div>
       
       <div className="flex items-center gap-3">
-        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full hidden md:block">
-          {user ? user.email : 'Guest Mode'}
-        </span>
+        <div className="text-right hidden md:block">
+            <div className="text-xs font-bold text-gray-900">{deviceName}</div>
+            <div className="text-[10px] text-gray-500">{user?.email}</div>
+        </div>
         <button onClick={onLogout} className="p-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
           <LogOut size={20} />
         </button>
@@ -140,6 +117,33 @@ const Header = ({ user, onLogout, setTab, activeTab }) => (
   </header>
 );
 
+const DeviceNameModal = ({ onSave }) => {
+    const [name, setName] = useState('');
+    return (
+        <div className="fixed inset-0 bg-slate-900 z-[200] flex items-center justify-center p-6">
+            <div className="bg-white p-8 rounded-2xl max-w-md w-full text-center">
+                <Smartphone size={48} className="mx-auto text-blue-600 mb-4"/>
+                <h2 className="text-2xl font-bold mb-2">Name this Device</h2>
+                <p className="text-gray-500 mb-6">e.g., "Production Line 1", "Gate Phone", "Office PC"</p>
+                <input 
+                    className="w-full border-2 border-gray-300 p-3 rounded-xl text-lg mb-4 text-center focus:border-blue-600 outline-none"
+                    placeholder="Enter Device Name"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                />
+                <button 
+                    disabled={!name}
+                    onClick={() => onSave(name)} 
+                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-lg disabled:opacity-50"
+                >
+                    Save & Continue
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// ... (Existing NewProductView, BarcodeScanner, EditModal components remain the same) ...
 const NewProductView = ({ formData, setFormData, onSubmit }) => {
   return (
     <div className="max-w-xl mx-auto bg-white p-5 rounded-xl shadow-sm border border-gray-100 mt-2">
@@ -151,7 +155,6 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => {
             <label className="text-xs font-bold text-gray-500 uppercase ml-1">Customer</label>
             <input placeholder="Internal Name" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} />
         </div>
-
         <div>
             <label className="text-xs font-bold text-gray-500 uppercase ml-1">Quality</label>
             <input placeholder="Type" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.quality} onChange={e => setFormData({...formData, quality: e.target.value})} />
@@ -160,7 +163,6 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => {
             <label className="text-xs font-bold text-gray-500 uppercase ml-1">Color</label>
             <input placeholder="Color" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} />
         </div>
-
         <div className="col-span-2 grid grid-cols-3 gap-3">
             <div>
                 <label className="text-xs font-bold text-gray-500 uppercase ml-1">GSM</label>
@@ -175,7 +177,6 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => {
                 <input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.length_meters} onChange={e => setFormData({...formData, length_meters: e.target.value})} />
             </div>
         </div>
-
         <div className="col-span-2 grid grid-cols-2 gap-3 bg-blue-50 p-3 rounded-lg border border-blue-100">
              <div>
                 <label className="text-xs font-bold text-blue-800 uppercase ml-1">Net Kg</label>
@@ -186,7 +187,6 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => {
                 <input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg" value={formData.gross_weight} onChange={e => setFormData({...formData, gross_weight: e.target.value})} />
             </div>
         </div>
-        
         <button type="submit" className="col-span-2 mt-2 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-blue-200">
           Save & Print Label
         </button>
@@ -195,25 +195,11 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => {
   );
 };
 
-// --- SCANNER COMPONENT ---
 const BarcodeScanner = ({ onScan }) => {
     useEffect(() => {
-        const scanner = new Html5QrcodeScanner("reader", { 
-            fps: 10, 
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0
-        }, false);
-
-        scanner.render((text) => {
-            scanner.clear();
-            onScan(text);
-        }, (error) => {
-            console.warn(error);
-        });
-
-        return () => {
-            scanner.clear().catch(error => console.error("Failed to clear scanner", error));
-        };
+        const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false);
+        scanner.render((text) => { scanner.clear(); onScan(text); }, (error) => { console.warn(error); });
+        return () => { scanner.clear().catch(error => console.error("Failed to clear scanner", error)); };
     }, [onScan]);
 
     return (
@@ -229,64 +215,39 @@ const BarcodeScanner = ({ onScan }) => {
 
 const EditModal = ({ roll, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
-
-    const handleDelete = () => {
-        if(window.confirm("PERMANENTLY DELETE this roll?")) {
-            onDelete(roll.id);
-            onClose();
-        }
-    };
+    const handleDelete = () => { if(window.confirm("PERMANENTLY DELETE this roll?")) { onDelete(roll.id); onClose(); } };
 
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
             <div className="bg-white p-5 rounded-xl max-w-lg w-full animate-in fade-in zoom-in-95 duration-200">
                 <div className="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 className="text-lg font-bold flex items-center gap-2">
-                        <Package size={18} className="text-blue-600"/> Roll Details
-                    </h2>
+                    <h2 className="text-lg font-bold flex items-center gap-2"><Package size={18} className="text-blue-600"/> Roll Details</h2>
                     <button onClick={onClose}><X size={24} className="text-gray-400 hover:text-red-500"/></button>
                 </div>
-
                 <div className="bg-blue-50 p-3 rounded-lg mb-4 text-center">
                     <div className="text-xs text-blue-600 uppercase font-bold">Product ID</div>
                     <div className="text-xl font-mono font-black text-blue-900">{roll.product_id}</div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3 mb-6">
                     <div className="col-span-2">
                          <label className="text-xs font-bold text-gray-500 uppercase">Customer</label>
                          <input className="w-full border p-2.5 rounded-lg bg-gray-50" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} />
                     </div>
-                    <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase">Quality</label>
-                         <input className="w-full border p-2.5 rounded-lg" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})} />
-                    </div>
-                    <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase">Color</label>
-                         <input className="w-full border p-2.5 rounded-lg" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} />
-                    </div>
-                    <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label>
-                         <input type="number" className="w-full border p-2.5 rounded-lg font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} />
-                    </div>
-                     <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label>
-                         <input type="number" className="w-full border p-2.5 rounded-lg" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} />
-                    </div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><input className="w-full border p-2.5 rounded-lg" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><input className="w-full border p-2.5 rounded-lg" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border p-2.5 rounded-lg font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-2.5 rounded-lg" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} /></div>
                 </div>
-
                 <div className="flex flex-col gap-3">
-                    <button onClick={() => onSave(editData)} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-blue-200">
-                        Save Changes
-                    </button>
-                    <button onClick={handleDelete} className="w-full bg-white border border-red-200 text-red-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50">
-                        <Trash2 size={18}/> Delete Roll
-                    </button>
+                    <button onClick={() => onSave(editData)} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-blue-200">Save Changes</button>
+                    <button onClick={handleDelete} className="w-full bg-white border border-red-200 text-red-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50"><Trash2 size={18}/> Delete Roll</button>
                 </div>
             </div>
         </div>
     );
 };
+
+// ... (Existing StockView, HistoryView, DispatchView, MaterialsView, LabelPrint - No major logic changes, just ensuring they use passed props) ...
 
 const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   const [filter, setFilter] = useState('');
@@ -303,11 +264,8 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
                   <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
                   <input className="w-full pl-10 p-2.5 bg-white border-gray-200 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Search..." value={filter} onChange={e => setFilter(e.target.value)} />
               </div>
-              <button onClick={onExport} className="bg-white border border-green-200 text-green-700 p-2.5 rounded-xl shadow-sm">
-                  <Download size={20} />
-              </button>
+              <button onClick={onExport} className="bg-white border border-green-200 text-green-700 p-2.5 rounded-xl shadow-sm"><Download size={20} /></button>
           </div>
-
           <div className="flex-1 overflow-y-auto pb-20">
             {filtered.map(r => (
                 <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center active:bg-blue-50 transition-colors cursor-pointer">
@@ -316,17 +274,11 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
                             <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span>
                             <span className="text-xs font-bold text-gray-500 uppercase">{r.quality}</span>
                         </div>
-                        <div className="text-gray-900 font-medium">
-                            {r.color} • {r.width_inches}" • {r.gsm} GSM
-                        </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                            Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m
-                        </div>
+                        <div className="text-gray-900 font-medium">{r.color} • {r.width_inches}" • {r.gsm} GSM</div>
+                        <div className="text-sm text-gray-500 mt-1">Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m</div>
+                        {r.device_name && <div className="text-[10px] text-gray-400 mt-1 flex items-center gap-1"><Smartphone size={10}/> {r.device_name}</div>}
                     </div>
-                    {/* StopPropagation prevents opening the edit modal when clicking print */}
-                    <button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="p-3 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg">
-                        <Printer size={20}/>
-                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="p-3 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg"><Printer size={20}/></button>
                 </div>
             ))}
             {filtered.length === 0 && <div className="text-center text-gray-400 py-10">No Stock Found</div>}
@@ -336,48 +288,32 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
 };
 
 const HistoryView = ({ rolls }) => {
-    const history = rolls
-        .filter(r => r.status === 'dispatched')
-        .sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
-
+    const history = rolls.filter(r => r.status === 'dispatched').sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
     const totalDispatchedWeight = history.reduce((acc, curr) => acc + parseFloat(curr.net_weight || 0), 0);
 
     return (
         <div className="space-y-4 h-full flex flex-col">
             <div className="bg-slate-800 text-white p-5 rounded-xl shadow-md">
-                <div className="flex items-center gap-2 mb-2 text-slate-300 text-sm uppercase font-bold tracking-wider">
-                    <Clock size={16}/> Dispatch Log
-                </div>
+                <div className="flex items-center gap-2 mb-2 text-slate-300 text-sm uppercase font-bold tracking-wider"><Clock size={16}/> Dispatch Log</div>
                 <div className="flex justify-between items-end">
-                    <div>
-                        <div className="text-3xl font-black">{history.length}</div>
-                        <div className="text-xs text-slate-400">Rolls Sent</div>
-                    </div>
-                    <div className="text-right">
-                        <div className="text-3xl font-black text-green-400">{totalDispatchedWeight.toLocaleString()}</div>
-                        <div className="text-xs text-slate-400">Total Kg</div>
-                    </div>
+                    <div><div className="text-3xl font-black">{history.length}</div><div className="text-xs text-slate-400">Rolls Sent</div></div>
+                    <div className="text-right"><div className="text-3xl font-black text-green-400">{totalDispatchedWeight.toLocaleString()}</div><div className="text-xs text-slate-400">Total Kg</div></div>
                 </div>
             </div>
-
             <div className="flex-1 overflow-y-auto pb-20">
                 {history.map(r => (
                     <div key={r.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 relative">
-                        <div className="absolute top-4 right-4 text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                            {new Date(r.dispatched_at).toLocaleDateString()}
-                        </div>
-                        <div className="mb-2">
-                             <span className="font-mono font-bold text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{r.product_id}</span>
-                        </div>
+                        <div className="absolute top-4 right-4 text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">{new Date(r.dispatched_at).toLocaleDateString()}</div>
+                        <div className="mb-2"><span className="font-mono font-bold text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{r.product_id}</span></div>
                         <div className="grid grid-cols-2 gap-y-1 text-sm text-gray-600">
                              <div>To: <span className="font-bold text-gray-900">{r.customer_name || 'Unknown'}</span></div>
                              <div>Wt: <span className="font-bold text-gray-900">{r.net_weight} kg</span></div>
                              <div>Qual: {r.quality}</div>
                              <div>Size: {r.width_inches}" / {r.length_meters}m</div>
                         </div>
+                        {r.device_name && <div className="mt-2 text-[10px] text-gray-400 border-t pt-1">Dispatched by: {r.device_name}</div>}
                     </div>
                 ))}
-                {history.length === 0 && <div className="text-center text-gray-400 py-10">No dispatch history yet.</div>}
             </div>
         </div>
     );
@@ -386,6 +322,8 @@ const HistoryView = ({ rolls }) => {
 const Dashboard = ({ rolls, materials }) => {
     const totalRolls = rolls.filter(r => r.status === 'in_stock').length;
     const totalWeight = rolls.filter(r => r.status === 'in_stock').reduce((acc, curr) => acc + parseFloat(curr.net_weight || 0), 0);
+    // Recent Activity Logic (First 5 items)
+    const recentActivity = rolls.slice(0, 5);
     
     return (
         <div className="space-y-4">
@@ -403,9 +341,22 @@ const Dashboard = ({ rolls, materials }) => {
             </div>
 
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                <div className="text-gray-900 font-bold mb-3 flex items-center gap-2">
-                    <AlertCircle size={18} className="text-orange-500"/> Low Material Alerts
+                <div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><Activity size={18} className="text-blue-500"/> Recent Activity</div>
+                <div className="space-y-3">
+                    {recentActivity.map(r => (
+                        <div key={r.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-0">
+                            <div>
+                                <span className="font-bold text-gray-700">{r.product_id}</span> <span className="text-gray-500">({r.status})</span>
+                                <div className="text-[10px] text-gray-400">By: {r.device_name || 'Unknown'}</div>
+                            </div>
+                            <div className="text-xs text-gray-400">{new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        </div>
+                    ))}
                 </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                <div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> Low Material Alerts</div>
                 <div className="space-y-2">
                 {materials.filter(m => m.stock_quantity < 100).length > 0 ? (
                    materials.filter(m => m.stock_quantity < 100).map(m => (
@@ -431,39 +382,23 @@ const DispatchView = ({ rolls, onDispatch }) => {
     const handleSearch = (idOverride) => {
         const query = idOverride || scanId;
         const roll = rolls.find(r => r.product_id === query && r.status === 'in_stock');
-        if (roll) {
-            setFoundRoll(roll);
-            setScanId(query);
-            setShowScanner(false);
-        }
+        if (roll) { setFoundRoll(roll); setScanId(query); setShowScanner(false); }
         else alert('Roll not found or already dispatched.');
     };
 
     return (
         <div className="max-w-xl mx-auto space-y-4">
             {showScanner && <BarcodeScanner onScan={(text) => { if(text) handleSearch(text); else setShowScanner(false); }} />}
-            
             <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center">
                 <div className="mb-4">
                     <h2 className="text-lg font-bold mb-2 text-gray-800">Scan Barcode</h2>
-                    <input 
-                        className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" 
-                        placeholder="Type or Scan" 
-                        value={scanId}
-                        onChange={(e) => setScanId(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    />
+                    <input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Type or Scan" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
-                        <Camera size={20}/> Camera
-                    </button>
-                    <button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">
-                        Search
-                    </button>
+                    <button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button>
+                    <button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button>
                 </div>
             </div>
-
             {foundRoll && (
                 <div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4">
                     <h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Ready to Dispatch</h3>
@@ -472,9 +407,7 @@ const DispatchView = ({ rolls, onDispatch }) => {
                         <div className="text-gray-500">Quality</div><div className="font-bold">{foundRoll.quality}</div>
                         <div className="text-gray-500">Weight</div><div className="font-bold">{foundRoll.net_weight} kg</div>
                     </div>
-                    <button onClick={() => { onDispatch(foundRoll.id); setFoundRoll(null); setScanId(''); }} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200">
-                        CONFIRM DISPATCH
-                    </button>
+                    <button onClick={() => { onDispatch(foundRoll.id); setFoundRoll(null); setScanId(''); }} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200">CONFIRM DISPATCH</button>
                 </div>
             )}
         </div>
@@ -484,27 +417,20 @@ const DispatchView = ({ rolls, onDispatch }) => {
 const MaterialsView = ({ materials, onUpdate, onAdd }) => {
     const handleUpdate = (id, type) => {
         const qty = prompt(`Enter quantity to ${type} (Kg):`);
-        if (qty && !isNaN(qty)) {
-            onUpdate(id, qty, type === 'add');
-        }
+        if (qty && !isNaN(qty)) onUpdate(id, qty, type === 'add');
     };
-
-    const handleAdd = () => {
-        const name = prompt("Enter Material Name (e.g. Vistamaxx, Omega, Red MB):");
-        if(name) onAdd(name);
-    };
+    const handleAdd = () => { const name = prompt("Enter Material Name:"); if(name) onAdd(name); };
 
     return (
         <div className="pb-20">
-            <button onClick={handleAdd} className="w-full bg-white border-2 border-dashed border-gray-300 text-gray-500 py-3 rounded-xl font-bold mb-4 hover:border-blue-400 hover:text-blue-500 transition-colors">
-                + Add New Material
-            </button>
+            <button onClick={handleAdd} className="w-full bg-white border-2 border-dashed border-gray-300 text-gray-500 py-3 rounded-xl font-bold mb-4 hover:border-blue-400 hover:text-blue-500 transition-colors">+ Add New Material</button>
             <div className="grid grid-cols-1 gap-3">
                 {materials.map(m => (
                     <div key={m.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
                         <div>
                             <h3 className="font-bold text-gray-700 text-sm">{m.name}</h3>
                             <div className="text-2xl font-black text-gray-900">{m.stock_quantity} <span className="text-xs font-medium text-gray-400">{m.unit}</span></div>
+                            {m.last_updated_by && <div className="text-[9px] text-gray-400 mt-1">Updated by: {m.last_updated_by}</div>}
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => handleUpdate(m.id, 'issue')} className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-bold border border-red-100">-</button>
@@ -525,43 +451,18 @@ const LabelPrint = ({ data, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
       <div className="bg-white p-6 rounded-xl max-w-md w-full">
-        
-        {/* Print Preview Area */}
         <div id="print-area" className="border-4 border-black p-4 mb-4 text-center bg-white">
-            {showLogo && (
-                <div className="flex items-center justify-center gap-2 mb-2">
-                    <img src="/logo.png" className="h-8 object-contain" alt="KSF" />
-                    <h2 className="text-2xl font-bold">KSF Non-Woven</h2>
-                </div>
-            )}
+            {showLogo && <div className="flex items-center justify-center gap-2 mb-2"><img src="/logo.png" className="h-8 object-contain" alt="KSF" /><h2 className="text-2xl font-bold">KSF Non-Woven</h2></div>}
             <div className="grid grid-cols-2 text-left gap-y-1 text-sm border-t-2 border-black pt-2 mb-2 font-mono">
-                <div><strong>Quality:</strong> {data.quality}</div>
-                <div><strong>GSM:</strong> {data.gsm}</div>
-                <div><strong>Color:</strong> {data.color}</div>
-                <div><strong>Width:</strong> {data.width_inches}"</div>
-                <div><strong>Length:</strong> {data.length_meters}m</div>
-                <div><strong>Net Wt:</strong> {data.net_weight}kg</div>
+                <div><strong>Quality:</strong> {data.quality}</div><div><strong>GSM:</strong> {data.gsm}</div>
+                <div><strong>Color:</strong> {data.color}</div><div><strong>Width:</strong> {data.width_inches}"</div>
+                <div><strong>Length:</strong> {data.length_meters}m</div><div><strong>Net Wt:</strong> {data.net_weight}kg</div>
                 <div><strong>Gross Wt:</strong> {data.gross_weight}kg</div>
             </div>
-            <div className="flex justify-center py-2">
-                <Barcode value={data.product_id} width={2} height={50} fontSize={14} />
-            </div>
+            <div className="flex justify-center py-2"><Barcode value={data.product_id} width={2} height={50} fontSize={14} /></div>
         </div>
-
-        {/* Controls */}
-        <div className="mb-4 flex items-center justify-between bg-gray-50 p-3 rounded-lg">
-             <span className="text-sm font-bold text-gray-600">Include Logo?</span>
-             <button onClick={() => setShowLogo(!showLogo)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${showLogo ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                 {showLogo ? 'YES' : 'NO'}
-             </button>
-        </div>
-
-        <div className="flex gap-3 no-print">
-          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200">
-            <Printer size={20} /> Print
-          </button>
-          <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold">Close</button>
-        </div>
+        <div className="mb-4 flex items-center justify-between bg-gray-50 p-3 rounded-lg"><span className="text-sm font-bold text-gray-600">Include Logo?</span><button onClick={() => setShowLogo(!showLogo)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${showLogo ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{showLogo ? 'YES' : 'NO'}</button></div>
+        <div className="flex gap-3 no-print"><button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200"><Printer size={20} /> Print</button><button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold">Close</button></div>
       </div>
     </div>
   );
@@ -570,115 +471,60 @@ const LabelPrint = ({ data, onClose }) => {
 // --- MAIN APP ---
 export default function App() {
   const [user, setUser] = useState(null);
-  const [isGuest, setIsGuest] = useState(false);
+  const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || '');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [rolls, setRolls] = useState([]);
   const [materials, setMaterials] = useState([]);
   
-  // Modals state
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
   
-  const [formData, setFormData] = useState({
-    customer_name: '', quality: '', gsm: '', color: '', 
-    width_inches: '', length_meters: '', net_weight: '', gross_weight: ''
-  });
+  const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
 
   useEffect(() => {
     const checkSession = async () => {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-            setUser(session.user);
-            setIsGuest(false);
-            fetchData(false);
-        }
+        if (session) { setUser(session.user); fetchData(); }
     };
     checkSession();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user ?? null);
-        if (session) {
-            setIsGuest(false);
-            fetchData(false);
-        }
+        if (session) fetchData();
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchData = async (guestMode) => {
+  const fetchData = async () => {
     setLoading(true);
-    const r = await DataService.getStock(guestMode);
-    const m = await DataService.getRawMaterials(guestMode);
+    const r = await DataService.getStock();
+    const m = await DataService.getRawMaterials();
     setRolls(r || []);
     setMaterials(m || []);
     setLoading(false);
   };
 
-  const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({ 
-        provider: 'google', 
-        options: { redirectTo: window.location.origin } 
-    });
-  };
-
-  const handleGuestEntry = () => {
-    setIsGuest(true);
-    fetchData(true);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setIsGuest(false);
-    setRolls([]);
-  };
+  const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
+  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setRolls([]); };
+  const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); };
 
   const handleSaveRoll = async (e) => {
     e.preventDefault();
     const id = `KSF-${Math.floor(Math.random() * 1000000)}`;
-    const newRoll = {
-        ...formData,
-        product_id: id,
-        status: 'in_stock',
-        id: isGuest ? crypto.randomUUID() : undefined
-    };
+    const newRoll = { ...formData, product_id: id, status: 'in_stock' };
     try {
-        await DataService.addRoll(newRoll, isGuest);
+        await DataService.addRoll(newRoll, deviceName);
         setPrintData(newRoll);
-        fetchData(isGuest);
+        fetchData();
         setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
-    } catch (err) {
-        alert('Error: ' + err.message);
-    }
+    } catch (err) { alert('Error: ' + err.message); }
   };
 
-  const handleDispatch = async (id) => {
-      await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, isGuest);
-      alert('Dispatched Successfully');
-      fetchData(isGuest);
-  };
-
-  const handleDeleteRoll = async (id) => {
-      await DataService.deleteRoll(id, isGuest);
-      fetchData(isGuest);
-  };
-
-  const handleEditRoll = async (updates) => {
-      await DataService.updateRoll(updates.id, updates, isGuest);
-      setEditRoll(null);
-      fetchData(isGuest);
-  };
-
-  const handleMaterialUpdate = async (id, qty, isAdd) => {
-      await DataService.updateRawMaterial(id, qty, isAdd, isGuest);
-      fetchData(isGuest);
-  };
-
-  const handleAddMaterial = async (name) => {
-      await DataService.addRawMaterial(name, isGuest);
-      fetchData(isGuest);
-  };
+  const handleDispatch = async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); alert('Dispatched Successfully'); fetchData(); };
+  const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
+  const handleEditRoll = async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(); };
+  const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
+  const handleAddMaterial = async (name) => { await DataService.addRawMaterial(name); fetchData(); };
 
   const handleExport = () => {
     const ws = XLSX.utils.json_to_sheet(rolls);
@@ -687,63 +533,37 @@ export default function App() {
     XLSX.writeFile(wb, "KSF_Stock_Report.xlsx");
   };
 
-  if (!user && !isGuest) {
+  if (!user) {
     return (
         <div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6">
             <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100">
                 <img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" />
                 <h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1>
                 <p className="text-gray-500 mb-8">Manage your factory floor efficiently.</p>
-                <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200">
-                    Login with Google
-                </button>
-                <button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold hover:bg-gray-50 transition border border-gray-200">
-                    Continue as Guest
-                </button>
+                <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200">Login with Google</button>
             </div>
         </div>
     );
   }
 
+  // Ask for device name if logged in but name not set
+  if (user && !deviceName) { return <DeviceNameModal onSave={handleSaveDeviceName} />; }
+
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pb-10">
-      <Header user={user} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} />
-      
+      <Header user={user} deviceName={deviceName} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
-        {loading ? (
-            <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div>
-        ) : (
+        {loading ? ( <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div> ) : (
             <>
                 {activeTab === 'dashboard' && <Dashboard rolls={rolls} materials={materials} />}
-                {activeTab === 'entry' && (
-                    <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />
-                )}
-                {activeTab === 'stock' && (
-                    <StockView 
-                        rolls={rolls} 
-                        onPrint={setPrintData} 
-                        onExport={handleExport} 
-                        onSelectRoll={setEditRoll}
-                    />
-                )}
-                {activeTab === 'dispatch' && (
-                    <DispatchView rolls={rolls} onDispatch={handleDispatch} />
-                )}
-                {activeTab === 'history' && (
-                    <HistoryView rolls={rolls} />
-                )}
-                {activeTab === 'materials' && (
-                    <MaterialsView 
-                        materials={materials} 
-                        onUpdate={handleMaterialUpdate} 
-                        onAdd={handleAddMaterial}
-                    />
-                )}
+                {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
+                {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onExport={handleExport} onSelectRoll={setEditRoll} />}
+                {activeTab === 'dispatch' && <DispatchView rolls={rolls} onDispatch={handleDispatch} />}
+                {activeTab === 'history' && <HistoryView rolls={rolls} />}
+                {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
             </>
         )}
       </main>
-
-      {/* Modals */}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
       {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
