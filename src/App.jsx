@@ -11,7 +11,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -158,11 +158,19 @@ const DeviceNameModal = ({ onSave }) => {
     );
 };
 
-// ... (NewProductView, BarcodeScanner, EditModal - Updated EditModal below) ...
+// ... (NewProductView, BarcodeScanner - Same as before) ...
 
 const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("PERMANENTLY DELETE this roll from database?")) { onDelete(roll.id); onClose(); } };
+    
+    // Function to handle return to stock
+    const handleReturnToStock = () => {
+        if(window.confirm("Undo Dispatch? This will move the roll back to Stock.")) {
+            // We set status back to 'in_stock' and clear the dispatched_at date
+            onSave({ ...editData, status: 'in_stock', dispatched_at: null });
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
@@ -188,6 +196,13 @@ const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
                 </div>
                 {!isGuest && (
                     <div className="flex flex-col gap-3">
+                        {/* New Return to Stock Button */}
+                        {roll.status === 'dispatched' && (
+                            <button onClick={handleReturnToStock} className="w-full bg-orange-100 text-orange-700 border border-orange-200 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-orange-200 transition-colors">
+                                <RotateCcw size={18}/> Return to Stock
+                            </button>
+                        )}
+                        
                         <button onClick={() => onSave(editData)} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-blue-200">Save Changes</button>
                         <button onClick={handleDelete} className="w-full bg-white border border-red-200 text-red-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50"><Trash2 size={18}/> Delete Roll</button>
                     </div>
@@ -264,6 +279,7 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   );
 };
 
+// ... (HistoryView, AnalyticsDashboard, Dashboard, DispatchView, MaterialsView, NewProductView, BarcodeScanner, LabelPrint - Same as before) ...
 const HistoryView = ({ rolls, onSelectRoll, onExport }) => {
     const history = useMemo(() => rolls.filter(r => r.status === 'dispatched').sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at)), [rolls]);
     const totalDispatchedWeight = history.reduce((acc, curr) => acc + parseFloat(curr.net_weight || 0), 0);
@@ -293,249 +309,62 @@ const HistoryView = ({ rolls, onSelectRoll, onExport }) => {
         </div>
     );
 };
-
 const AnalyticsDashboard = ({ rolls }) => {
     // 1. Production (Added) Last 7 Days
-    const last7Days = [...Array(7)].map((_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        return d.toISOString().split('T')[0];
-    }).reverse();
-
-    const productionData = last7Days.map(date => {
-        const count = rolls.filter(r => r.created_at.startsWith(date)).length;
-        return { name: date.slice(5), rolls: count };
-    });
-
+    const last7Days = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return d.toISOString().split('T')[0]; }).reverse();
+    const productionData = last7Days.map(date => { const count = rolls.filter(r => r.created_at.startsWith(date)).length; return { name: date.slice(5), rolls: count }; });
     // 2. Stock by Color
     const stockRolls = rolls.filter(r => r.status === 'in_stock');
     const colorMap = stockRolls.reduce((acc, r) => { acc[r.color] = (acc[r.color] || 0) + 1; return acc; }, {});
     const pieData = Object.keys(colorMap).map(k => ({ name: k, value: colorMap[k] }));
     const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#ff7300'];
-
     return (
         <div className="space-y-4">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="font-bold text-gray-700 mb-4 text-sm">Production (Last 7 Days)</h3>
-                <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={productionData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="name" fontSize={10} />
-                            <YAxis fontSize={10} />
-                            <RechartsTooltip />
-                            <Bar dataKey="rolls" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="font-bold text-gray-700 mb-4 text-sm">Stock by Color</h3>
-                <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie data={pieData} cx="50%" cy="50%" outerRadius={60} fill="#8884d8" dataKey="value" label={({name})=>name}>
-                                {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                            </Pie>
-                            <RechartsTooltip />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100"><h3 className="font-bold text-gray-700 mb-4 text-sm">Production (Last 7 Days)</h3><div className="h-48 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={productionData}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" fontSize={10} /><YAxis fontSize={10} /><RechartsTooltip /><Bar dataKey="rolls" fill="#3b82f6" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div></div>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100"><h3 className="font-bold text-gray-700 mb-4 text-sm">Stock by Color</h3><div className="h-48 w-full"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={pieData} cx="50%" cy="50%" outerRadius={60} fill="#8884d8" dataKey="value" label={({name})=>name}>{pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie><RechartsTooltip /></PieChart></ResponsiveContainer></div></div>
         </div>
     );
 };
-
 const Dashboard = ({ rolls, materials }) => {
     const totalRolls = rolls.filter(r => r.status === 'in_stock').length;
     const totalWeight = rolls.filter(r => r.status === 'in_stock').reduce((acc, curr) => acc + parseFloat(curr.net_weight || 0), 0);
-    
     return (
         <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-5 rounded-2xl shadow-lg shadow-blue-200">
-                    <div className="text-blue-100 text-xs font-bold uppercase tracking-wide mb-1">Total Stock</div>
-                    <div className="text-3xl font-black">{totalRolls}</div>
-                    <div className="text-blue-200 text-xs mt-1">Rolls Available</div>
-                </div>
-                <div className="bg-gradient-to-br from-purple-600 to-purple-700 text-white p-5 rounded-2xl shadow-lg shadow-purple-200">
-                    <div className="text-purple-100 text-xs font-bold uppercase tracking-wide mb-1">Total Weight</div>
-                    <div className="text-3xl font-black">{totalWeight.toLocaleString()}</div>
-                    <div className="text-purple-200 text-xs mt-1">Kilograms</div>
-                </div>
-            </div>
-            
+            <div className="grid grid-cols-2 gap-4"><div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-5 rounded-2xl shadow-lg shadow-blue-200"><div className="text-blue-100 text-xs font-bold uppercase tracking-wide mb-1">Total Stock</div><div className="text-3xl font-black">{totalRolls}</div><div className="text-blue-200 text-xs mt-1">Rolls Available</div></div><div className="bg-gradient-to-br from-purple-600 to-purple-700 text-white p-5 rounded-2xl shadow-lg shadow-purple-200"><div className="text-purple-100 text-xs font-bold uppercase tracking-wide mb-1">Total Weight</div><div className="text-3xl font-black">{totalWeight.toLocaleString()}</div><div className="text-purple-200 text-xs mt-1">Kilograms</div></div></div>
             <AnalyticsDashboard rolls={rolls} />
-
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                <div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> Low Material Alerts</div>
-                <div className="space-y-2">
-                {materials.filter(m => m.stock_quantity < 100).length > 0 ? (
-                   materials.filter(m => m.stock_quantity < 100).map(m => (
-                       <div key={m.id} className="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-100">
-                           <span className="text-red-900 font-medium text-sm">{m.name}</span>
-                           <span className="text-red-700 font-bold text-sm">{m.stock_quantity} kg</span>
-                       </div>
-                   ))
-                ) : <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100 text-center">All materials sufficient</div>}
-                </div>
-            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100"><div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> Low Material Alerts</div><div className="space-y-2">{materials.filter(m => m.stock_quantity < 100).length > 0 ? (materials.filter(m => m.stock_quantity < 100).map(m => (<div key={m.id} className="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-100"><span className="text-red-900 font-medium text-sm">{m.name}</span><span className="text-red-700 font-bold text-sm">{m.stock_quantity} kg</span></div>))) : <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100 text-center">All materials sufficient</div>}</div></div>
         </div>
     );
 };
-
 const DispatchView = ({ rolls, isGuest, deviceName, onDispatch }) => {
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
-    
-    // Session list for Challan
     const [sessionList, setSessionList] = useState([]);
     const [challanDetails, setChallanDetails] = useState({ vehicle: '', buyer: '' });
-
     const handleSearch = (idOverride) => {
         const query = idOverride || scanId;
         const roll = rolls.find(r => r.product_id === query && r.status === 'in_stock');
         if (roll) { setFoundRoll(roll); setScanId(query); setShowScanner(false); }
         else alert('Roll not found or already dispatched.');
     };
-
-    const handleConfirmDispatch = () => {
-        onDispatch(foundRoll.id);
-        setSessionList([...sessionList, foundRoll]);
-        setFoundRoll(null);
-        setScanId('');
-    };
-
+    const handleConfirmDispatch = () => { onDispatch(foundRoll.id); setSessionList([...sessionList, foundRoll]); setFoundRoll(null); setScanId(''); };
     const handlePrintChallan = () => {
         if(!challanDetails.buyer || !challanDetails.vehicle) return alert("Enter Buyer Name and Vehicle No first!");
         generateChallan(sessionList, { ...challanDetails, device: deviceName });
-        if(window.confirm("Clear this Challan list?")) {
-            setSessionList([]);
-            setChallanDetails({ vehicle: '', buyer: '' });
-        }
+        if(window.confirm("Clear this Challan list?")) { setSessionList([]); setChallanDetails({ vehicle: '', buyer: '' }); }
     };
-
     return (
         <div className="max-w-xl mx-auto space-y-4">
             {showScanner && <BarcodeScanner onScan={(text) => { if(text) handleSearch(text); else setShowScanner(false); }} />}
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center">
-                <div className="mb-4">
-                    <h2 className="text-lg font-bold mb-2 text-gray-800">Scan Barcode</h2>
-                    <input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Type or Scan" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button>
-                    <button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button>
-                </div>
-            </div>
-
-            {/* Found Result */}
-            {foundRoll && (
-                <div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4">
-                    <h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Ready to Dispatch</h3>
-                    <div className="bg-white/50 p-3 rounded-lg grid grid-cols-2 gap-y-2 text-sm mb-4">
-                        <div className="text-gray-500">ID</div><div className="font-mono font-bold">{foundRoll.product_id}</div>
-                        <div className="text-gray-500">Quality</div><div className="font-bold">{foundRoll.quality}</div>
-                        <div className="text-gray-500">Weight</div><div className="font-bold">{foundRoll.net_weight} kg</div>
-                    </div>
-                    {isGuest ? (
-                        <div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>
-                    ) : (
-                        <button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200">CONFIRM DISPATCH</button>
-                    )}
-                </div>
-            )}
-
-            {/* Gate Pass Section */}
-            {!isGuest && sessionList.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 p-5 rounded-xl mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                         <h3 className="font-bold text-blue-900 flex items-center gap-2"><FileText size={20}/> Gate Pass Generator</h3>
-                         <span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{sessionList.length} Items</span>
-                    </div>
-                    <input className="w-full border p-2 mb-2 rounded" placeholder="Buyer Name" value={challanDetails.buyer} onChange={e => setChallanDetails({...challanDetails, buyer: e.target.value})} />
-                    <input className="w-full border p-2 mb-4 rounded" placeholder="Vehicle No (e.g. UP 27 ...)" value={challanDetails.vehicle} onChange={e => setChallanDetails({...challanDetails, vehicle: e.target.value})} />
-                    <button onClick={handlePrintChallan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><Printer size={18}/> Download Gate Pass PDF</button>
-                </div>
-            )}
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center"><div className="mb-4"><h2 className="text-lg font-bold mb-2 text-gray-800">Scan Barcode</h2><input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Type or Scan" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/></div><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button><button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button></div></div>
+            {foundRoll && (<div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4"><h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Ready to Dispatch</h3><div className="bg-white/50 p-3 rounded-lg grid grid-cols-2 gap-y-2 text-sm mb-4"><div className="text-gray-500">ID</div><div className="font-mono font-bold">{foundRoll.product_id}</div><div className="text-gray-500">Quality</div><div className="font-bold">{foundRoll.quality}</div><div className="text-gray-500">Weight</div><div className="font-bold">{foundRoll.net_weight} kg</div></div>{isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (<button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200">CONFIRM DISPATCH</button>)}</div>)}
+            {!isGuest && sessionList.length > 0 && (<div className="bg-blue-50 border border-blue-200 p-5 rounded-xl mt-6"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-blue-900 flex items-center gap-2"><FileText size={20}/> Gate Pass Generator</h3><span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{sessionList.length} Items</span></div><input className="w-full border p-2 mb-2 rounded" placeholder="Buyer Name" value={challanDetails.buyer} onChange={e => setChallanDetails({...challanDetails, buyer: e.target.value})} /><input className="w-full border p-2 mb-4 rounded" placeholder="Vehicle No (e.g. UP 27 ...)" value={challanDetails.vehicle} onChange={e => setChallanDetails({...challanDetails, vehicle: e.target.value})} /><button onClick={handlePrintChallan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><Printer size={18}/> Download Gate Pass PDF</button></div>)}
         </div>
     );
 };
-
-// ... (MaterialsView, NewProductView, BarcodeScanner, LabelPrint: Same as before - omitted for brevity but ASSUMED PRESENT in full copy) ...
-// NOTE: I am including the full code again to avoid "missing component" errors.
-
-const MaterialsView = ({ materials, isGuest, onUpdate, onAdd }) => {
-    const handleUpdate = (id, type) => { const qty = prompt(`Enter quantity to ${type} (Kg):`); if (qty && !isNaN(qty)) onUpdate(id, qty, type === 'add'); };
-    const handleAdd = () => { const name = prompt("Enter Material Name:"); if(name) onAdd(name); };
-    return (
-        <div className="pb-20">
-            {!isGuest && <button onClick={handleAdd} className="w-full bg-white border-2 border-dashed border-gray-300 text-gray-500 py-3 rounded-xl font-bold mb-4 hover:border-blue-400 hover:text-blue-500 transition-colors">+ Add New Material</button>}
-            <div className="grid grid-cols-1 gap-3">
-                {materials.map(m => (
-                    <div key={m.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-                        <div><h3 className="font-bold text-gray-700 text-sm">{m.name}</h3><div className="text-2xl font-black text-gray-900">{m.stock_quantity} <span className="text-xs font-medium text-gray-400">{m.unit}</span></div></div>
-                        {!isGuest && <div className="flex gap-2"><button onClick={() => handleUpdate(m.id, 'issue')} className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-bold border border-red-100">-</button><button onClick={() => handleUpdate(m.id, 'add')} className="w-10 h-10 flex items-center justify-center bg-green-50 text-green-600 rounded-lg font-bold border border-green-100">+</button></div>}
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-const NewProductView = ({ formData, setFormData, onSubmit }) => {
-  return (
-    <div className="max-w-xl mx-auto bg-white p-5 rounded-xl shadow-sm border border-gray-100 mt-2">
-      <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800 border-b pb-2"><Plus className="text-blue-600" size={20}/> New Roll Entry</h2>
-      <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3">
-        <div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Customer</label><input placeholder="Internal Name" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} /></div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Quality</label><input placeholder="Type" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.quality} onChange={e => setFormData({...formData, quality: e.target.value})} /></div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Color</label><input placeholder="Color" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} /></div>
-        <div className="col-span-2 grid grid-cols-3 gap-3">
-            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">GSM</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.gsm} onChange={e => setFormData({...formData, gsm: e.target.value})} /></div>
-            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Width (In)</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.width_inches} onChange={e => setFormData({...formData, width_inches: e.target.value})} /></div>
-            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Length (m)</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.length_meters} onChange={e => setFormData({...formData, length_meters: e.target.value})} /></div>
-        </div>
-        <div className="col-span-2 grid grid-cols-2 gap-3 bg-blue-50 p-3 rounded-lg border border-blue-100">
-             <div><label className="text-xs font-bold text-blue-800 uppercase ml-1">Net Kg</label><input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg font-bold text-blue-900" value={formData.net_weight} onChange={e => setFormData({...formData, net_weight: e.target.value})} /></div>
-             <div><label className="text-xs font-bold text-blue-800 uppercase ml-1">Gross Kg</label><input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg" value={formData.gross_weight} onChange={e => setFormData({...formData, gross_weight: e.target.value})} /></div>
-        </div>
-        <button type="submit" className="col-span-2 mt-2 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-blue-200">Save & Print Label</button>
-      </form>
-    </div>
-  );
-};
-const BarcodeScanner = ({ onScan }) => {
-    useEffect(() => {
-        const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false);
-        scanner.render((text) => { scanner.clear(); onScan(text); }, (error) => { console.warn(error); });
-        return () => { scanner.clear().catch(error => console.error("Failed to clear scanner", error)); };
-    }, [onScan]);
-    return (<div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4"><div className="w-full max-w-sm bg-white rounded-xl overflow-hidden p-4"><h3 className="text-center font-bold mb-2">Scan Roll Barcode</h3><div id="reader" className="w-full"></div><button onClick={() => onScan(null)} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Cancel</button></div></div>);
-};
-const LabelPrint = ({ data, onClose }) => {
-  const [showLogo, setShowLogo] = useState(true);
-  if (!data) return null;
-  const handlePrint = () => window.print();
-  return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white p-6 rounded-xl max-w-md w-full">
-        <div id="print-area" className="border-4 border-black p-4 mb-4 text-center bg-white">
-            {showLogo && <div className="flex items-center justify-center gap-2 mb-2"><img src="/logo.png" className="h-8 object-contain" alt="KSF" /><h2 className="text-2xl font-bold">KSF Non-Woven</h2></div>}
-            <div className="grid grid-cols-2 text-left gap-y-1 text-sm border-t-2 border-black pt-2 mb-2 font-mono">
-                <div><strong>Quality:</strong> {data.quality}</div><div><strong>GSM:</strong> {data.gsm}</div>
-                <div><strong>Color:</strong> {data.color}</div><div><strong>Width:</strong> {data.width_inches}"</div>
-                <div><strong>Length:</strong> {data.length_meters}m</div><div><strong>Net Wt:</strong> {data.net_weight}kg</div>
-                <div><strong>Gross Wt:</strong> {data.gross_weight}kg</div>
-            </div>
-            <div className="flex justify-center py-2"><Barcode value={data.product_id} width={2} height={50} fontSize={14} /></div>
-        </div>
-        <div className="mb-4 flex items-center justify-between bg-gray-50 p-3 rounded-lg"><span className="text-sm font-bold text-gray-600">Include Logo?</span><button onClick={() => setShowLogo(!showLogo)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${showLogo ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{showLogo ? 'YES' : 'NO'}</button></div>
-        <div className="flex gap-3 no-print"><button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200"><Printer size={20} /> Print</button><button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold">Close</button></div>
-      </div>
-    </div>
-  );
-};
+const MaterialsView = ({ materials, isGuest, onUpdate, onAdd }) => { const handleUpdate = (id, type) => { const qty = prompt(`Enter quantity to ${type} (Kg):`); if (qty && !isNaN(qty)) onUpdate(id, qty, type === 'add'); }; const handleAdd = () => { const name = prompt("Enter Material Name:"); if(name) onAdd(name); }; return (<div className="pb-20">{!isGuest && <button onClick={handleAdd} className="w-full bg-white border-2 border-dashed border-gray-300 text-gray-500 py-3 rounded-xl font-bold mb-4 hover:border-blue-400 hover:text-blue-500 transition-colors">+ Add New Material</button>}<div className="grid grid-cols-1 gap-3">{materials.map(m => (<div key={m.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between"><div><h3 className="font-bold text-gray-700 text-sm">{m.name}</h3><div className="text-2xl font-black text-gray-900">{m.stock_quantity} <span className="text-xs font-medium text-gray-400">{m.unit}</span></div></div>{!isGuest && <div className="flex gap-2"><button onClick={() => handleUpdate(m.id, 'issue')} className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-bold border border-red-100">-</button><button onClick={() => handleUpdate(m.id, 'add')} className="w-10 h-10 flex items-center justify-center bg-green-50 text-green-600 rounded-lg font-bold border border-green-100">+</button></div>}</div>))}</div></div>); };
+const NewProductView = ({ formData, setFormData, onSubmit }) => { return (<div className="max-w-xl mx-auto bg-white p-5 rounded-xl shadow-sm border border-gray-100 mt-2"><h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800 border-b pb-2"><Plus className="text-blue-600" size={20}/> New Roll Entry</h2><form onSubmit={onSubmit} className="grid grid-cols-2 gap-3"><div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Customer</label><input placeholder="Internal Name" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} /></div><div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Quality</label><input placeholder="Type" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.quality} onChange={e => setFormData({...formData, quality: e.target.value})} /></div><div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Color</label><input placeholder="Color" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} /></div><div className="col-span-2 grid grid-cols-3 gap-3"><div><label className="text-xs font-bold text-gray-500 uppercase ml-1">GSM</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.gsm} onChange={e => setFormData({...formData, gsm: e.target.value})} /></div><div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Width (In)</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.width_inches} onChange={e => setFormData({...formData, width_inches: e.target.value})} /></div><div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Length (m)</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.length_meters} onChange={e => setFormData({...formData, length_meters: e.target.value})} /></div></div><div className="col-span-2 grid grid-cols-2 gap-3 bg-blue-50 p-3 rounded-lg border border-blue-100"><div><label className="text-xs font-bold text-blue-800 uppercase ml-1">Net Kg</label><input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg font-bold text-blue-900" value={formData.net_weight} onChange={e => setFormData({...formData, net_weight: e.target.value})} /></div><div><label className="text-xs font-bold text-blue-800 uppercase ml-1">Gross Kg</label><input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg" value={formData.gross_weight} onChange={e => setFormData({...formData, gross_weight: e.target.value})} /></div></div><button type="submit" className="col-span-2 mt-2 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-blue-200">Save & Print Label</button></form></div>); };
 
 // --- MAIN APP ---
 export default function App() {
