@@ -11,7 +11,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -86,7 +86,7 @@ const generateChallan = (rolls, details) => {
 };
 
 // --- COMPONENTS ---
-const Header = React.memo(({ user, isGuest, deviceName, onLogout, setTab, activeTab }) => (
+const Header = React.memo(({ user, isGuest, deviceName, onLogout, setTab, activeTab, onEditDeviceName }) => (
   <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm safe-area-inset-top">
     <div className="flex justify-between items-center px-4 py-2 max-w-7xl mx-auto h-16">
       <div className="flex items-center gap-3 cursor-pointer" onClick={() => setTab('dashboard')}>
@@ -98,7 +98,17 @@ const Header = React.memo(({ user, isGuest, deviceName, onLogout, setTab, active
       </div>
       <div className="flex items-center gap-3">
         <div className="text-right hidden md:block">
-            {isGuest ? (<div className="flex items-center gap-1 text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full"><Eye size={12}/> View Only</div>) : (<><div className="text-xs font-bold text-gray-900">{deviceName}</div><div className="text-[10px] text-gray-500">{user?.email}</div></>)}
+            {isGuest ? (
+                <div className="flex items-center gap-1 text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full"><Eye size={12}/> View Only</div>
+            ) : (
+                <>
+                    <div className="flex items-center justify-end gap-1 group cursor-pointer" onClick={onEditDeviceName} title="Edit Device Name">
+                        <div className="text-xs font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{deviceName}</div>
+                        <Edit3 size={10} className="text-gray-400 group-hover:text-blue-600"/>
+                    </div>
+                    <div className="text-[10px] text-gray-500">{user?.email}</div>
+                </>
+            )}
         </div>
         <button onClick={onLogout} className="p-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"><LogOut size={20} /></button>
       </div>
@@ -114,15 +124,23 @@ const Header = React.memo(({ user, isGuest, deviceName, onLogout, setTab, active
   </header>
 ));
 
-const DeviceNameModal = ({ onSave }) => {
-    const [name, setName] = useState('');
+const DeviceNameModal = ({ onSave, initialName, onClose }) => {
+    const [name, setName] = useState(initialName || '');
     return (
-        <div className="fixed inset-0 bg-slate-900 z-[200] flex items-center justify-center p-6">
-            <div className="bg-white p-8 rounded-2xl max-w-md w-full text-center">
+        <div className="fixed inset-0 bg-slate-900/95 z-[200] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative">
+                {onClose && <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={24}/></button>}
                 <Smartphone size={48} className="mx-auto text-blue-600 mb-4"/>
                 <h2 className="text-2xl font-bold mb-2">Name this Device</h2>
-                <input className="w-full border-2 border-gray-300 p-3 rounded-xl text-lg mb-4 text-center focus:border-blue-600 outline-none" placeholder="Enter Device Name" value={name} onChange={e => setName(e.target.value)} />
-                <button disabled={!name} onClick={() => onSave(name)} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-lg disabled:opacity-50">Save & Continue</button>
+                <p className="text-gray-500 mb-6 text-sm">This name will appear in the activity logs.<br/>e.g., "Production Line 1", "Owner's iPhone"</p>
+                <input 
+                    className="w-full border-2 border-gray-300 p-4 rounded-xl text-lg mb-4 text-center focus:border-blue-600 outline-none font-bold text-gray-800" 
+                    placeholder="Enter Device Name" 
+                    value={name} 
+                    onChange={e => setName(e.target.value)} 
+                    autoFocus
+                />
+                <button disabled={!name} onClick={() => onSave(name)} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">Save Device Name</button>
             </div>
         </div>
     );
@@ -244,7 +262,6 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   const uniqueColors = ['All', ...new Set(rolls.map(r => r.color).filter(Boolean))];
   const uniqueQualities = ['All', ...new Set(rolls.map(r => r.quality).filter(Boolean))];
   const uniqueGSM = ['All', ...new Set(rolls.map(r => r.gsm).filter(Boolean))];
-  
   const filtered = rolls.filter(r => {
       const term = search.toLowerCase();
       const matchSearch = r.status === 'in_stock' && (
@@ -305,14 +322,11 @@ const AnalyticsDashboard = ({ rolls }) => {
 const Dashboard = ({ rolls, materials }) => {
     const totalRolls = rolls.filter(r => r.status === 'in_stock').length;
     const totalWeight = rolls.filter(r => r.status === 'in_stock').reduce((acc, curr) => acc + parseFloat(curr.net_weight || 0), 0);
-    // Recent Activity Logic (Last 5 rolls by updated_at)
     const recentActivity = rolls.slice(0, 5);
 
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4"><div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-5 rounded-2xl shadow-lg shadow-blue-200"><div className="text-blue-100 text-xs font-bold uppercase tracking-wide mb-1">Total Stock</div><div className="text-3xl font-black">{totalRolls}</div><div className="text-blue-200 text-xs mt-1">Rolls Available</div></div><div className="bg-gradient-to-br from-purple-600 to-purple-700 text-white p-5 rounded-2xl shadow-lg shadow-purple-200"><div className="text-purple-100 text-xs font-bold uppercase tracking-wide mb-1">Total Weight</div><div className="text-3xl font-black">{totalWeight.toLocaleString()}</div><div className="text-purple-200 text-xs mt-1">Kilograms</div></div></div>
-            
-            {/* UPDATED ACTIVITY SECTION */}
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                 <div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><Activity size={18} className="text-blue-500"/> Recent Activity (Live)</div>
                 <div className="space-y-3">
@@ -321,22 +335,15 @@ const Dashboard = ({ rolls, materials }) => {
                             <div>
                                 <div className="flex items-center gap-2">
                                     <span className="font-bold text-gray-700">{r.product_id}</span> 
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${r.status === 'dispatched' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                        {r.status === 'in_stock' ? 'Added/Edited' : 'Dispatched'}
-                                    </span>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${r.status === 'dispatched' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{r.status === 'in_stock' ? 'Added/Edited' : 'Dispatched'}</span>
                                 </div>
-                                <div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1">
-                                    <Smartphone size={10}/> {r.device_name || 'Unknown Device'}
-                                </div>
+                                <div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1"><Smartphone size={10}/> {r.device_name || 'Unknown Device'}</div>
                             </div>
-                            <div className="text-xs text-gray-400 font-mono">
-                                {new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                            </div>
+                            <div className="text-xs text-gray-400 font-mono">{new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                         </div>
                     ))}
                 </div>
             </div>
-
             <AnalyticsDashboard rolls={rolls} />
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100"><div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> Low Material Alerts</div><div className="space-y-2">{materials.filter(m => m.stock_quantity < 100).length > 0 ? (materials.filter(m => m.stock_quantity < 100).map(m => (<div key={m.id} className="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-100"><span className="text-red-900 font-medium text-sm">{m.name}</span><span className="text-red-700 font-bold text-sm">{m.stock_quantity} kg</span></div>))) : <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100 text-center">All materials sufficient</div>}</div></div>
         </div>
@@ -396,9 +403,12 @@ export default function App() {
   const [materials, setMaterials] = useState([]);
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
+  
+  // MODAL STATES
+  const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
+
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
 
-  // Use refs to avoid re-creating functions that depend on state
   const fetchDataRef = useRef();
 
   const fetchData = useCallback(async (isBackground = false) => {
@@ -421,22 +431,33 @@ export default function App() {
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { 
         setUser(session?.user ?? null); 
-        // Only trigger fetch if session exists and we weren't just mounting (avoid double load)
         if (session && !user) { setIsGuest(false); fetchData(); } 
     });
     
-    // Silent Auto Refresh every 10s
     const interval = setInterval(() => { 
         if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); 
     }, 10000);
 
     return () => { subscription.unsubscribe(); clearInterval(interval); };
-  }, [fetchData]); // Dependency array is stable now
+  }, [fetchData]);
+
+  // Force open modal if device name is missing on login
+  useEffect(() => {
+      if(user && !isGuest && !deviceName) {
+          setDeviceModalOpen(true);
+      }
+  }, [user, isGuest, deviceName]);
 
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
   const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
-  const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); };
+  
+  const handleSaveDeviceName = (name) => { 
+      localStorage.setItem('ksf_device_name', name); 
+      setDeviceName(name); 
+      setDeviceModalOpen(false); 
+  };
+
   const handleSaveRoll = async (e) => { e.preventDefault(); const id = `KSF-${Math.floor(Math.random() * 1000000)}`; const newRoll = { ...formData, product_id: id, status: 'in_stock' }; try { await DataService.addRoll(newRoll, deviceName); setPrintData(newRoll); fetchData(); setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); } catch (err) { alert('Error: ' + err.message); } };
   const handleDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
   const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
@@ -446,11 +467,10 @@ export default function App() {
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
 
   if (!user && !isGuest) { return (<div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6"><div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100"><img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" /><h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1><p className="text-gray-500 mb-8">Manage your factory floor efficiently.</p><button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200">Login with Google</button><button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold hover:bg-gray-50 transition border border-gray-200 flex items-center justify-center gap-2"><Eye size={20}/> Monitor Only (Guest)</button></div></div>); }
-  if (user && !deviceName && !isGuest) { return <DeviceNameModal onSave={handleSaveDeviceName} />; }
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pb-10">
-      <Header user={user} isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} />
+      <Header user={user} isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} onEditDeviceName={() => setDeviceModalOpen(true)} />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading ? ( <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div> ) : (
             <>
@@ -464,6 +484,9 @@ export default function App() {
             </>
         )}
       </main>
+      
+      {/* MODALS RENDERED HERE TO AVOID BLOCKING UI */}
+      {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
       {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
