@@ -181,17 +181,20 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (CLEAN DESIGN + BOX) ---
+// --- REDESIGNED LABEL PRINT COMPONENT ---
 const LabelPrint = ({ data, onClose }) => {
   const [showLogo, setShowLogo] = useState(true);
   const [labelSize, setLabelSize] = useState('4in-2in');
   const canvasRef = useRef(null);
 
-  // Dynamic Styles based on selection
+  // Dynamic Styles
   const [width, height] = labelSize.split('-');
   const isSmall = width.startsWith('2');
-  const fontSize = isSmall ? '9px' : '11px';
-  const logoHeight = isSmall ? '35px' : '55px';
+  
+  // Font & Size Config
+  const fontSize = isSmall ? '12px' : '16px'; 
+  const logoHeight = isSmall ? '50px' : '80px';
+  const barcodeHeight = isSmall ? 25 : 35;
 
   useEffect(() => {
       if (data && canvasRef.current) {
@@ -199,15 +202,16 @@ const LabelPrint = ({ data, onClose }) => {
               JsBarcode(canvasRef.current, data.product_id, { 
                   format: "CODE128", 
                   width: 2, 
-                  height: isSmall ? 30 : 40,
+                  height: barcodeHeight, // Reduced barcode height
                   displayValue: true, 
                   margin: 2,
-                  fontSize: 14
+                  fontSize: 18, // Large, readable ID
+                  fontOptions: "bold"
               }); 
           } 
           catch (e) { console.error("Barcode rendering failed", e); }
       }
-  }, [data, labelSize, isSmall]);
+  }, [data, labelSize, isSmall, barcodeHeight]);
 
   const handlePrint = () => window.print();
 
@@ -221,8 +225,9 @@ const LabelPrint = ({ data, onClose }) => {
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
-      padding: '4px',
-      border: '3px solid black', // The requested outer box
+      alignItems: 'center',
+      padding: '5px',
+      border: '4px solid black', // Heavy Outer Box
       boxSizing: 'border-box'
   };
 
@@ -234,13 +239,8 @@ const LabelPrint = ({ data, onClose }) => {
                 body * { visibility: hidden; }
                 #print-wrapper, #print-wrapper * { visibility: visible; }
                 #print-wrapper { 
-                    position: absolute; 
-                    top: 0; 
-                    left: 0; 
-                    margin: 0;
-                    width: auto;
-                    height: auto;
-                    border: none !important; /* Hide wrapper border, keep label border */
+                    position: absolute; top: 0; left: 0; margin: 0;
+                    width: auto; height: auto; border: none !important;
                 }
                 #print-controls { display: none !important; }
             }
@@ -269,37 +269,45 @@ const LabelPrint = ({ data, onClose }) => {
         {/* PRINT WRAPPER */}
         <div id="print-wrapper" className="flex items-center justify-center bg-gray-200 p-8 rounded-lg border border-dashed border-gray-400">
             
-            {/* ACTUAL LABEL DESIGN */}
+            {/* ACTUAL LABEL */}
             <div id="print-area" style={printStyle}>
                 
-                {showLogo && (
-                    <div className="w-full flex justify-center pt-1">
-                        <img src="/logo.png" style={{ height: logoHeight, objectFit: 'contain' }} alt="Logo" />
-                    </div>
-                )}
-
-                {/* DETAILS GRID (Full Names) */}
-                <div className="w-full grid grid-cols-2 gap-x-1 font-bold font-mono leading-tight mt-1" style={{ fontSize: fontSize }}>
-                    <div>Quality: {data.quality}</div>
-                    <div>GSM: {data.gsm}</div>
-                    <div>Color: {data.color}</div>
-                    <div>Size: {data.width_inches}" / {data.length_meters}m</div>
-                    <div>Net Wt: {data.net_weight} kg</div>
-                    <div>Gross Wt: {data.gross_weight} kg</div>
+                {/* Logo Area */}
+                <div className="w-full flex justify-center items-center pb-1">
+                     {showLogo && <img src="/logo.png" style={{ height: logoHeight, objectFit: 'contain' }} alt="Logo" />}
                 </div>
 
-                {/* BARCODE */}
-                <div className="w-full flex justify-center overflow-hidden pb-1">
-                    <canvas ref={canvasRef} style={{ maxWidth: '100%' }}></canvas>
+                {/* Persistent Line */}
+                <div className="w-full border-t-2 border-black my-1"></div>
+
+                {/* Details (Centered, Bold, No Abbr) */}
+                <div className="w-full flex flex-col items-center justify-center font-black font-mono leading-snug text-center" style={{ fontSize: fontSize }}>
+                    <div>{data.quality}</div>
+                    <div>{data.color}</div>
+                    
+                    {/* Size Row */}
+                    <div className="flex gap-2 justify-center w-full">
+                        <span>{data.width_inches}"</span>
+                        <span>/</span>
+                        <span>{data.gsm} GSM</span>
+                    </div>
+
+                    {/* Weight Row */}
+                    <div className="flex gap-4 justify-center w-full mt-1 border-t border-black pt-1">
+                        <div>Net: {data.net_weight}</div>
+                        <div>Grs: {data.gross_weight}</div>
+                    </div>
+                </div>
+
+                {/* Barcode Canvas */}
+                <div className="w-full flex justify-center overflow-hidden mt-1">
+                    <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
                 </div>
             </div>
         </div>
 
-        {/* BUTTONS */}
         <div id="print-controls" className="flex gap-3 w-full mt-4">
-          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors">
-            <Printer size={20} /> Print Label
-          </button>
+          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print Label</button>
           <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close</button>
         </div>
 
@@ -390,8 +398,14 @@ const Dashboard = ({ rolls, materials }) => {
     const totalRolls = rolls.filter(r => r.status === 'in_stock').length;
     const totalWeight = rolls.filter(r => r.status === 'in_stock').reduce((acc, curr) => acc + parseFloat(curr.net_weight || 0), 0);
     const recentActivity = rolls.slice(0, 5);
+
     return (
-        <div className="space-y-4"><div className="grid grid-cols-2 gap-4"><div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-5 rounded-2xl shadow-lg shadow-blue-200"><div className="text-blue-100 text-xs font-bold uppercase tracking-wide mb-1">Total Stock</div><div className="text-3xl font-black">{totalRolls}</div><div className="text-blue-200 text-xs mt-1">Rolls Available</div></div><div className="bg-gradient-to-br from-purple-600 to-purple-700 text-white p-5 rounded-2xl shadow-lg shadow-purple-200"><div className="text-purple-100 text-xs font-bold uppercase tracking-wide mb-1">Total Weight</div><div className="text-3xl font-black">{totalWeight.toLocaleString()}</div><div className="text-purple-200 text-xs mt-1">Kilograms</div></div></div><div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100"><div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><Activity size={18} className="text-blue-500"/> Recent Activity (Live)</div><div className="space-y-3">{recentActivity.map(r => (<div key={r.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-0"><div><div className="flex items-center gap-2"><span className="font-bold text-gray-700">{r.product_id}</span> <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${r.status === 'dispatched' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{r.status === 'in_stock' ? 'Added/Edited' : 'Dispatched'}</span></div><div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1"><Smartphone size={10}/> {r.device_name || 'Unknown Device'}</div></div><div className="text-xs text-gray-400 font-mono">{new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div></div>))}</div></div><AnalyticsDashboard rolls={rolls} /><div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100"><div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> Low Material Alerts</div><div className="space-y-2">{materials.filter(m => m.stock_quantity < 100).length > 0 ? (materials.filter(m => m.stock_quantity < 100).map(m => (<div key={m.id} className="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-100"><span className="text-red-900 font-medium text-sm">{m.name}</span><span className="text-red-700 font-bold text-sm">{m.stock_quantity} kg</span></div>))) : <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100 text-center">All materials sufficient</div>}</div></div></div>
+        <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4"><div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-5 rounded-2xl shadow-lg shadow-blue-200"><div className="text-blue-100 text-xs font-bold uppercase tracking-wide mb-1">Total Stock</div><div className="text-3xl font-black">{totalRolls}</div><div className="text-blue-200 text-xs mt-1">Rolls Available</div></div><div className="bg-gradient-to-br from-purple-600 to-purple-700 text-white p-5 rounded-2xl shadow-lg shadow-purple-200"><div className="text-purple-100 text-xs font-bold uppercase tracking-wide mb-1">Total Weight</div><div className="text-3xl font-black">{totalWeight.toLocaleString()}</div><div className="text-purple-200 text-xs mt-1">Kilograms</div></div></div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100"><div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><Activity size={18} className="text-blue-500"/> Recent Activity (Live)</div><div className="space-y-3">{recentActivity.map(r => (<div key={r.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-0"><div><div className="flex items-center gap-2"><span className="font-bold text-gray-700">{r.product_id}</span> <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${r.status === 'dispatched' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{r.status === 'in_stock' ? 'Added/Edited' : 'Dispatched'}</span></div><div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1"><Smartphone size={10}/> {r.device_name || 'Unknown Device'}</div></div><div className="text-xs text-gray-400 font-mono">{new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div></div>))}</div></div>
+            <AnalyticsDashboard rolls={rolls} />
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100"><div className="text-gray-900 font-bold mb-3 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> Low Material Alerts</div><div className="space-y-2">{materials.filter(m => m.stock_quantity < 100).length > 0 ? (materials.filter(m => m.stock_quantity < 100).map(m => (<div key={m.id} className="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-100"><span className="text-red-900 font-medium text-sm">{m.name}</span><span className="text-red-700 font-bold text-sm">{m.stock_quantity} kg</span></div>))) : <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100 text-center">All materials sufficient</div>}</div></div>
+        </div>
     );
 };
 
