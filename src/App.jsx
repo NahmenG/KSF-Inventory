@@ -11,7 +11,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3, Settings
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3, Settings, Type, Bold, AlignLeft, AlignCenter, AlignRight, Minus, Plus as PlusIcon
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -181,130 +181,181 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- CLASSIC GRID DESIGN (SMART SCALING) ---
+// --- POWERPOINT-STYLE EDITABLE LABEL COMPONENT ---
 const LabelPrint = ({ data, onClose }) => {
   const [showLogo, setShowLogo] = useState(true);
-  const [labelSize, setLabelSize] = useState('4in-2in'); // Default
+  const [labelSize, setLabelSize] = useState('4in-2in');
+  
+  // Design State
+  const [fontSize, setFontSize] = useState(12);
+  const [logoSize, setLogoSize] = useState(50);
+  const [barcodeScale, setBarcodeScale] = useState(40);
+  const [isBold, setIsBold] = useState(true);
+  const [textAlign, setTextAlign] = useState('left');
+
+  // Editable Content State (Init from data)
+  const [content, setContent] = useState({
+      qualityLabel: 'Quality:', qualityVal: data.quality,
+      gsmLabel: 'GSM:', gsmVal: data.gsm,
+      colorLabel: 'Color:', colorVal: data.color,
+      sizeLabel: 'Size:', sizeVal: `${data.width_inches}" / ${data.length_meters}m`,
+      netLabel: 'Net Wt:', netVal: `${data.net_weight} kg`,
+      grossLabel: 'Gross Wt:', grossVal: `${data.gross_weight} kg`
+  });
+
   const canvasRef = useRef(null);
 
-  // Dynamic Scale Logic
-  const [widthStr, heightStr] = labelSize.split('-');
-  const isSmallWidth = widthStr.startsWith('2');
-  const isSmallHeight = heightStr.startsWith('2');
-
-  // Adjust parameters based on size selection
-  const styles = {
-      logoHeight: isSmallHeight ? '35px' : '55px',
-      fontSize: isSmallWidth ? '10px' : '14px',
-      gridGap: isSmallWidth ? '1px' : '4px',
-      barcodeHeight: isSmallHeight ? 30 : 45,
-      barcodeWidth: isSmallWidth ? 1.5 : 2, // Thinner bars for small width
-      barcodeFontSize: isSmallWidth ? 12 : 16
-  };
-
+  // Barcode Render
   useEffect(() => {
       if (data && canvasRef.current) {
           try { 
               JsBarcode(canvasRef.current, data.product_id, { 
                   format: "CODE128", 
-                  width: styles.barcodeWidth, 
-                  height: styles.barcodeHeight, 
+                  width: 2, 
+                  height: barcodeScale, 
                   displayValue: true, 
                   margin: 2,
-                  fontSize: styles.barcodeFontSize,
+                  fontSize: fontSize + 4,
                   fontOptions: "bold"
               }); 
-          } 
-          catch (e) { console.error("Barcode rendering failed", e); }
+          } catch (e) { console.error(e); }
       }
-  }, [data, labelSize, styles]);
+  }, [data, barcodeScale, fontSize]);
 
   const handlePrint = () => window.print();
+  const handleChange = (field, val) => setContent(prev => ({...prev, [field]: val}));
 
   if (!data) return null;
 
-  // The outer box container
+  const [width, height] = labelSize.split('-');
+
+  // The CSS for the inputs to make them look like text
+  const inputStyle = {
+      background: 'transparent',
+      border: 'none',
+      width: '100%',
+      fontWeight: isBold ? '900' : 'normal',
+      fontSize: `${fontSize}px`,
+      textAlign: textAlign,
+      outline: 'none',
+      padding: 0,
+      margin: 0,
+      color: 'black'
+  };
+
   const printStyle = {
-      width: widthStr,
-      height: heightStr,
+      width: width,
+      height: height,
       backgroundColor: 'white',
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
-      justifyContent: 'space-between',
+      justifyContent: 'flex-start',
       padding: '5px',
-      border: '4px solid black', // Requested outer box
+      border: '2px solid black',
       boxSizing: 'border-box'
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 overflow-y-auto">
       <style>
-        {`
-            @media print {
-                body * { visibility: hidden; }
-                #print-wrapper, #print-wrapper * { visibility: visible; }
-                #print-wrapper { 
-                    position: absolute; top: 0; left: 0; margin: 0;
-                    width: auto; height: auto; border: none !important;
-                }
-                #print-controls { display: none !important; }
-            }
-        `}
+        {`@media print { body * { visibility: hidden; } #print-wrapper, #print-wrapper * { visibility: visible; } #print-wrapper { position: absolute; top: 0; left: 0; margin: 0; border: none !important; } #print-controls { display: none !important; } }`}
       </style>
 
-      <div className="bg-white p-6 rounded-xl max-w-lg w-full flex flex-col items-center animate-in fade-in zoom-in-95">
+      <div className="bg-white p-4 rounded-xl max-w-lg w-full flex flex-col items-center animate-in fade-in zoom-in-95 my-auto">
         
-        {/* CONTROLS */}
-        <div id="print-controls" className="w-full mb-4 space-y-3">
-            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
-                <span className="font-bold text-sm text-gray-600 flex items-center gap-2"><Settings size={16}/> Label Size</span>
-                <select className="border border-gray-300 rounded p-1 text-sm font-bold text-gray-700" value={labelSize} onChange={(e) => setLabelSize(e.target.value)}>
+        {/* DESIGN TOOLBAR */}
+        <div id="print-controls" className="w-full mb-4 space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-500 uppercase">Layout</span>
+                <select className="border rounded p-1 text-xs font-bold" value={labelSize} onChange={(e) => setLabelSize(e.target.value)}>
                     <option value="4in-2in">4" x 2"</option>
                     <option value="4in-3in">4" x 3"</option>
                     <option value="2in-2in">2" x 2"</option>
                     <option value="2in-4in">2" x 4"</option>
                 </select>
             </div>
-            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
-                <span className="font-bold text-sm text-gray-600">Include Logo?</span>
-                <button onClick={() => setShowLogo(!showLogo)} className={`px-4 py-1 rounded text-xs font-bold transition-colors ${showLogo ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{showLogo ? 'YES' : 'NO'}</button>
+            
+            {/* Formatting Tools */}
+            <div className="flex gap-2 justify-between items-center border-t border-slate-200 pt-2">
+                <div className="flex gap-1 bg-white p-1 rounded border">
+                    <button onClick={() => setFontSize(f => Math.max(8, f-1))} className="p-1 hover:bg-slate-100 rounded"><Minus size={14}/></button>
+                    <span className="text-xs font-bold w-6 text-center pt-0.5">{fontSize}</span>
+                    <button onClick={() => setFontSize(f => Math.min(24, f+1))} className="p-1 hover:bg-slate-100 rounded"><PlusIcon size={14}/></button>
+                </div>
+                <button onClick={() => setIsBold(!isBold)} className={`p-1.5 rounded border ${isBold ? 'bg-blue-100 border-blue-300 text-blue-600' : 'bg-white'}`}><Bold size={14}/></button>
+                <div className="flex gap-0.5 bg-white p-1 rounded border">
+                    <button onClick={() => setTextAlign('left')} className={`p-1 rounded ${textAlign==='left' ? 'bg-slate-200':''}`}><AlignLeft size={14}/></button>
+                    <button onClick={() => setTextAlign('center')} className={`p-1 rounded ${textAlign==='center' ? 'bg-slate-200':''}`}><AlignCenter size={14}/></button>
+                    <button onClick={() => setTextAlign('right')} className={`p-1 rounded ${textAlign==='right' ? 'bg-slate-200':''}`}><AlignRight size={14}/></button>
+                </div>
+            </div>
+
+            {/* Sliders */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                    <label className="text-[10px] font-bold text-slate-400">Logo Size</label>
+                    <input type="range" min="20" max="100" value={logoSize} onChange={e => setLogoSize(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+                <div>
+                    <label className="text-[10px] font-bold text-slate-400">Barcode Ht</label>
+                    <input type="range" min="20" max="80" value={barcodeScale} onChange={e => setBarcodeScale(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/>
+                </div>
+            </div>
+            
+            <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Show Logo</span>
+                <button onClick={() => setShowLogo(!showLogo)} className={`w-8 h-4 rounded-full transition-colors ${showLogo ? 'bg-green-500' : 'bg-slate-300'}`}></button>
             </div>
         </div>
 
-        {/* PRINT WRAPPER */}
-        <div id="print-wrapper" className="flex items-center justify-center bg-gray-200 p-8 rounded-lg border border-dashed border-gray-400">
-            
-            {/* ACTUAL LABEL */}
+        {/* PRINT PREVIEW AREA */}
+        <div id="print-wrapper" className="flex items-center justify-center bg-gray-200 p-6 rounded-lg border border-dashed border-gray-400 overflow-auto max-h-[60vh] w-full">
             <div id="print-area" style={printStyle}>
                 
-                {/* Logo Area */}
+                {/* Logo */}
                 {showLogo && (
-                    <div className="w-full flex justify-center pb-1">
-                        <img src="/logo.png" style={{ height: styles.logoHeight, objectFit: 'contain' }} alt="Logo" />
+                    <div className="w-full flex justify-center pb-1" style={{ borderBottom: '2px solid black', marginBottom: '4px' }}>
+                        <img src="/logo.png" style={{ height: `${logoSize}px`, objectFit: 'contain' }} alt="Logo" />
                     </div>
                 )}
 
-                {/* ORIGINAL GRID LAYOUT (Restored) */}
-                <div className="w-full grid grid-cols-2 text-left font-mono border-t-2 border-black pt-1 leading-tight" 
-                     style={{ fontSize: styles.fontSize, gap: styles.gridGap }}>
-                    <div><strong>Quality:</strong> {data.quality}</div>
-                    <div><strong>GSM:</strong> {data.gsm}</div>
-                    <div><strong>Color:</strong> {data.color}</div>
-                    <div><strong>Size:</strong> {data.width_inches}" / {data.length_meters}m</div>
-                    <div><strong>Net Wt:</strong> {data.net_weight}kg</div>
-                    <div><strong>Gross Wt:</strong> {data.gross_weight}kg</div>
+                {/* EDITABLE GRID */}
+                <div className="w-full grid grid-cols-2 gap-x-1 gap-y-0.5 font-mono leading-tight">
+                    {/* Row 1 */}
+                    <input style={inputStyle} value={content.qualityLabel} onChange={e => handleChange('qualityLabel', e.target.value)} />
+                    <input style={inputStyle} value={content.qualityVal} onChange={e => handleChange('qualityVal', e.target.value)} />
+                    
+                    {/* Row 2 */}
+                    <input style={inputStyle} value={content.gsmLabel} onChange={e => handleChange('gsmLabel', e.target.value)} />
+                    <input style={inputStyle} value={content.gsmVal} onChange={e => handleChange('gsmVal', e.target.value)} />
+
+                    {/* Row 3 */}
+                    <input style={inputStyle} value={content.colorLabel} onChange={e => handleChange('colorLabel', e.target.value)} />
+                    <input style={inputStyle} value={content.colorVal} onChange={e => handleChange('colorVal', e.target.value)} />
+
+                    {/* Row 4 */}
+                    <input style={inputStyle} value={content.sizeLabel} onChange={e => handleChange('sizeLabel', e.target.value)} />
+                    <input style={inputStyle} value={content.sizeVal} onChange={e => handleChange('sizeVal', e.target.value)} />
+
+                    {/* Row 5 */}
+                    <input style={inputStyle} value={content.netLabel} onChange={e => handleChange('netLabel', e.target.value)} />
+                    <input style={inputStyle} value={content.netVal} onChange={e => handleChange('netVal', e.target.value)} />
+
+                    {/* Row 6 */}
+                    <input style={inputStyle} value={content.grossLabel} onChange={e => handleChange('grossLabel', e.target.value)} />
+                    <input style={inputStyle} value={content.grossVal} onChange={e => handleChange('grossVal', e.target.value)} />
                 </div>
 
-                {/* Barcode Canvas */}
-                <div className="w-full flex justify-center overflow-hidden flex-1 flex items-end">
+                {/* Barcode */}
+                <div className="w-full flex justify-center overflow-hidden flex-1 items-end mt-1">
                     <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
                 </div>
             </div>
         </div>
 
         <div id="print-controls" className="flex gap-3 w-full mt-4">
-          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print Label</button>
+          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print</button>
           <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close</button>
         </div>
 
