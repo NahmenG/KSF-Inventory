@@ -181,7 +181,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- PROFESSIONAL LABEL PRINT COMPONENT ---
+// --- PROFESSIONAL LABEL PRINT COMPONENT (OPTIMIZED) ---
 const LabelPrint = ({ data, onClose }) => {
   // --- Load Settings from Memory ---
   const savedDesign = JSON.parse(localStorage.getItem('ksf_label_design_v2') || '{}');
@@ -238,26 +238,28 @@ const LabelPrint = ({ data, onClose }) => {
   const [width, height] = labelSize.split('-');
 
   // --- DYNAMIC STYLES ---
+  // Tighter vertical rhythm
   const labelStyle = {
       background: 'transparent', border: 'none', width: '100%', outline: 'none', padding: 0, margin: 0,
-      color: '#555', fontSize: `${baseFontSize * 0.7}px`, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em'
+      color: '#555', fontSize: `${baseFontSize * 0.6}px`, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em'
   };
   const valueStyle = {
       background: 'transparent', border: 'none', width: '100%', outline: 'none', padding: 0, margin: 0,
-      color: '#000', fontSize: `${baseFontSize * 1.3}px`, fontWeight: '900', lineHeight: '1.1'
+      color: '#000', fontSize: `${baseFontSize * 1.2}px`, fontWeight: '900', lineHeight: '1.0' // Tight line height
   };
   const smallValueStyle = {
       background: 'transparent', border: 'none', width: '100%', outline: 'none', padding: 0, margin: 0,
-      color: '#000', fontSize: `${baseFontSize * 1.1}px`, fontWeight: '900', lineHeight: '1.1'
+      color: '#000', fontSize: `${baseFontSize * 1.0}px`, fontWeight: '900', lineHeight: '1.0'
   };
 
   const printStyle = {
       width: width, height: height, backgroundColor: 'white', overflow: 'hidden',
       display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-      padding: '8px', border: '4px solid black', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif'
+      padding: '4px', border: '4px solid black', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif'
   };
 
-  const sectionBorder = { borderBottom: '2px solid black', paddingBottom: '4px', marginBottom: '4px' };
+  // Minimized spacing
+  const sectionBorder = { borderBottom: '2px solid black', paddingBottom: '2px', marginBottom: '2px' };
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 overflow-y-auto">
@@ -286,7 +288,7 @@ const LabelPrint = ({ data, onClose }) => {
             </div>
             <div className="grid grid-cols-2 gap-4 pt-1 border-t border-slate-200">
                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">Logo Size</label><input type="range" min="30" max="100" value={logoSize} onChange={e => setLogoSize(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div>
-                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">Barcode Ht</label><input type="range" min="30" max="100" value={barcodeScale} onChange={e => setBarcodeScale(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div>
+                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">Barcode Ht</label><input type="range" min="20" max="100" value={barcodeScale} onChange={e => setBarcodeScale(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div>
             </div>
              <div className="flex items-center justify-between border-t border-slate-200 pt-2">
                 <span className="text-xs font-bold text-slate-500">Include Logo</span>
@@ -294,21 +296,21 @@ const LabelPrint = ({ data, onClose }) => {
             </div>
         </div>
 
-        {/* PRINT PREVIEW AREA - PROFESSIONAL LAYOUT */}
+        {/* PRINT PREVIEW AREA - COMPACT */}
         <div id="print-wrapper" className="flex items-center justify-center bg-gray-200 p-6 rounded-lg border border-dashed border-gray-400 overflow-auto max-h-[65vh] w-full">
             <div id="print-area" style={printStyle}>
                 
                 {/* Header: Logo centered */}
                 <div className="w-full flex justify-center pb-1" style={sectionBorder}>
-                    {showLogo && <img src="/logo.png" style={{ height: `${logoSize}px`, objectFit: 'contain' }} alt="Logo" />}
-                    {!showLogo && <div style={{height: '10px'}}></div>} 
+                    {showLogo && <img src="/logo.png" style={{ height: `${logoSize}px`, maxHeight: '50px', objectFit: 'contain' }} alt="Logo" />}
+                    {!showLogo && <div style={{height: '5px'}}></div>} 
                 </div>
 
                 {/* Main Body */}
                 <div className="flex-1 flex flex-col justify-start">
                     
                     {/* Primary Data Block */}
-                    <div style={sectionBorder} className="grid grid-cols-3 gap-2">
+                    <div style={sectionBorder} className="grid grid-cols-3 gap-1">
                         <div className="col-span-2">
                              <input style={labelStyle} value={content.qualityLabel} onChange={e => handleChange('qualityLabel', e.target.value)} />
                              <input style={valueStyle} value={content.qualityVal} onChange={e => handleChange('qualityVal', e.target.value)} />
@@ -317,19 +319,19 @@ const LabelPrint = ({ data, onClose }) => {
                              <input style={labelStyle} value={content.gsmLabel} onChange={e => handleChange('gsmLabel', e.target.value)} />
                              <input style={valueStyle} value={content.gsmVal} onChange={e => handleChange('gsmVal', e.target.value)} />
                         </div>
-                         <div className="col-span-3 mt-1">
+                         <div className="col-span-3 mt-0.5">
                              <input style={labelStyle} value={content.sizeLabel} onChange={e => handleChange('sizeLabel', e.target.value)} />
                              <input style={valueStyle} value={content.sizeVal} onChange={e => handleChange('sizeVal', e.target.value)} />
                         </div>
                     </div>
 
                      {/* Secondary Data Block */}
-                    <div className="grid grid-cols-3 gap-2 mt-1" style={{...sectionBorder, borderBottom: 'none'}}>
-                        <div style={{ borderRight: '2px solid #ccc', paddingRight: '4px' }}>
+                    <div className="grid grid-cols-3 gap-1 mt-0.5" style={{...sectionBorder, borderBottom: 'none'}}>
+                        <div style={{ borderRight: '2px solid #ccc', paddingRight: '2px' }}>
                             <input style={labelStyle} value={content.netLabel} onChange={e => handleChange('netLabel', e.target.value)} />
                             <input style={smallValueStyle} value={content.netVal} onChange={e => handleChange('netVal', e.target.value)} />
                         </div>
-                        <div style={{ borderRight: '2px solid #ccc', paddingRight: '4px' }}>
+                        <div style={{ borderRight: '2px solid #ccc', paddingRight: '2px' }}>
                             <input style={labelStyle} value={content.grossLabel} onChange={e => handleChange('grossLabel', e.target.value)} />
                             <input style={smallValueStyle} value={content.grossVal} onChange={e => handleChange('grossVal', e.target.value)} />
                         </div>
@@ -341,8 +343,10 @@ const LabelPrint = ({ data, onClose }) => {
                 </div>
 
                 {/* Footer: Barcode & ID */}
-                <div className="w-full flex flex-col items-center justify-end mt-2 pt-1 border-t-4 border-black">
-                    <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
+                <div className="w-full flex flex-col items-center justify-end mt-1 pt-1 border-t-4 border-black">
+                    <div style={{maxHeight: `${barcodeScale + 10}px`, overflow: 'hidden', width: '100%', display: 'flex', justifyContent: 'center'}}>
+                        <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
+                    </div>
                     <div style={{ fontWeight: '900', fontSize: `${baseFontSize * 1.1}px`, fontFamily: 'monospace', marginTop: '-2px' }}>
                         {data.product_id}
                     </div>
