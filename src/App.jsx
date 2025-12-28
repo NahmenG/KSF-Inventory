@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import JsBarcode from 'jsbarcode';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
@@ -86,7 +86,7 @@ const generateChallan = (rolls, details) => {
 };
 
 // --- COMPONENTS ---
-const Header = ({ user, isGuest, deviceName, onLogout, setTab, activeTab }) => (
+const Header = React.memo(({ user, isGuest, deviceName, onLogout, setTab, activeTab }) => (
   <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm safe-area-inset-top">
     <div className="flex justify-between items-center px-4 py-2 max-w-7xl mx-auto h-16">
       <div className="flex items-center gap-3 cursor-pointer" onClick={() => setTab('dashboard')}>
@@ -112,7 +112,7 @@ const Header = ({ user, isGuest, deviceName, onLogout, setTab, activeTab }) => (
       ))}
     </nav>
   </header>
-);
+));
 
 const DeviceNameModal = ({ onSave }) => {
     const [name, setName] = useState('');
@@ -351,25 +351,17 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
     const [sessionList, setSessionList] = useState([]);
     const [challanDetails, setChallanDetails] = useState({ vehicle: '', buyer: '' });
 
-    const handleSearch = (idOverride) => {
+    const handleSearch = useCallback((idOverride) => {
         const query = idOverride || scanId;
         const roll = rolls.find(r => r.product_id === query && r.status === 'in_stock');
-        if (roll) { 
-            setFoundRoll(roll); 
-            setEditedRoll({ ...roll });
-            setScanId(query); 
-            setShowScanner(false); 
-        } else {
-            alert('Roll not found or already dispatched.');
-        }
-    };
+        if (roll) { setFoundRoll(roll); setEditedRoll({ ...roll }); setScanId(query); setShowScanner(false); } 
+        else { alert('Roll not found or already dispatched.'); }
+    }, [rolls, scanId]);
 
     const handleConfirmDispatch = async () => {
-        if (editedRoll.net_weight !== foundRoll.net_weight || editedRoll.customer_name !== foundRoll.customer_name) {
-            await onUpdateRoll(editedRoll); 
-        }
+        if (editedRoll.net_weight !== foundRoll.net_weight || editedRoll.customer_name !== foundRoll.customer_name) { await onUpdateRoll(editedRoll); }
         onDispatch(editedRoll.id);
-        setSessionList([...sessionList, editedRoll]);
+        setSessionList(prev => [...prev, editedRoll]);
         setFoundRoll(null);
         setEditedRoll(null);
         setScanId('');
@@ -384,37 +376,9 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
     return (
         <div className="max-w-xl mx-auto space-y-4">
             {showScanner && <BarcodeScanner onScan={(text) => { if(text) handleSearch(text); else setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
-            
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center">
-                <div className="mb-4">
-                    <h2 className="text-lg font-bold mb-2 text-gray-800">Scan Barcode</h2>
-                    <input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Type or Scan" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button>
-                    <button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button>
-                </div>
-            </div>
-
-            {foundRoll && editedRoll && (
-                <div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4">
-                    <h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Ready to Dispatch</h3>
-                    <div className="bg-white/70 p-4 rounded-lg grid grid-cols-2 gap-3 text-sm mb-4 border border-green-100">
-                        <div className="col-span-2 text-center border-b pb-2 mb-1"><span className="text-gray-500 text-xs">ID:</span> <span className="font-mono font-bold text-lg">{foundRoll.product_id}</span></div>
-                        <div><label className="text-xs text-gray-500 font-bold uppercase">Customer</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.customer_name || ''} onChange={e => setEditedRoll({...editedRoll, customer_name: e.target.value})} /></div>
-                        <div><label className="text-xs text-gray-500 font-bold uppercase">Weight (Kg)</label><input type="number" className="w-full border p-2 rounded bg-white font-bold text-green-800" value={editedRoll.net_weight} onChange={e => setEditedRoll({...editedRoll, net_weight: e.target.value})} /></div>
-                        <div><label className="text-xs text-gray-500 font-bold uppercase">Quality</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.quality} onChange={e => setEditedRoll({...editedRoll, quality: e.target.value})} /></div>
-                         <div><label className="text-xs text-gray-500 font-bold uppercase">Color</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.color} onChange={e => setEditedRoll({...editedRoll, color: e.target.value})} /></div>
-                    </div>
-                    {isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (<button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200 flex items-center justify-center gap-2"><CheckCircle size={20}/> CONFIRM & DISPATCH</button>)}
-                </div>
-            )}
-
-            {!isGuest && sessionList.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 p-5 rounded-xl mt-6">
-                    <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-blue-900 flex items-center gap-2"><FileText size={20}/> Gate Pass Generator</h3><span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{sessionList.length} Items</span></div><input className="w-full border p-2 mb-2 rounded" placeholder="Buyer Name" value={challanDetails.buyer} onChange={e => setChallanDetails({...challanDetails, buyer: e.target.value})} /><input className="w-full border p-2 mb-4 rounded" placeholder="Vehicle No (e.g. UP 27 ...)" value={challanDetails.vehicle} onChange={e => setChallanDetails({...challanDetails, vehicle: e.target.value})} /><button onClick={handlePrintChallan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><Printer size={18}/> Download Gate Pass PDF</button>
-                </div>
-            )}
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center"><div className="mb-4"><h2 className="text-lg font-bold mb-2 text-gray-800">Scan Barcode</h2><input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Type or Scan" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/></div><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button><button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button></div></div>
+            {foundRoll && editedRoll && (<div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4"><h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Ready to Dispatch</h3><div className="bg-white/70 p-4 rounded-lg grid grid-cols-2 gap-3 text-sm mb-4 border border-green-100"><div className="col-span-2 text-center border-b pb-2 mb-1"><span className="text-gray-500 text-xs">ID:</span> <span className="font-mono font-bold text-lg">{foundRoll.product_id}</span></div><div><label className="text-xs text-gray-500 font-bold uppercase">Customer</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.customer_name || ''} onChange={e => setEditedRoll({...editedRoll, customer_name: e.target.value})} /></div><div><label className="text-xs text-gray-500 font-bold uppercase">Weight (Kg)</label><input type="number" className="w-full border p-2 rounded bg-white font-bold text-green-800" value={editedRoll.net_weight} onChange={e => setEditedRoll({...editedRoll, net_weight: e.target.value})} /></div><div><label className="text-xs text-gray-500 font-bold uppercase">Quality</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.quality} onChange={e => setEditedRoll({...editedRoll, quality: e.target.value})} /></div><div><label className="text-xs text-gray-500 font-bold uppercase">Color</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.color} onChange={e => setEditedRoll({...editedRoll, color: e.target.value})} /></div></div>{isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (<button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200 flex items-center justify-center gap-2"><CheckCircle size={20}/> CONFIRM & DISPATCH</button>)}</div>)}
+            {!isGuest && sessionList.length > 0 && (<div className="bg-blue-50 border border-blue-200 p-5 rounded-xl mt-6"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-blue-900 flex items-center gap-2"><FileText size={20}/> Gate Pass Generator</h3><span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{sessionList.length} Items</span></div><input className="w-full border p-2 mb-2 rounded" placeholder="Buyer Name" value={challanDetails.buyer} onChange={e => setChallanDetails({...challanDetails, buyer: e.target.value})} /><input className="w-full border p-2 mb-4 rounded" placeholder="Vehicle No (e.g. UP 27 ...)" value={challanDetails.vehicle} onChange={e => setChallanDetails({...challanDetails, vehicle: e.target.value})} /><button onClick={handlePrintChallan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><Printer size={18}/> Download Gate Pass PDF</button></div>)}
         </div>
     );
 };
@@ -434,35 +398,49 @@ export default function App() {
   const [editRoll, setEditRoll] = useState(null);
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
 
+  // Use refs to avoid re-creating functions that depend on state
+  const fetchDataRef = useRef();
+
+  const fetchData = useCallback(async (isBackground = false) => {
+      if (!isBackground) setLoading(true);
+      const r = await DataService.getStock();
+      const m = await DataService.getRawMaterials();
+      setRolls(r || []);
+      setMaterials(m || []);
+      if (!isBackground) setLoading(false);
+  }, []);
+
+  fetchDataRef.current = fetchData;
+
   useEffect(() => {
-    const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } };
+    const checkSession = async () => { 
+        const { data: { session } } = await supabase.auth.getSession(); 
+        if (session) { setUser(session.user); setIsGuest(false); fetchData(); } 
+    };
     checkSession();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session) { setIsGuest(false); fetchData(); } });
     
-    // AUTO REFRESH every 10 seconds
-    const interval = setInterval(() => { if(user || isGuest) fetchData(true); }, 10000);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { 
+        setUser(session?.user ?? null); 
+        // Only trigger fetch if session exists and we weren't just mounting (avoid double load)
+        if (session && !user) { setIsGuest(false); fetchData(); } 
+    });
+    
+    // Silent Auto Refresh every 10s
+    const interval = setInterval(() => { 
+        if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); 
+    }, 10000);
 
     return () => { subscription.unsubscribe(); clearInterval(interval); };
-  }, [user, isGuest]);
-
-  // Updated fetchData with "isBackground" flag to prevent spinner on auto-refresh
-  const fetchData = async (isBackground = false) => { 
-      if (!isBackground) setLoading(true); 
-      const r = await DataService.getStock(); 
-      const m = await DataService.getRawMaterials(); 
-      setRolls(r || []); 
-      setMaterials(m || []); 
-      if (!isBackground) setLoading(false); 
-  };
+  }, [fetchData]); // Dependency array is stable now
 
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
   const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); };
   const handleSaveRoll = async (e) => { e.preventDefault(); const id = `KSF-${Math.floor(Math.random() * 1000000)}`; const newRoll = { ...formData, product_id: id, status: 'in_stock' }; try { await DataService.addRoll(newRoll, deviceName); setPrintData(newRoll); fetchData(); setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); } catch (err) { alert('Error: ' + err.message); } };
-  const handleDispatch = async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(); };
+  const handleDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
   const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
-  const handleEditRoll = async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(); };
+  const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
   const handleAddMaterial = async (name) => { await DataService.addRawMaterial(name); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
