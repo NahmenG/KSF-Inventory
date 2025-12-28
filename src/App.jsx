@@ -15,6 +15,14 @@ import {
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
+// --- CONSTANTS ---
+const QUALITIES = ['Virgin', 'Fresh', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
+const COLORS = [
+  'White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 
+  'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 
+  'Navy Blue', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'
+];
+
 // --- DATA SERVICE ---
 const DataService = {
   async getStock() {
@@ -233,8 +241,25 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => {
       <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800 border-b pb-2"><Plus className="text-blue-600" size={20}/> New Roll Entry</h2>
       <form onSubmit={onSubmit} className="grid grid-cols-2 gap-3">
         <div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Customer</label><input placeholder="Internal Name" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} /></div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Quality</label><input placeholder="Type" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.quality} onChange={e => setFormData({...formData, quality: e.target.value})} /></div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Color</label><input placeholder="Color" required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} /></div>
+        
+        {/* QUALITY DROPDOWN */}
+        <div>
+            <label className="text-xs font-bold text-gray-500 uppercase ml-1">Quality</label>
+            <select required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.quality} onChange={e => setFormData({...formData, quality: e.target.value})}>
+                <option value="">Select...</option>
+                {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
+            </select>
+        </div>
+
+        {/* COLOR DROPDOWN */}
+        <div>
+            <label className="text-xs font-bold text-gray-500 uppercase ml-1">Color</label>
+            <select required className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})}>
+                <option value="">Select...</option>
+                {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+        </div>
+
         <div className="col-span-2 grid grid-cols-3 gap-3"><div><label className="text-xs font-bold text-gray-500 uppercase ml-1">GSM</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.gsm} onChange={e => setFormData({...formData, gsm: e.target.value})} /></div><div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Width (In)</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.width_inches} onChange={e => setFormData({...formData, width_inches: e.target.value})} /></div><div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Length (m)</label><input type="number" className="w-full bg-gray-50 border-gray-200 border p-2.5 rounded-lg" value={formData.length_meters} onChange={e => setFormData({...formData, length_meters: e.target.value})} /></div></div>
         <div className="col-span-2 grid grid-cols-2 gap-3 bg-blue-50 p-3 rounded-lg border border-blue-100"><div><label className="text-xs font-bold text-blue-800 uppercase ml-1">Net Kg</label><input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg font-bold text-blue-900" value={formData.net_weight} onChange={e => setFormData({...formData, net_weight: e.target.value})} /></div><div><label className="text-xs font-bold text-blue-800 uppercase ml-1">Gross Kg</label><input type="number" className="w-full bg-white border-blue-200 border p-2.5 rounded-lg" value={formData.gross_weight} onChange={e => setFormData({...formData, gross_weight: e.target.value})} /></div></div>
         <button type="submit" className="col-span-2 mt-2 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-blue-200">Save & Print Label</button>
@@ -262,7 +287,6 @@ const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
     );
 };
 
-// --- UPDATED STOCK VIEW (UNIVERSAL SEARCH & CUSTOMER DISPLAY) ---
 const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({ color: 'All', quality: 'All', gsm: 'All' });
@@ -272,7 +296,6 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   
   const filtered = rolls.filter(r => {
       const term = search.toLowerCase();
-      // UNIVERSAL SEARCH: Checks Customer, ID, Weight, Width, GSM, Color, Quality
       const matchSearch = r.status === 'in_stock' && (
           (r.product_id || '').toLowerCase().includes(term) || 
           (r.customer_name || '').toLowerCase().includes(term) ||
@@ -294,7 +317,6 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
           <div className="flex-1 overflow-y-auto pb-20">{filtered.map(r => (
             <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center active:bg-blue-50 transition-colors cursor-pointer">
                 <div>
-                    {/* CUSTOMER NAME ADDED HERE */}
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                         <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span>
                         <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide">{r.customer_name}</span>
@@ -378,9 +400,37 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
     return (
         <div className="max-w-xl mx-auto space-y-4">
             {showScanner && <BarcodeScanner onScan={(text) => { if(text) handleSearch(text); else setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center"><div className="mb-4"><h2 className="text-lg font-bold mb-2 text-gray-800">Scan Barcode</h2><input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Type or Scan" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/></div><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button><button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button></div></div>
-            {foundRoll && editedRoll && (<div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4"><h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Ready to Dispatch</h3><div className="bg-white/70 p-4 rounded-lg grid grid-cols-2 gap-3 text-sm mb-4 border border-green-100"><div className="col-span-2 text-center border-b pb-2 mb-1"><span className="text-gray-500 text-xs">ID:</span> <span className="font-mono font-bold text-lg">{foundRoll.product_id}</span></div><div><label className="text-xs text-gray-500 font-bold uppercase">Customer</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.customer_name || ''} onChange={e => setEditedRoll({...editedRoll, customer_name: e.target.value})} /></div><div><label className="text-xs text-gray-500 font-bold uppercase">Weight (Kg)</label><input type="number" className="w-full border p-2 rounded bg-white font-bold text-green-800" value={editedRoll.net_weight} onChange={e => setEditedRoll({...editedRoll, net_weight: e.target.value})} /></div><div><label className="text-xs text-gray-500 font-bold uppercase">Quality</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.quality} onChange={e => setEditedRoll({...editedRoll, quality: e.target.value})} /></div><div><label className="text-xs text-gray-500 font-bold uppercase">Color</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.color} onChange={e => setEditedRoll({...editedRoll, color: e.target.value})} /></div></div>{isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (<button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200 flex items-center justify-center gap-2"><CheckCircle size={20}/> CONFIRM & DISPATCH</button>)}</div>)}
-            {!isGuest && sessionList.length > 0 && (<div className="bg-blue-50 border border-blue-200 p-5 rounded-xl mt-6"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-blue-900 flex items-center gap-2"><FileText size={20}/> Gate Pass Generator</h3><span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{sessionList.length} Items</span></div><input className="w-full border p-2 mb-2 rounded" placeholder="Buyer Name" value={challanDetails.buyer} onChange={e => setChallanDetails({...challanDetails, buyer: e.target.value})} /><input className="w-full border p-2 mb-4 rounded" placeholder="Vehicle No (e.g. UP 27 ...)" value={challanDetails.vehicle} onChange={e => setChallanDetails({...challanDetails, vehicle: e.target.value})} /><button onClick={handlePrintChallan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><Printer size={18}/> Download Gate Pass PDF</button></div>)}
+            
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center">
+                <div className="mb-4">
+                    <h2 className="text-lg font-bold mb-2 text-gray-800">Scan Barcode</h2>
+                    <input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Type or Scan" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button>
+                    <button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button>
+                </div>
+            </div>
+
+            {foundRoll && editedRoll && (
+                <div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4">
+                    <h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Ready to Dispatch</h3>
+                    <div className="bg-white/70 p-4 rounded-lg grid grid-cols-2 gap-3 text-sm mb-4 border border-green-100">
+                        <div className="col-span-2 text-center border-b pb-2 mb-1"><span className="text-gray-500 text-xs">ID:</span> <span className="font-mono font-bold text-lg">{foundRoll.product_id}</span></div>
+                        <div><label className="text-xs text-gray-500 font-bold uppercase">Customer</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.customer_name || ''} onChange={e => setEditedRoll({...editedRoll, customer_name: e.target.value})} /></div>
+                        <div><label className="text-xs text-gray-500 font-bold uppercase">Weight (Kg)</label><input type="number" className="w-full border p-2 rounded bg-white font-bold text-green-800" value={editedRoll.net_weight} onChange={e => setEditedRoll({...editedRoll, net_weight: e.target.value})} /></div>
+                        <div><label className="text-xs text-gray-500 font-bold uppercase">Quality</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.quality} onChange={e => setEditedRoll({...editedRoll, quality: e.target.value})} /></div>
+                         <div><label className="text-xs text-gray-500 font-bold uppercase">Color</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.color} onChange={e => setEditedRoll({...editedRoll, color: e.target.value})} /></div>
+                    </div>
+                    {isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (<button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-green-200 flex items-center justify-center gap-2"><CheckCircle size={20}/> CONFIRM & DISPATCH</button>)}
+                </div>
+            )}
+
+            {!isGuest && sessionList.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 p-5 rounded-xl mt-6">
+                    <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-blue-900 flex items-center gap-2"><FileText size={20}/> Gate Pass Generator</h3><span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{sessionList.length} Items</span></div><input className="w-full border p-2 mb-2 rounded" placeholder="Buyer Name" value={challanDetails.buyer} onChange={e => setChallanDetails({...challanDetails, buyer: e.target.value})} /><input className="w-full border p-2 mb-4 rounded" placeholder="Vehicle No (e.g. UP 27 ...)" value={challanDetails.vehicle} onChange={e => setChallanDetails({...challanDetails, vehicle: e.target.value})} /><button onClick={handlePrintChallan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"><Printer size={18}/> Download Gate Pass PDF</button>
+                </div>
+            )}
         </div>
     );
 };
