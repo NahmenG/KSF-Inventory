@@ -120,7 +120,7 @@ const DeviceNameModal = ({ onSave }) => {
     );
 };
 
-// --- INDUSTRIAL BARCODE SCANNER ---
+// --- HIGH-PERFORMANCE BARCODE SCANNER ---
 const BarcodeScanner = ({ onScan, onClose }) => {
     const scannerRef = useRef(null);
     const [isMounted, setIsMounted] = useState(true);
@@ -133,21 +133,32 @@ const BarcodeScanner = ({ onScan, onClose }) => {
             const html5QrCode = new Html5Qrcode("reader");
             scannerRef.current = html5QrCode;
 
-            // CONFIG FOR 1D BARCODES (Not just QR)
+            // INDUSTRIAL GRADE CONFIG
             const config = { 
-                fps: 10, 
-                qrbox: { width: 300, height: 150 }, // Rectangular box for barcodes
+                fps: 15, // Higher FPS for faster scanning
+                qrbox: { width: 300, height: 100 }, // Wide rectangular box for barcodes
                 aspectRatio: 1.0,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true // Uses native phone hardware if available
+                },
                 formatsToSupport: [
-                    Html5QrcodeSupportedFormats.CODE_128, // The standard used in LabelPrint
+                    Html5QrcodeSupportedFormats.CODE_128,
                     Html5QrcodeSupportedFormats.CODE_39,
                     Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.UPC_A,
                     Html5QrcodeSupportedFormats.QR_CODE
                 ]
             };
             
+            // Force High Resolution Camera
+            const cameraConfig = { 
+                facingMode: "environment",
+                width: { min: 640, ideal: 1280, max: 1920 },
+                height: { min: 480, ideal: 720, max: 1080 } 
+            };
+            
             html5QrCode.start(
-                { facingMode: "environment" }, 
+                cameraConfig, 
                 config,
                 (decodedText) => {
                     if (isMounted) {
@@ -181,7 +192,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
         <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-sm bg-white rounded-xl overflow-hidden p-4">
                  <h3 className="text-center font-bold mb-2">Scan Roll Barcode</h3>
-                 <div className="text-xs text-gray-500 mb-2 text-center">Center barcode in the box. Move phone slowly.</div>
+                 <div className="text-xs text-gray-500 mb-2 text-center">Ensure good lighting. Hold phone 6 inches away.</div>
                  <div id="reader" className="w-full bg-black min-h-[300px]"></div>
                  <button onClick={onClose} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Close Scanner</button>
             </div>
