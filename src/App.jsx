@@ -120,39 +120,55 @@ const DeviceNameModal = ({ onSave }) => {
     );
 };
 
-// --- FIXED CAMERA COMPONENT (ROBUST) ---
+// --- CRASH-PROOF BARCODE SCANNER ---
 const BarcodeScanner = ({ onScan, onClose }) => {
-    const [errorMsg, setErrorMsg] = useState('');
     const scannerRef = useRef(null);
+    const [isMounted, setIsMounted] = useState(true);
 
     useEffect(() => {
-        const html5QrCode = new Html5Qrcode("reader");
-        scannerRef.current = html5QrCode;
+        setIsMounted(true);
+        // Delay initialization to ensure DOM is ready
+        const initTimer = setTimeout(() => {
+            if (!isMounted) return;
+            
+            const html5QrCode = new Html5Qrcode("reader");
+            scannerRef.current = html5QrCode;
 
-        const startConfig = { fps: 10, qrbox: { width: 250, height: 250 } };
-        
-        html5QrCode.start(
-            { facingMode: "environment" }, 
-            startConfig,
-            (decodedText) => {
-                // Success
-                html5QrCode.stop().then(() => {
-                     onScan(decodedText);
-                }).catch(err => console.error("Stop failed", err));
-            },
-            (errorMessage) => {
-                // scanning, no code found yet (ignore)
-            }
-        ).catch(err => {
-            console.error(err);
-            setErrorMsg("Camera Error: " + err);
-        });
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                config,
+                (decodedText) => {
+                    if (isMounted) {
+                        // Successfully scanned
+                        onScan(decodedText);
+                    }
+                },
+                (errorMessage) => {
+                    // ignore scanning errors
+                }
+            ).catch(err => {
+                console.log("Camera start error (usually harmless if re-opening):", err);
+            });
+        }, 300);
 
         return () => {
-            if(html5QrCode.isScanning) {
-                html5QrCode.stop().catch(err => console.error("Cleanup stop failed", err));
+            setIsMounted(false);
+            clearTimeout(initTimer);
+            if (scannerRef.current) {
+                try {
+                    // Force stop the camera, catch any errors if it's already stopped
+                    scannerRef.current.stop().then(() => {
+                        scannerRef.current.clear();
+                    }).catch(err => {
+                        // It is safe to ignore stop() errors during unmount
+                        console.log("Scanner cleanup:", err);
+                    });
+                } catch (e) {
+                    console.log("Scanner cleanup error:", e);
+                }
             }
-            html5QrCode.clear();
         };
     }, [onScan]);
 
@@ -160,17 +176,8 @@ const BarcodeScanner = ({ onScan, onClose }) => {
         <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-sm bg-white rounded-xl overflow-hidden p-4">
                  <h3 className="text-center font-bold mb-2">Scan Roll Barcode</h3>
-                 
-                 {/* The ID must match the one used in new Html5Qrcode("reader") */}
                  <div id="reader" className="w-full bg-black min-h-[300px]"></div>
-
-                 {errorMsg && (
-                    <div className="mt-2 bg-red-100 text-red-700 p-2 text-xs rounded text-center font-bold">
-                        {errorMsg}. Check permissions!
-                    </div>
-                 )}
-
-                 <button onClick={onClose} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Cancel</button>
+                 <button onClick={onClose} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Close Scanner</button>
             </div>
         </div>
     );
