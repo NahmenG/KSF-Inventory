@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import JsBarcode from 'jsbarcode';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -120,28 +120,37 @@ const DeviceNameModal = ({ onSave }) => {
     );
 };
 
-// --- CRASH-PROOF BARCODE SCANNER ---
+// --- INDUSTRIAL BARCODE SCANNER ---
 const BarcodeScanner = ({ onScan, onClose }) => {
     const scannerRef = useRef(null);
     const [isMounted, setIsMounted] = useState(true);
 
     useEffect(() => {
         setIsMounted(true);
-        // Delay initialization to ensure DOM is ready
         const initTimer = setTimeout(() => {
             if (!isMounted) return;
             
             const html5QrCode = new Html5Qrcode("reader");
             scannerRef.current = html5QrCode;
 
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            // CONFIG FOR 1D BARCODES (Not just QR)
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 300, height: 150 }, // Rectangular box for barcodes
+                aspectRatio: 1.0,
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.CODE_128, // The standard used in LabelPrint
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.QR_CODE
+                ]
+            };
             
             html5QrCode.start(
                 { facingMode: "environment" }, 
                 config,
                 (decodedText) => {
                     if (isMounted) {
-                        // Successfully scanned
                         onScan(decodedText);
                     }
                 },
@@ -149,7 +158,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
                     // ignore scanning errors
                 }
             ).catch(err => {
-                console.log("Camera start error (usually harmless if re-opening):", err);
+                console.log("Camera start error:", err);
             });
         }, 300);
 
@@ -158,15 +167,11 @@ const BarcodeScanner = ({ onScan, onClose }) => {
             clearTimeout(initTimer);
             if (scannerRef.current) {
                 try {
-                    // Force stop the camera, catch any errors if it's already stopped
                     scannerRef.current.stop().then(() => {
                         scannerRef.current.clear();
-                    }).catch(err => {
-                        // It is safe to ignore stop() errors during unmount
-                        console.log("Scanner cleanup:", err);
-                    });
+                    }).catch(err => console.log("Scanner cleanup error", err));
                 } catch (e) {
-                    console.log("Scanner cleanup error:", e);
+                    console.log("Scanner cleanup catch", e);
                 }
             }
         };
@@ -176,6 +181,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
         <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-sm bg-white rounded-xl overflow-hidden p-4">
                  <h3 className="text-center font-bold mb-2">Scan Roll Barcode</h3>
+                 <div className="text-xs text-gray-500 mb-2 text-center">Center barcode in the box. Move phone slowly.</div>
                  <div id="reader" className="w-full bg-black min-h-[300px]"></div>
                  <button onClick={onClose} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Close Scanner</button>
             </div>
@@ -195,7 +201,8 @@ const LabelPrint = ({ data, onClose }) => {
                   format: "CODE128",
                   width: 2,
                   height: 50,
-                  displayValue: true
+                  displayValue: true,
+                  margin: 10
               });
           } catch (e) {
               console.error("Barcode rendering failed", e);
@@ -218,8 +225,8 @@ const LabelPrint = ({ data, onClose }) => {
                 <div><strong>Length:</strong> {data.length_meters}m</div><div><strong>Net Wt:</strong> {data.net_weight}kg</div>
                 <div><strong>Gross Wt:</strong> {data.gross_weight}kg</div>
             </div>
-            <div className="flex justify-center py-2">
-                <canvas ref={canvasRef}></canvas>
+            <div className="flex justify-center py-2 overflow-hidden">
+                <canvas ref={canvasRef} className="max-w-full"></canvas>
             </div>
         </div>
         <div className="mb-4 flex items-center justify-between bg-gray-50 p-3 rounded-lg"><span className="text-sm font-bold text-gray-600">Include Logo?</span><button onClick={() => setShowLogo(!showLogo)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${showLogo ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{showLogo ? 'YES' : 'NO'}</button></div>
