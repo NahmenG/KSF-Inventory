@@ -181,53 +181,59 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- REDESIGNED LABEL PRINT COMPONENT ---
+// --- CLASSIC GRID DESIGN (SMART SCALING) ---
 const LabelPrint = ({ data, onClose }) => {
   const [showLogo, setShowLogo] = useState(true);
-  const [labelSize, setLabelSize] = useState('4in-2in');
+  const [labelSize, setLabelSize] = useState('4in-2in'); // Default
   const canvasRef = useRef(null);
 
-  // Dynamic Styles
-  const [width, height] = labelSize.split('-');
-  const isSmall = width.startsWith('2');
-  
-  // Font & Size Config
-  const fontSize = isSmall ? '12px' : '16px'; 
-  const logoHeight = isSmall ? '50px' : '80px';
-  const barcodeHeight = isSmall ? 25 : 35;
+  // Dynamic Scale Logic
+  const [widthStr, heightStr] = labelSize.split('-');
+  const isSmallWidth = widthStr.startsWith('2');
+  const isSmallHeight = heightStr.startsWith('2');
+
+  // Adjust parameters based on size selection
+  const styles = {
+      logoHeight: isSmallHeight ? '35px' : '55px',
+      fontSize: isSmallWidth ? '10px' : '14px',
+      gridGap: isSmallWidth ? '1px' : '4px',
+      barcodeHeight: isSmallHeight ? 30 : 45,
+      barcodeWidth: isSmallWidth ? 1.5 : 2, // Thinner bars for small width
+      barcodeFontSize: isSmallWidth ? 12 : 16
+  };
 
   useEffect(() => {
       if (data && canvasRef.current) {
           try { 
               JsBarcode(canvasRef.current, data.product_id, { 
                   format: "CODE128", 
-                  width: 2, 
-                  height: barcodeHeight, // Reduced barcode height
+                  width: styles.barcodeWidth, 
+                  height: styles.barcodeHeight, 
                   displayValue: true, 
                   margin: 2,
-                  fontSize: 18, // Large, readable ID
+                  fontSize: styles.barcodeFontSize,
                   fontOptions: "bold"
               }); 
           } 
           catch (e) { console.error("Barcode rendering failed", e); }
       }
-  }, [data, labelSize, isSmall, barcodeHeight]);
+  }, [data, labelSize, styles]);
 
   const handlePrint = () => window.print();
 
   if (!data) return null;
 
+  // The outer box container
   const printStyle = {
-      width: width,
-      height: height,
+      width: widthStr,
+      height: heightStr,
       backgroundColor: 'white',
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
-      alignItems: 'center',
       padding: '5px',
-      border: '4px solid black', // Heavy Outer Box
+      border: '4px solid black', // Requested outer box
       boxSizing: 'border-box'
   };
 
@@ -273,34 +279,25 @@ const LabelPrint = ({ data, onClose }) => {
             <div id="print-area" style={printStyle}>
                 
                 {/* Logo Area */}
-                <div className="w-full flex justify-center items-center pb-1">
-                     {showLogo && <img src="/logo.png" style={{ height: logoHeight, objectFit: 'contain' }} alt="Logo" />}
-                </div>
-
-                {/* Persistent Line */}
-                <div className="w-full border-t-2 border-black my-1"></div>
-
-                {/* Details (Centered, Bold, No Abbr) */}
-                <div className="w-full flex flex-col items-center justify-center font-black font-mono leading-snug text-center" style={{ fontSize: fontSize }}>
-                    <div>{data.quality}</div>
-                    <div>{data.color}</div>
-                    
-                    {/* Size Row */}
-                    <div className="flex gap-2 justify-center w-full">
-                        <span>{data.width_inches}"</span>
-                        <span>/</span>
-                        <span>{data.gsm} GSM</span>
+                {showLogo && (
+                    <div className="w-full flex justify-center pb-1">
+                        <img src="/logo.png" style={{ height: styles.logoHeight, objectFit: 'contain' }} alt="Logo" />
                     </div>
+                )}
 
-                    {/* Weight Row */}
-                    <div className="flex gap-4 justify-center w-full mt-1 border-t border-black pt-1">
-                        <div>Net: {data.net_weight}</div>
-                        <div>Grs: {data.gross_weight}</div>
-                    </div>
+                {/* ORIGINAL GRID LAYOUT (Restored) */}
+                <div className="w-full grid grid-cols-2 text-left font-mono border-t-2 border-black pt-1 leading-tight" 
+                     style={{ fontSize: styles.fontSize, gap: styles.gridGap }}>
+                    <div><strong>Quality:</strong> {data.quality}</div>
+                    <div><strong>GSM:</strong> {data.gsm}</div>
+                    <div><strong>Color:</strong> {data.color}</div>
+                    <div><strong>Size:</strong> {data.width_inches}" / {data.length_meters}m</div>
+                    <div><strong>Net Wt:</strong> {data.net_weight}kg</div>
+                    <div><strong>Gross Wt:</strong> {data.gross_weight}kg</div>
                 </div>
 
                 {/* Barcode Canvas */}
-                <div className="w-full flex justify-center overflow-hidden mt-1">
+                <div className="w-full flex justify-center overflow-hidden flex-1 flex items-end">
                     <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
                 </div>
             </div>
