@@ -11,7 +11,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3, Settings, Type, Bold, AlignLeft, AlignCenter, AlignRight, Minus, Plus as PlusIcon
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3, Settings, Type, Bold, AlignLeft, AlignCenter, AlignRight, Minus, Plus as PlusIcon, Scale
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -183,18 +183,15 @@ const BarcodeScanner = ({ onScan, onClose }) => {
 
 // --- IMAGE-PERFECT LABEL PRINT ---
 const LabelPrint = ({ data, onClose }) => {
-  // --- Load Settings from Memory ---
   const savedDesign = JSON.parse(localStorage.getItem('ksf_label_design_v3') || '{}');
   const savedLabels = JSON.parse(localStorage.getItem('ksf_label_labels_v3') || '{}');
 
-  // State initialization with fallbacks
   const [showLogo, setShowLogo] = useState(savedDesign.showLogo ?? true);
   const [labelSize, setLabelSize] = useState(savedDesign.labelSize || '4in-3in');
   const [baseFontSize, setBaseFontSize] = useState(savedDesign.baseFontSize || 14); 
   const [logoSize, setLogoSize] = useState(savedDesign.logoSize || 50);
   const [barcodeScale, setBarcodeScale] = useState(savedDesign.barcodeScale || 50);
 
-  // Content State - Pre-populated with defaults from the image logic
   const [content, setContent] = useState({
       qualityLabel: savedLabels.qualityLabel || 'Quality:', qualityVal: data.quality,
       gsmLabel: savedLabels.gsmLabel || 'GSM:', gsmVal: data.gsm,
@@ -207,7 +204,6 @@ const LabelPrint = ({ data, onClose }) => {
 
   const canvasRef = useRef(null);
 
-  // Auto-Save
   useEffect(() => {
       const designSettings = { showLogo, labelSize, baseFontSize, logoSize, barcodeScale };
       const labelSettings = { ...content };
@@ -215,16 +211,11 @@ const LabelPrint = ({ data, onClose }) => {
       localStorage.setItem('ksf_label_labels_v3', JSON.stringify(labelSettings));
   }, [showLogo, labelSize, baseFontSize, logoSize, barcodeScale, content]);
 
-  // Barcode Render
   useEffect(() => {
       if (data && canvasRef.current) {
           try { 
               JsBarcode(canvasRef.current, data.product_id, { 
-                  format: "CODE128", 
-                  width: 2.5, 
-                  height: barcodeScale, 
-                  displayValue: false, 
-                  margin: 0,
+                  format: "CODE128", width: 2.5, height: barcodeScale, displayValue: false, margin: 0,
               }); 
           } catch (e) { console.error(e); }
       }
@@ -237,138 +228,35 @@ const LabelPrint = ({ data, onClose }) => {
 
   const [width, height] = labelSize.split('-');
 
-  // --- STYLES ---
-  // Replicating the image's Monospaced look
   const fontStyle = { fontFamily: "'Courier New', Courier, monospace" };
-  
-  const labelInputStyle = {
-      ...fontStyle,
-      background: 'transparent', border: 'none', width: 'auto', outline: 'none', padding: 0, margin: 0,
-      color: '#000', fontSize: `${baseFontSize}px`, fontWeight: '900', textAlign: 'left',
-      minWidth: '60px' // Ensure label has some width
-  };
-  
-  const valueInputStyle = {
-      ...fontStyle,
-      background: 'transparent', border: 'none', width: '100%', outline: 'none', padding: 0, margin: 0,
-      color: '#000', fontSize: `${baseFontSize}px`, fontWeight: '500', textAlign: 'left'
-  };
-
-  const printStyle = {
-      width: width, height: height, backgroundColor: 'white', overflow: 'hidden',
-      display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
-      padding: '10px', border: '6px solid black', boxSizing: 'border-box', ...fontStyle
-  };
-
+  const labelInputStyle = { ...fontStyle, background: 'transparent', border: 'none', width: 'auto', outline: 'none', padding: 0, margin: 0, color: '#000', fontSize: `${baseFontSize}px`, fontWeight: '900', textAlign: 'left', minWidth: '60px' };
+  const valueInputStyle = { ...fontStyle, background: 'transparent', border: 'none', width: '100%', outline: 'none', padding: 0, margin: 0, color: '#000', fontSize: `${baseFontSize}px`, fontWeight: '500', textAlign: 'left' };
+  const printStyle = { width: width, height: height, backgroundColor: 'white', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', padding: '10px', border: '6px solid black', boxSizing: 'border-box', ...fontStyle };
   const rowStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '4px' };
   const colStyle = { display: 'flex', gap: '4px', flex: 1 };
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 overflow-y-auto">
       <style>{`@media print { body * { visibility: hidden; } #print-wrapper, #print-wrapper * { visibility: visible; } #print-wrapper { position: absolute; top: 0; left: 0; margin: 0; border: none !important; } #print-controls { display: none !important; } }`}</style>
-
       <div className="bg-white p-4 rounded-xl max-w-lg w-full flex flex-col items-center animate-in fade-in zoom-in-95 my-auto">
-        
-        {/* DESIGN TOOLBAR */}
         <div id="print-controls" className="w-full mb-4 space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
-             <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-500 uppercase"><Settings size={14} className="inline mr-1"/>Settings</span>
-                <select className="border rounded p-1 text-xs font-bold" value={labelSize} onChange={(e) => setLabelSize(e.target.value)}>
-                    <option value="4in-3in">4" x 3"</option>
-                    <option value="4in-4in">4" x 4"</option>
-                    <option value="4in-2in">4" x 2"</option>
-                </select>
-            </div>
-             <div className="flex items-center justify-between border-t border-slate-200 pt-2">
-                <span className="text-xs font-bold text-slate-500">Font Size</span>
-                 <div className="flex gap-1 bg-white p-1 rounded border">
-                    <button onClick={() => setBaseFontSize(f => Math.max(10, f-1))} className="p-1 hover:bg-slate-100 rounded"><Minus size={14}/></button>
-                    <span className="text-xs font-bold w-6 text-center pt-0.5">{baseFontSize}</span>
-                    <button onClick={() => setBaseFontSize(f => Math.min(30, f+1))} className="p-1 hover:bg-slate-100 rounded"><PlusIcon size={14}/></button>
-                </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-slate-200">
-                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">Logo Size</label><input type="range" min="30" max="100" value={logoSize} onChange={e => setLogoSize(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div>
-                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">Barcode</label><input type="range" min="30" max="120" value={barcodeScale} onChange={e => setBarcodeScale(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div>
-            </div>
-             <div className="flex items-center justify-between border-t border-slate-200 pt-2">
-                <span className="text-xs font-bold text-slate-500">Show Logo</span>
-                <button onClick={() => setShowLogo(!showLogo)} className={`w-8 h-4 rounded-full transition-colors ${showLogo ? 'bg-green-500' : 'bg-slate-300'}`}></button>
-            </div>
+             <div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-500 uppercase"><Settings size={14} className="inline mr-1"/>Settings</span><select className="border rounded p-1 text-xs font-bold" value={labelSize} onChange={(e) => setLabelSize(e.target.value)}><option value="4in-3in">4" x 3"</option><option value="4in-4in">4" x 4"</option><option value="4in-2in">4" x 2"</option></select></div>
+             <div className="flex items-center justify-between border-t border-slate-200 pt-2"><span className="text-xs font-bold text-slate-500">Font Size</span><div className="flex gap-1 bg-white p-1 rounded border"><button onClick={() => setBaseFontSize(f => Math.max(10, f-1))} className="p-1 hover:bg-slate-100 rounded"><Minus size={14}/></button><span className="text-xs font-bold w-6 text-center pt-0.5">{baseFontSize}</span><button onClick={() => setBaseFontSize(f => Math.min(30, f+1))} className="p-1 hover:bg-slate-100 rounded"><PlusIcon size={14}/></button></div></div>
+            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-slate-200"><div><label className="text-[10px] font-bold text-slate-400 block mb-1">Logo Size</label><input type="range" min="30" max="100" value={logoSize} onChange={e => setLogoSize(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div><div><label className="text-[10px] font-bold text-slate-400 block mb-1">Barcode</label><input type="range" min="30" max="120" value={barcodeScale} onChange={e => setBarcodeScale(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div></div>
+             <div className="flex items-center justify-between border-t border-slate-200 pt-2"><span className="text-xs font-bold text-slate-500">Show Logo</span><button onClick={() => setShowLogo(!showLogo)} className={`w-8 h-4 rounded-full transition-colors ${showLogo ? 'bg-green-500' : 'bg-slate-300'}`}></button></div>
         </div>
-
-        {/* PRINT PREVIEW AREA - EXACT IMAGE REPLICA */}
         <div id="print-wrapper" className="flex items-center justify-center bg-gray-200 p-6 rounded-lg border border-dashed border-gray-400 overflow-auto max-h-[70vh] w-full">
             <div id="print-area" style={printStyle}>
-                
-                {/* Header: Just Logo (Centered) - Text removed as requested */}
-                <div className="w-full flex justify-center pb-2">
-                    {showLogo && <img src="/logo.png" style={{ height: `${logoSize}px`, objectFit: 'contain' }} alt="Logo" />}
-                    {!showLogo && <div style={{height: '10px'}}></div>} 
-                </div>
-
-                {/* The Thick Divider Line */}
+                <div className="w-full flex justify-center pb-2">{showLogo && <img src="/logo.png" style={{ height: `${logoSize}px`, objectFit: 'contain' }} alt="Logo" />}{!showLogo && <div style={{height: '10px'}}></div>}</div>
                 <div style={{ width: '100%', borderTop: '3px solid black', marginBottom: '8px' }}></div>
-
-                {/* Line 1: Quality | GSM */}
-                <div style={rowStyle}>
-                    <div style={colStyle}>
-                        <input style={labelInputStyle} value={content.qualityLabel} onChange={e => handleChange('qualityLabel', e.target.value)} />
-                        <input style={valueInputStyle} value={content.qualityVal} onChange={e => handleChange('qualityVal', e.target.value)} />
-                    </div>
-                    <div style={{...colStyle, justifyContent: 'flex-start', flex: 0.6}}>
-                        <input style={{...labelInputStyle, minWidth: '40px'}} value={content.gsmLabel} onChange={e => handleChange('gsmLabel', e.target.value)} />
-                        <input style={valueInputStyle} value={content.gsmVal} onChange={e => handleChange('gsmVal', e.target.value)} />
-                    </div>
-                </div>
-
-                {/* Line 2: Color | Width */}
-                <div style={rowStyle}>
-                    <div style={colStyle}>
-                        <input style={labelInputStyle} value={content.colorLabel} onChange={e => handleChange('colorLabel', e.target.value)} />
-                        <input style={valueInputStyle} value={content.colorVal} onChange={e => handleChange('colorVal', e.target.value)} />
-                    </div>
-                    <div style={{...colStyle, justifyContent: 'flex-start', flex: 0.6}}>
-                        <input style={{...labelInputStyle, minWidth: '60px'}} value={content.widthLabel} onChange={e => handleChange('widthLabel', e.target.value)} />
-                        <input style={valueInputStyle} value={content.widthVal} onChange={e => handleChange('widthVal', e.target.value)} />
-                    </div>
-                </div>
-
-                {/* Line 3: Length | Net Wt */}
-                <div style={rowStyle}>
-                    <div style={colStyle}>
-                        <input style={labelInputStyle} value={content.lengthLabel} onChange={e => handleChange('lengthLabel', e.target.value)} />
-                        <input style={valueInputStyle} value={content.lengthVal} onChange={e => handleChange('lengthVal', e.target.value)} />
-                    </div>
-                    <div style={{...colStyle, justifyContent: 'flex-start', flex: 0.6}}>
-                        <input style={{...labelInputStyle, minWidth: '70px'}} value={content.netLabel} onChange={e => handleChange('netLabel', e.target.value)} />
-                        <input style={valueInputStyle} value={content.netVal} onChange={e => handleChange('netVal', e.target.value)} />
-                    </div>
-                </div>
-
-                {/* Line 4: Gross Wt (Combined) */}
-                <div style={{ ...rowStyle, marginTop: '4px', marginBottom: '8px' }}>
-                    <div style={colStyle}>
-                        <input style={{...labelInputStyle, minWidth: '85px'}} value={content.grossLabel} onChange={e => handleChange('grossLabel', e.target.value)} />
-                        <input style={valueInputStyle} value={content.grossVal} onChange={e => handleChange('grossVal', e.target.value)} />
-                    </div>
-                </div>
-
-                {/* Footer: Barcode & ID */}
-                <div className="w-full flex flex-col items-center justify-end mt-auto pt-2">
-                    <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
-                    <div style={{ fontWeight: 'bold', fontSize: `${baseFontSize * 1.3}px`, marginTop: '2px', ...fontStyle }}>
-                        {data.product_id}
-                    </div>
-                </div>
+                <div style={rowStyle}><div style={colStyle}><input style={labelInputStyle} value={content.qualityLabel} onChange={e => handleChange('qualityLabel', e.target.value)} /><input style={valueInputStyle} value={content.qualityVal} onChange={e => handleChange('qualityVal', e.target.value)} /></div><div style={{...colStyle, justifyContent: 'flex-start', flex: 0.6}}><input style={{...labelInputStyle, minWidth: '40px'}} value={content.gsmLabel} onChange={e => handleChange('gsmLabel', e.target.value)} /><input style={valueInputStyle} value={content.gsmVal} onChange={e => handleChange('gsmVal', e.target.value)} /></div></div>
+                <div style={rowStyle}><div style={colStyle}><input style={labelInputStyle} value={content.colorLabel} onChange={e => handleChange('colorLabel', e.target.value)} /><input style={valueInputStyle} value={content.colorVal} onChange={e => handleChange('colorVal', e.target.value)} /></div><div style={{...colStyle, justifyContent: 'flex-start', flex: 0.6}}><input style={{...labelInputStyle, minWidth: '60px'}} value={content.widthLabel} onChange={e => handleChange('widthLabel', e.target.value)} /><input style={valueInputStyle} value={content.widthVal} onChange={e => handleChange('widthVal', e.target.value)} /></div></div>
+                <div style={rowStyle}><div style={colStyle}><input style={labelInputStyle} value={content.lengthLabel} onChange={e => handleChange('lengthLabel', e.target.value)} /><input style={valueInputStyle} value={content.lengthVal} onChange={e => handleChange('lengthVal', e.target.value)} /></div><div style={{...colStyle, justifyContent: 'flex-start', flex: 0.6}}><input style={{...labelInputStyle, minWidth: '70px'}} value={content.netLabel} onChange={e => handleChange('netLabel', e.target.value)} /><input style={valueInputStyle} value={content.netVal} onChange={e => handleChange('netVal', e.target.value)} /></div></div>
+                <div style={{ marginTop: '4px', marginBottom: '8px', display: 'flex', gap: '4px' }}><input style={{...labelInputStyle, width: 'auto'}} value={content.grossLabel} onChange={e => handleChange('grossLabel', e.target.value)} /><input style={valueInputStyle} value={content.grossVal} onChange={e => handleChange('grossVal', e.target.value)} /></div>
+                <div className="w-full flex flex-col items-center justify-end mt-auto pt-2"><canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas><div style={{ fontWeight: 'bold', fontSize: `${baseFontSize * 1.3}px`, marginTop: '2px', ...fontStyle }}>{data.product_id}</div></div>
             </div>
         </div>
-
-        <div id="print-controls" className="flex gap-3 w-full mt-4">
-          <button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print Label</button>
-          <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close</button>
-        </div>
-
+        <div id="print-controls" className="flex gap-3 w-full mt-4"><button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print Label</button><button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close</button></div>
       </div>
     </div>
   );
@@ -416,17 +304,24 @@ const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
   const uniqueQualities = ['All', ...new Set(rolls.map(r => r.quality).filter(Boolean))];
   const uniqueGSM = ['All', ...new Set(rolls.map(r => r.gsm).filter(Boolean))];
   const filtered = rolls.filter(r => {
-      const term = search.toLowerCase();
-      const matchSearch = r.status === 'in_stock' && ((r.product_id || '').toLowerCase().includes(term) || (r.customer_name || '').toLowerCase().includes(term) || (r.quality || '').toLowerCase().includes(term) || (r.color || '').toLowerCase().includes(term) || String(r.gsm || '').toLowerCase().includes(term) || String(r.width_inches || '').toLowerCase().includes(term) || String(r.net_weight || '').toLowerCase().includes(term));
-      const matchColor = filters.color === 'All' || r.color === filters.color;
-      const matchQuality = filters.quality === 'All' || r.quality === filters.quality;
-      const matchGSM = filters.gsm === 'All' || r.gsm == filters.gsm;
-      return matchSearch && matchColor && matchQuality && matchGSM;
+      if (filters.color !== 'All' && r.color !== filters.color) return false;
+      if (filters.quality !== 'All' && r.quality !== filters.quality) return false;
+      if (filters.gsm !== 'All' && r.gsm != filters.gsm) return false;
+      if (r.status !== 'in_stock') return false;
+      if (!search.trim()) return true;
+      const searchTerms = search.toLowerCase().split(' ').filter(Boolean);
+      return searchTerms.every(term => ((r.product_id || '').toLowerCase().includes(term) || (r.customer_name || '').toLowerCase().includes(term) || (r.quality || '').toLowerCase().includes(term) || (r.color || '').toLowerCase().includes(term) || String(r.gsm || '').toLowerCase().includes(term) || String(r.width_inches || '').toLowerCase().includes(term) || String(r.net_weight || '').toLowerCase().includes(term)));
   });
+  
+  const totalWeight = filtered.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
 
   return (
       <div className="space-y-4 h-full flex flex-col">
-          <div className="sticky top-0 bg-slate-50 z-10 pb-2 space-y-2"><div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-3 text-gray-400" size={18}/><input className="w-full pl-10 p-2.5 bg-white border-gray-200 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Search (Cust, ID, Wt...)" value={search} onChange={e => setSearch(e.target.value)} /></div><button onClick={onExport} className="bg-white border border-green-200 text-green-700 p-2.5 rounded-xl shadow-sm"><Download size={20} /></button></div><div className="flex gap-2 overflow-x-auto no-scrollbar"><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.color} onChange={e => setFilters({...filters, color: e.target.value})}>{uniqueColors.map(c => <option key={c} value={c}>Color: {c}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.quality} onChange={e => setFilters({...filters, quality: e.target.value})}>{uniqueQualities.map(q => <option key={q} value={q}>Qual: {q}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[80px]" value={filters.gsm} onChange={e => setFilters({...filters, gsm: e.target.value})}>{uniqueGSM.map(g => <option key={g} value={g}>GSM: {g}</option>)}</select></div></div>
+          <div className="sticky top-0 bg-slate-50 z-10 pb-2 space-y-2">
+              <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-3 text-gray-400" size={18}/><input className="w-full pl-10 p-2.5 bg-white border-gray-200 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Search (Cust 38 60...)" value={search} onChange={e => setSearch(e.target.value)} /></div><button onClick={onExport} className="bg-white border border-green-200 text-green-700 p-2.5 rounded-xl shadow-sm"><Download size={20} /></button></div>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar"><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.color} onChange={e => setFilters({...filters, color: e.target.value})}>{uniqueColors.map(c => <option key={c} value={c}>Color: {c}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.quality} onChange={e => setFilters({...filters, quality: e.target.value})}>{uniqueQualities.map(q => <option key={q} value={q}>Qual: {q}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[80px]" value={filters.gsm} onChange={e => setFilters({...filters, gsm: e.target.value})}>{uniqueGSM.map(g => <option key={g} value={g}>GSM: {g}</option>)}</select></div>
+              <div className="bg-blue-600 text-white p-3 rounded-xl flex justify-between items-center shadow-sm shadow-blue-200"><div className="text-xs font-bold opacity-80 uppercase">Filtered Stock</div><div className="flex items-center gap-4"><div className="text-right"><div className="text-xs opacity-70">Count</div><div className="font-bold">{filtered.length}</div></div><div className="text-right"><div className="text-xs opacity-70">Total Kg</div><div className="font-bold text-lg"><Scale size={14} className="inline mb-1 mr-1"/>{totalWeight.toLocaleString()}</div></div></div></div>
+          </div>
           <div className="flex-1 overflow-y-auto pb-20">{filtered.map(r => (<div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center active:bg-blue-50 transition-colors cursor-pointer"><div><div className="flex flex-wrap items-center gap-2 mb-1"><span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span><span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide">{r.customer_name}</span></div><div className="text-gray-900 font-medium text-sm">{r.quality} • {r.color} • {r.width_inches}" • {r.gsm} GSM</div><div className="text-sm text-gray-500 mt-1">Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m</div></div><button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="p-3 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg"><Printer size={20}/></button></div>))}{filtered.length === 0 && <div className="text-center text-gray-400 py-10">No Stock Found</div>}</div>
       </div>
   );
