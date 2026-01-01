@@ -15,6 +15,17 @@ import {
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
+// --- UTILS: SAFE STORAGE (Prevents White Screen Crashes) ---
+const safeJSONParse = (key, fallback) => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : fallback;
+  } catch (e) {
+    console.error(`Error parsing ${key} from localStorage`, e);
+    return fallback;
+  }
+};
+
 // --- CONSTANTS ---
 const QUALITIES = ['Virgin', 'Fresh', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
 const COLORS = [
@@ -204,8 +215,9 @@ const BarcodeScanner = ({ onScan, onClose }) => {
 
 // --- IMAGE-PERFECT LABEL PRINT ---
 const LabelPrint = ({ data, onClose }) => {
-  const savedDesign = JSON.parse(localStorage.getItem('ksf_label_design_v3') || '{}');
-  const savedLabels = JSON.parse(localStorage.getItem('ksf_label_labels_v3') || '{}');
+  // Use SAFE JSON Parsing here
+  const savedDesign = safeJSONParse('ksf_label_design_v3', {});
+  const savedLabels = safeJSONParse('ksf_label_labels_v3', {});
 
   const [showLogo, setShowLogo] = useState(savedDesign.showLogo ?? true);
   const [labelSize, setLabelSize] = useState(savedDesign.labelSize || '4in-3in');
@@ -283,6 +295,7 @@ const LabelPrint = ({ data, onClose }) => {
   );
 };
 
+// --- NEW PRODUCT VIEW (Unchanged) ---
 const NewProductView = ({ formData, setFormData, onSubmit }) => {
   return (
     <div className="max-w-xl mx-auto bg-white p-5 rounded-xl shadow-sm border border-gray-100 mt-2">
@@ -323,16 +336,13 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({ color: 'All', quality: 'All', gsm: 'All' });
 
-  // 1. Memoize unique lists to stop re-calc on every render (Crash Prevention)
   const uniqueColors = useMemo(() => ['All', ...new Set((rolls || []).map(r => r.color).filter(Boolean))], [rolls]);
   const uniqueQualities = useMemo(() => ['All', ...new Set((rolls || []).map(r => r.quality).filter(Boolean))], [rolls]);
   const uniqueGSM = useMemo(() => ['All', ...new Set((rolls || []).map(r => r.gsm).filter(Boolean))], [rolls]);
 
-  // 2. Memoize filter logic (Heavy Calculation)
   const filtered = useMemo(() => {
       if (!rolls) return [];
       return rolls.filter(r => {
-          // Guard clause for missing data
           if (!r) return false;
           if (r.status !== 'in_stock') return false;
           
@@ -342,7 +352,6 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
 
           if (!search.trim()) return true;
           
-          // Google-Style Search Logic
           const searchTerms = search.toLowerCase().split(' ').filter(Boolean);
           return searchTerms.every(term => (
               (r.product_id || '').toLowerCase().includes(term) || 
@@ -356,7 +365,6 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
       });
   }, [rolls, search, filters]);
   
-  // 3. Safe Calculation of Total Weight
   const totalWeight = useMemo(() => {
       return filtered.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
   }, [filtered]);
@@ -443,11 +451,23 @@ const Dashboard = ({ rolls, materials }) => {
 };
 
 const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) => {
+    // --- SAFE JSON PARSE HELPER ---
+    const safeJSONParse = (key, fallback) => {
+        try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : fallback;
+        } catch (e) {
+            return fallback;
+        }
+    };
+
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
     const [editedRoll, setEditedRoll] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
-    const [sessionList, setSessionList] = useState(() => JSON.parse(localStorage.getItem('ksf_dispatch_list') || '[]'));
+    
+    // Use Safe Parse for initial state
+    const [sessionList, setSessionList] = useState(() => safeJSONParse('ksf_dispatch_list', []));
     const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer') || '');
     const [vehicleNo, setVehicleNo] = useState(() => localStorage.getItem('ksf_dispatch_vehicle') || '');
 
@@ -594,7 +614,7 @@ export default function App() {
                 {activeTab === 'dashboard' && <Dashboard rolls={rolls} materials={materials} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
-                {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUpdateRoll={handleEditRoll} />}
+                {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={setEditRoll} onExport={handleExport} />}
                 {activeTab === 'materials' && <MaterialsView materials={materials} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
             </>
