@@ -283,174 +283,7 @@ const LabelPrint = ({ data, onClose }) => {
   );
 };
 
-// --- UPDATED DISPATCH VIEW (List, Name, Date) ---
-const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) => {
-    // --- PERSISTENT STATE ---
-    const [scanId, setScanId] = useState('');
-    const [foundRoll, setFoundRoll] = useState(null);
-    const [editedRoll, setEditedRoll] = useState(null);
-    const [showScanner, setShowScanner] = useState(false);
-    
-    // Load batch details from localStorage so they survive refresh
-    const [sessionList, setSessionList] = useState(() => JSON.parse(localStorage.getItem('ksf_dispatch_list') || '[]'));
-    const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer') || '');
-    const [vehicleNo, setVehicleNo] = useState(() => localStorage.getItem('ksf_dispatch_vehicle') || '');
-
-    // --- EFFECTS ---
-    useEffect(() => {
-        localStorage.setItem('ksf_dispatch_list', JSON.stringify(sessionList));
-        localStorage.setItem('ksf_dispatch_customer', customerName);
-        localStorage.setItem('ksf_dispatch_vehicle', vehicleNo);
-    }, [sessionList, customerName, vehicleNo]);
-
-    // --- HANDLERS ---
-    const handleSearch = useCallback((idOverride) => {
-        const query = idOverride || scanId;
-        const roll = rolls.find(r => r.product_id === query && r.status === 'in_stock');
-        if (roll) { setFoundRoll(roll); setEditedRoll({ ...roll }); setScanId(query); setShowScanner(false); } 
-        else { alert('Roll not found or already dispatched.'); }
-    }, [rolls, scanId]);
-
-    const handleConfirmDispatch = async () => {
-        // 1. Update roll if edited
-        if (editedRoll.net_weight !== foundRoll.net_weight || editedRoll.customer_name !== foundRoll.customer_name) { 
-            await onUpdateRoll(editedRoll); 
-        }
-        // 2. Mark as dispatched in DB
-        onDispatch(editedRoll.id);
-        
-        // 3. Add to local session list
-        const newItem = { ...editedRoll, added_at: new Date().toISOString() };
-        setSessionList(prev => [newItem, ...prev]);
-        
-        // 4. Reset Scan
-        setFoundRoll(null);
-        setEditedRoll(null);
-        setScanId('');
-    };
-
-    const handleRemoveFromList = async (itemToRemove) => {
-        if(!window.confirm(`Remove ${itemToRemove.product_id} from this list? It will be marked as 'In Stock' again.`)) return;
-        
-        // 1. Revert DB status to 'in_stock'
-        await onUpdateRoll({ ...itemToRemove, status: 'in_stock', dispatched_at: null });
-        
-        // 2. Remove from local list
-        setSessionList(prev => prev.filter(item => item.id !== itemToRemove.id));
-    };
-
-    const handlePrintChallan = () => {
-        if(!customerName) return alert("Please enter a Customer Name for the List!");
-        if(!vehicleNo) return alert("Please enter Vehicle Number!");
-        if(sessionList.length === 0) return alert("List is empty!");
-
-        generateChallan(sessionList, { buyer: customerName, vehicle: vehicleNo, device: deviceName });
-        
-        if(window.confirm("Gate Pass Generated. Start a new batch? (This clears the current list)")) { 
-            setSessionList([]); 
-            setCustomerName(''); 
-            setVehicleNo(''); 
-        }
-    };
-
-    const totalWeight = sessionList.reduce((acc, r) => acc + parseFloat(r.net_weight || 0), 0);
-
-    return (
-        <div className="max-w-xl mx-auto space-y-4 pb-20">
-            {showScanner && <BarcodeScanner onScan={(text) => { if(text) handleSearch(text); else setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
-            
-            {/* BATCH HEADER */}
-            <div className="bg-blue-600 p-4 rounded-xl text-white shadow-lg shadow-blue-200">
-                <h3 className="font-bold text-sm opacity-80 uppercase mb-2 flex items-center gap-2"><FileText size={16}/> Dispatch Manifest</h3>
-                <input 
-                    className="w-full bg-blue-700/50 border border-blue-500 rounded p-2 text-white placeholder-blue-300 font-bold mb-2 outline-none focus:bg-blue-700"
-                    placeholder="Customer Name (e.g. Supreme Pack)"
-                    value={customerName}
-                    onChange={e => setCustomerName(e.target.value)}
-                />
-                <input 
-                    className="w-full bg-blue-700/50 border border-blue-500 rounded p-2 text-white placeholder-blue-300 text-sm outline-none focus:bg-blue-700"
-                    placeholder="Vehicle No (e.g. UP 27 AA 0000)"
-                    value={vehicleNo}
-                    onChange={e => setVehicleNo(e.target.value)}
-                />
-                <div className="flex justify-between items-end mt-3 border-t border-blue-500 pt-2">
-                    <div>
-                        <div className="text-xs opacity-70">Date</div>
-                        <div className="font-bold text-sm">{new Date().toLocaleDateString()}</div>
-                    </div>
-                    <div className="text-right">
-                        <div className="text-xs opacity-70">Total List Weight</div>
-                        <div className="font-black text-2xl">{totalWeight.toLocaleString()} <span className="text-sm font-normal">kg</span></div>
-                    </div>
-                </div>
-            </div>
-
-            {/* SCANNER AREA */}
-            {!foundRoll && (
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center">
-                    <div className="mb-4">
-                        <h2 className="text-lg font-bold mb-2 text-gray-800">Add to List</h2>
-                        <input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Scan Barcode" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button>
-                        <button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button>
-                    </div>
-                </div>
-            )}
-
-            {/* CONFIRMATION CARD */}
-            {foundRoll && editedRoll && (
-                <div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4">
-                    <h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Confirm Item</h3>
-                    <div className="bg-white/70 p-4 rounded-lg grid grid-cols-2 gap-3 text-sm mb-4 border border-green-100">
-                        <div className="col-span-2 text-center border-b pb-2 mb-1"><span className="text-gray-500 text-xs">ID:</span> <span className="font-mono font-bold text-lg">{foundRoll.product_id}</span></div>
-                        <div><label className="text-xs text-gray-500 font-bold uppercase">Customer</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.customer_name || ''} onChange={e => setEditedRoll({...editedRoll, customer_name: e.target.value})} /></div>
-                        <div><label className="text-xs text-gray-500 font-bold uppercase">Weight (Kg)</label><input type="number" className="w-full border p-2 rounded bg-white font-bold text-green-800" value={editedRoll.net_weight} onChange={e => setEditedRoll({...editedRoll, net_weight: e.target.value})} /></div>
-                        <div><label className="text-xs text-gray-500 font-bold uppercase">Quality</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.quality} onChange={e => setEditedRoll({...editedRoll, quality: e.target.value})} /></div>
-                         <div><label className="text-xs text-gray-500 font-bold uppercase">Color</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.color} onChange={e => setEditedRoll({...editedRoll, color: e.target.value})} /></div>
-                    </div>
-                    {isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (
-                        <div className="flex gap-2">
-                            <button onClick={() => { setFoundRoll(null); setScanId(''); }} className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">Cancel</button>
-                            <button onClick={handleConfirmDispatch} className="flex-[2] bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><PlusIcon size={20}/> Add to List</button>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* CURRENT LIST */}
-            {sessionList.length > 0 && (
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center px-2">
-                        <h4 className="font-bold text-gray-500 text-xs uppercase">Items in this Batch ({sessionList.length})</h4>
-                    </div>
-                    {sessionList.map((item, idx) => (
-                        <div key={idx} className="bg-white p-3 rounded-lg border border-gray-100 flex justify-between items-center shadow-sm">
-                            <div>
-                                <div className="font-mono font-bold text-sm text-blue-600">{item.product_id}</div>
-                                <div className="text-xs text-gray-500">{item.quality} • {item.width_inches}" • {item.color}</div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="text-right">
-                                    <div className="font-bold text-gray-900">{item.net_weight} kg</div>
-                                </div>
-                                <button onClick={() => handleRemoveFromList(item)} className="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"><Trash2 size={16}/></button>
-                            </div>
-                        </div>
-                    ))}
-                    
-                    <button onClick={handlePrintChallan} className="w-full mt-4 bg-gray-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl">
-                        <Printer size={20}/> Generate Gate Pass PDF
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// --- REST OF APP COMPONENT (Unchanged) ---
+// --- NEW PRODUCT VIEW (Unchanged) ---
 const NewProductView = ({ formData, setFormData, onSubmit }) => {
   return (
     <div className="max-w-xl mx-auto bg-white p-5 rounded-xl shadow-sm border border-gray-100 mt-2">
@@ -671,83 +504,44 @@ export default function App() {
   const [editRoll, setEditRoll] = useState(null);
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
 
-  const fetchDataRef = useRef();
-
-  const fetchData = useCallback(async (isBackground = false) => {
-      if (!isBackground) setLoading(true);
-      const r = await DataService.getStock();
-      const m = await DataService.getRawMaterials();
-      setRolls(r || []);
-      setMaterials(m || []);
-      if (!isBackground) setLoading(false);
+  useEffect(() => {
+    const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } };
+    checkSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session) { setIsGuest(false); fetchData(); } });
+    return () => subscription.unsubscribe();
   }, []);
 
-  fetchDataRef.current = fetchData;
-
-  useEffect(() => {
-    const checkSession = async () => { 
-        const { data: { session } } = await supabase.auth.getSession(); 
-        if (session) { setUser(session.user); setIsGuest(false); fetchData(); } 
-    };
-    checkSession();
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { 
-        setUser(session?.user ?? null); 
-        if (session && !user) { setIsGuest(false); fetchData(); } 
-    });
-    
-    const interval = setInterval(() => { 
-        if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); 
-    }, 10000);
-
-    return () => { subscription.unsubscribe(); clearInterval(interval); };
-  }, [fetchData]);
-
-  useEffect(() => {
-      if(user && !isGuest && !deviceName) {
-          setDeviceModalOpen(true);
-      }
-  }, [user, isGuest, deviceName]);
-
-  const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
-
+  const fetchData = async () => { setLoading(true); const r = await DataService.getStock(); const m = await DataService.getRawMaterials(); setRolls(r || []); setMaterials(m || []); setLoading(false); };
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
   const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
-  
-  const handleSaveDeviceName = (name) => { 
-      localStorage.setItem('ksf_device_name', name); 
-      setDeviceName(name); 
-      setDeviceModalOpen(false); 
-  };
-
+  const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); };
   const handleSaveRoll = async (e) => { e.preventDefault(); const id = `KSF-${Math.floor(Math.random() * 1000000)}`; const newRoll = { ...formData, product_id: id, status: 'in_stock' }; try { await DataService.addRoll(newRoll, deviceName); setPrintData(newRoll); fetchData(); setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); } catch (err) { alert('Error: ' + err.message); } };
-  const handleDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
+  const handleDispatch = async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(); };
   const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
-  const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
+  const handleEditRoll = async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(); };
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
   const handleAddMaterial = async (name) => { await DataService.addRawMaterial(name); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
 
   if (!user && !isGuest) { return (<div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6"><div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100"><img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" /><h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1><p className="text-gray-500 mb-8">Manage your factory floor efficiently.</p><button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200">Login with Google</button><button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold hover:bg-gray-50 transition border border-gray-200 flex items-center justify-center gap-2"><Eye size={20}/> Monitor Only (Guest)</button></div></div>); }
+  if (user && !deviceName && !isGuest) { return <DeviceNameModal onSave={handleSaveDeviceName} />; }
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pb-10">
-      <Header user={user} isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} onEditDeviceName={() => setDeviceModalOpen(true)} />
+      <Header user={user} isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} setTab={setActiveTab} activeTab={activeTab} />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading ? ( <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div> ) : (
             <>
                 {activeTab === 'dashboard' && <Dashboard rolls={rolls} materials={materials} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
-                {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUpdateRoll={handleEditRoll} />}
+                {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={setEditRoll} onExport={handleExport} />}
                 {activeTab === 'materials' && <MaterialsView materials={materials} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
             </>
         )}
       </main>
-      
-      {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
       {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
