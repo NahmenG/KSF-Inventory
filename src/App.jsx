@@ -283,7 +283,6 @@ const LabelPrint = ({ data, onClose }) => {
   );
 };
 
-// --- NEW PRODUCT VIEW (Unchanged) ---
 const NewProductView = ({ formData, setFormData, onSubmit }) => {
   return (
     <div className="max-w-xl mx-auto bg-white p-5 rounded-xl shadow-sm border border-gray-100 mt-2">
@@ -319,32 +318,91 @@ const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
     );
 };
 
-const StockView = ({ rolls, onPrint, onExport, onSelectRoll }) => {
+// --- OPTIMIZED STOCK VIEW (MEMOIZED & SAFE) ---
+const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({ color: 'All', quality: 'All', gsm: 'All' });
-  const uniqueColors = ['All', ...new Set(rolls.map(r => r.color).filter(Boolean))];
-  const uniqueQualities = ['All', ...new Set(rolls.map(r => r.quality).filter(Boolean))];
-  const uniqueGSM = ['All', ...new Set(rolls.map(r => r.gsm).filter(Boolean))];
-  const filtered = rolls.filter(r => {
-      if (filters.color !== 'All' && r.color !== filters.color) return false;
-      if (filters.quality !== 'All' && r.quality !== filters.quality) return false;
-      if (filters.gsm !== 'All' && r.gsm != filters.gsm) return false;
-      if (r.status !== 'in_stock') return false;
-      if (!search.trim()) return true;
-      const searchTerms = search.toLowerCase().split(' ').filter(Boolean);
-      return searchTerms.every(term => ((r.product_id || '').toLowerCase().includes(term) || (r.customer_name || '').toLowerCase().includes(term) || (r.quality || '').toLowerCase().includes(term) || (r.color || '').toLowerCase().includes(term) || String(r.gsm || '').toLowerCase().includes(term) || String(r.width_inches || '').toLowerCase().includes(term) || String(r.net_weight || '').toLowerCase().includes(term)));
-  });
+
+  // 1. Memoize unique lists to stop re-calc on every render (Crash Prevention)
+  const uniqueColors = useMemo(() => ['All', ...new Set((rolls || []).map(r => r.color).filter(Boolean))], [rolls]);
+  const uniqueQualities = useMemo(() => ['All', ...new Set((rolls || []).map(r => r.quality).filter(Boolean))], [rolls]);
+  const uniqueGSM = useMemo(() => ['All', ...new Set((rolls || []).map(r => r.gsm).filter(Boolean))], [rolls]);
+
+  // 2. Memoize filter logic (Heavy Calculation)
+  const filtered = useMemo(() => {
+      if (!rolls) return [];
+      return rolls.filter(r => {
+          // Guard clause for missing data
+          if (!r) return false;
+          if (r.status !== 'in_stock') return false;
+          
+          if (filters.color !== 'All' && r.color !== filters.color) return false;
+          if (filters.quality !== 'All' && r.quality !== filters.quality) return false;
+          if (filters.gsm !== 'All' && r.gsm != filters.gsm) return false;
+
+          if (!search.trim()) return true;
+          
+          // Google-Style Search Logic
+          const searchTerms = search.toLowerCase().split(' ').filter(Boolean);
+          return searchTerms.every(term => (
+              (r.product_id || '').toLowerCase().includes(term) || 
+              (r.customer_name || '').toLowerCase().includes(term) ||
+              (r.quality || '').toLowerCase().includes(term) || 
+              (r.color || '').toLowerCase().includes(term) ||
+              String(r.gsm || '').toLowerCase().includes(term) ||
+              String(r.width_inches || '').toLowerCase().includes(term) ||
+              String(r.net_weight || '').toLowerCase().includes(term)
+          ));
+      });
+  }, [rolls, search, filters]);
   
-  const totalWeight = filtered.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
+  // 3. Safe Calculation of Total Weight
+  const totalWeight = useMemo(() => {
+      return filtered.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
+  }, [filtered]);
 
   return (
       <div className="space-y-4 h-full flex flex-col">
           <div className="sticky top-0 bg-slate-50 z-10 pb-2 space-y-2">
-              <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-3 text-gray-400" size={18}/><input className="w-full pl-10 p-2.5 bg-white border-gray-200 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Search (Cust 38 60...)" value={search} onChange={e => setSearch(e.target.value)} /></div><button onClick={onExport} className="bg-white border border-green-200 text-green-700 p-2.5 rounded-xl shadow-sm"><Download size={20} /></button></div>
-              <div className="flex gap-2 overflow-x-auto no-scrollbar"><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.color} onChange={e => setFilters({...filters, color: e.target.value})}>{uniqueColors.map(c => <option key={c} value={c}>Color: {c}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.quality} onChange={e => setFilters({...filters, quality: e.target.value})}>{uniqueQualities.map(q => <option key={q} value={q}>Qual: {q}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[80px]" value={filters.gsm} onChange={e => setFilters({...filters, gsm: e.target.value})}>{uniqueGSM.map(g => <option key={g} value={g}>GSM: {g}</option>)}</select></div>
-              <div className="bg-blue-600 text-white p-3 rounded-xl flex justify-between items-center shadow-sm shadow-blue-200"><div className="text-xs font-bold opacity-80 uppercase">Filtered Stock</div><div className="flex items-center gap-4"><div className="text-right"><div className="text-xs opacity-70">Count</div><div className="font-bold">{filtered.length}</div></div><div className="text-right"><div className="text-xs opacity-70">Total Kg</div><div className="font-bold text-lg"><Scale size={14} className="inline mb-1 mr-1"/>{totalWeight.toLocaleString()}</div></div></div></div>
+              <div className="flex gap-2">
+                  <div className="relative flex-1">
+                      <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
+                      <input className="w-full pl-10 p-2.5 bg-white border-gray-200 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Search (Cust 38 60...)" value={search} onChange={e => setSearch(e.target.value)} />
+                  </div>
+                  <button onClick={onExport} className="bg-white border border-green-200 text-green-700 p-2.5 rounded-xl shadow-sm"><Download size={20} /></button>
+              </div>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                  <select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.color} onChange={e => setFilters({...filters, color: e.target.value})}>{uniqueColors.map(c => <option key={c} value={c}>Color: {c}</option>)}</select>
+                  <select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.quality} onChange={e => setFilters({...filters, quality: e.target.value})}>{uniqueQualities.map(q => <option key={q} value={q}>Qual: {q}</option>)}</select>
+                  <select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[80px]" value={filters.gsm} onChange={e => setFilters({...filters, gsm: e.target.value})}>{uniqueGSM.map(g => <option key={g} value={g}>GSM: {g}</option>)}</select>
+              </div>
+              <div className="bg-blue-600 text-white p-3 rounded-xl flex justify-between items-center shadow-sm shadow-blue-200">
+                  <div className="text-xs font-bold opacity-80 uppercase">Filtered Stock</div>
+                  <div className="flex items-center gap-4">
+                      <div className="text-right"><div className="text-xs opacity-70">Count</div><div className="font-bold">{filtered.length}</div></div>
+                      <div className="text-right">
+                          <div className="text-xs opacity-70">Total Kg</div>
+                          <div className="font-bold text-lg">{totalWeight.toLocaleString()}</div>
+                      </div>
+                  </div>
+              </div>
           </div>
-          <div className="flex-1 overflow-y-auto pb-20">{filtered.map(r => (<div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center active:bg-blue-50 transition-colors cursor-pointer"><div><div className="flex flex-wrap items-center gap-2 mb-1"><span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span><span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide">{r.customer_name}</span></div><div className="text-gray-900 font-medium text-sm">{r.quality} • {r.color} • {r.width_inches}" • {r.gsm} GSM</div><div className="text-sm text-gray-500 mt-1">Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m</div></div><button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="p-3 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg"><Printer size={20}/></button></div>))}{filtered.length === 0 && <div className="text-center text-gray-400 py-10">No Stock Found</div>}</div>
+          <div className="flex-1 overflow-y-auto pb-20">
+              {filtered.map(r => (
+                  <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center active:bg-blue-50 transition-colors cursor-pointer">
+                      <div>
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span>
+                              <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide">{r.customer_name}</span>
+                          </div>
+                          <div className="text-gray-900 font-medium text-sm">{r.quality} • {r.color} • {r.width_inches}" • {r.gsm} GSM</div>
+                          <div className="text-sm text-gray-500 mt-1">Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m</div>
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="p-3 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg"><Printer size={20}/></button>
+                  </div>
+              ))}
+              {filtered.length === 0 && <div className="text-center text-gray-400 py-10">No Stock Found</div>}
+          </div>
       </div>
   );
 };
@@ -536,12 +594,14 @@ export default function App() {
                 {activeTab === 'dashboard' && <Dashboard rolls={rolls} materials={materials} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
-                {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} />}
+                {activeTab === 'dispatch' && <DispatchView rolls={rolls} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUpdateRoll={handleEditRoll} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={setEditRoll} onExport={handleExport} />}
                 {activeTab === 'materials' && <MaterialsView materials={materials} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
             </>
         )}
       </main>
+      
+      {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
       {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
