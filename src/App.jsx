@@ -5,10 +5,19 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-// NOTE: Recharts and Lucide icons removed temporarily to prevent import crashes
+// Recharts import
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+} from 'recharts';
+// Lucide icons - importing only safe ones
+import { 
+  Package, Truck, Layers, LogOut, Printer, Search, 
+  Download, Database, Calendar, Clock, 
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle
+} from 'lucide-react';
 import { supabase } from './supabaseClient';
 
-// --- ERROR BOUNDARY (CATCHES CRASHES) ---
+// --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -17,13 +26,12 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <div className="p-6 bg-red-50 text-red-900 min-h-screen flex flex-col items-center justify-center text-center">
-          <h1 className="text-2xl font-bold mb-2">⚠️ The App Crashed</h1>
-          <p className="mb-4">Please screenshot this error and send it to support:</p>
-          <pre className="bg-white p-4 rounded border border-red-200 text-left overflow-auto max-w-full text-xs font-mono">
+          <h1 className="text-2xl font-bold mb-2">⚠️ Something went wrong</h1>
+          <pre className="bg-white p-4 rounded border border-red-200 text-left overflow-auto max-w-full text-xs font-mono mb-4">
             {this.state.error && this.state.error.toString()}
           </pre>
-          <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="mt-6 bg-red-600 text-white px-6 py-3 rounded font-bold">
-            Factory Reset & Reload
+          <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="bg-red-600 text-white px-6 py-3 rounded font-bold">
+            Reset App
           </button>
         </div>
       );
@@ -179,7 +187,7 @@ const LabelPrint = ({ data, onClose }) => {
             <div className="font-bold text-center text-lg mb-2">KSF NON WOVEN</div>
             <div className="grid grid-cols-2 gap-2">
                 <div>Q: {data.quality}</div><div>GSM: {data.gsm}</div>
-                <div>Col: {data.color}</div><div>Sz: {data.width_inches}"</div>
+                <div>Col: {data.color}</div><div>Sz: {data.width_inches} in</div>
                 <div>Net: {data.net_weight}kg</div><div>Gr: {data.gross_weight}kg</div>
             </div>
             <div className="flex justify-center mt-2"><canvas ref={canvasRef} className="w-full h-12"></canvas></div>
@@ -239,12 +247,14 @@ const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
 
 const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [search, setSearch] = useState('');
+  // Use Safe Arrays
+  const safeRolls = Array.isArray(rolls) ? rolls : [];
+  
   const filtered = useMemo(() => {
-      if (!rolls) return [];
-      return rolls.filter(r => r.status === 'in_stock' && (
+      return safeRolls.filter(r => r.status === 'in_stock' && (
           !search || JSON.stringify(r).toLowerCase().includes(search.toLowerCase())
       ));
-  }, [rolls, search]);
+  }, [safeRolls, search]);
   
   return (
       <div className="space-y-4 h-full flex flex-col">
@@ -275,14 +285,14 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
 const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) => {
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
-    const [sessionList, setSessionList] = useState(() => safeJSONParse('ksf_dispatch_list_v8', []));
-    const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer_v8') || '');
-    const [vehicleNo, setVehicleNo] = useState(() => localStorage.getItem('ksf_dispatch_vehicle_v8') || '');
+    const [sessionList, setSessionList] = useState(() => safeJSONParse('ksf_dispatch_list_v9', []));
+    const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer_v9') || '');
+    const [vehicleNo, setVehicleNo] = useState(() => localStorage.getItem('ksf_dispatch_vehicle_v9') || '');
 
     useEffect(() => {
-        localStorage.setItem('ksf_dispatch_list_v8', JSON.stringify(sessionList));
-        localStorage.setItem('ksf_dispatch_customer_v8', customerName);
-        localStorage.setItem('ksf_dispatch_vehicle_v8', vehicleNo);
+        localStorage.setItem('ksf_dispatch_list_v9', JSON.stringify(sessionList));
+        localStorage.setItem('ksf_dispatch_customer_v9', customerName);
+        localStorage.setItem('ksf_dispatch_vehicle_v9', vehicleNo);
     }, [sessionList, customerName, vehicleNo]);
 
     const handleSearch = () => {
@@ -343,11 +353,12 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
 };
 
 const HistoryView = ({ rolls, onExport }) => {
+    // FIX: Removed "->" arrow symbol which was causing build crash
     const history = (rolls || []).filter(r => r.status === 'dispatched');
     return (
         <div>
             <div className="flex justify-between items-center mb-4"><h2 className="font-bold">History</h2><button onClick={() => onExport(history)} className="bg-blue-100 px-3 py-1 rounded">Export</button></div>
-            {history.map(r => (<div key={r.id} className="bg-white p-3 rounded border mb-2 text-sm"><div>{r.product_id} -> {r.customer_name}</div><div className="text-gray-500">{new Date(r.dispatched_at).toLocaleDateString()}</div></div>))}
+            {history.map(r => (<div key={r.id} className="bg-white p-3 rounded border mb-2 text-sm"><div>{r.product_id} &rarr; {r.customer_name}</div><div className="text-gray-500">{new Date(r.dispatched_at).toLocaleDateString()}</div></div>))}
         </div>
     );
 };
