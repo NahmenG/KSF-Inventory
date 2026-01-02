@@ -4,7 +4,7 @@ import JsBarcode from 'jsbarcode';
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable'; // FIX: Changed import style
+import autoTable from 'jspdf-autotable';
 // Recharts import
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
@@ -13,7 +13,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter, Undo2, ToggleLeft, ToggleRight
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter, Undo2, ToggleLeft, ToggleRight, Plus
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -61,6 +61,9 @@ const COLORS = [
   'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 
   'Navy Blue', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'
 ];
+// NEW: Material Categories
+const MAT_CATEGORIES = ['Colour', 'Filler', 'Additives', 'Polymers', 'Others'];
+
 const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 // --- DATA SERVICE ---
@@ -87,8 +90,9 @@ const DataService = {
     const { data, error } = await supabase.from('raw_materials').select('*').order('name');
     return error ? [] : data;
   },
-  async addRawMaterial(name) {
-      const newMat = { name, stock_quantity: 0, unit: 'kg' };
+  // UPDATED: Now accepts category
+  async addRawMaterial(name, category) {
+      const newMat = { name, category, stock_quantity: 0, unit: 'kg' };
       await supabase.from('raw_materials').insert([newMat]);
   },
   async updateRawMaterial(id, qty, isAddition, deviceName) {
@@ -99,7 +103,7 @@ const DataService = {
   }
 };
 
-// --- HELPER: GENERATE PDF (FIXED) ---
+// --- HELPER: GENERATE PDF ---
 const generateChallan = (rolls, details) => {
     try {
         const doc = new jsPDF();
@@ -125,18 +129,16 @@ const generateChallan = (rolls, details) => {
             r.net_weight
         ]);
 
-        // FIX: Using autoTable(doc, options) instead of doc.autoTable
         autoTable(doc, {
             startY: 75,
             head: [['#', 'ID', 'Qual', 'Col', 'Size', 'GSM', 'Kg']],
             body: tableData,
             theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185] }, // Blue header
+            headStyles: { fillColor: [41, 128, 185] }, 
         });
         
         // Footer (Total Weight)
         const totalWt = rolls.reduce((sum, r) => sum + Number(r.net_weight || 0), 0);
-        // lastAutoTable.finalY helps position text right after the table
         const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 150; 
         
         doc.setFontSize(14);
@@ -199,6 +201,33 @@ const DeviceNameModal = ({ onSave, initialName }) => {
     );
 };
 
+// --- NEW MODAL: ADD MATERIAL ---
+const AddMaterialModal = ({ onSave, onClose }) => {
+    const [name, setName] = useState('');
+    const [category, setCategory] = useState('Colour');
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-lg w-full max-w-sm">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold">Add Material</h2>
+                    <button onClick={onClose}><X size={20}/></button>
+                </div>
+                
+                <label className="text-xs font-bold text-gray-500">Material Name</label>
+                <input className="w-full border p-3 rounded mb-4" placeholder="e.g. Red Batch 202" value={name} onChange={e => setName(e.target.value)} />
+                
+                <label className="text-xs font-bold text-gray-500">Category</label>
+                <select className="w-full border p-3 rounded mb-6 bg-white" value={category} onChange={e => setCategory(e.target.value)}>
+                    {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+
+                <button disabled={!name} onClick={() => onSave(name, category)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add to List</button>
+            </div>
+        </div>
+    );
+};
+
 const BarcodeScanner = ({ onScan, onClose }) => {
     useEffect(() => {
         const html5QrCode = new Html5Qrcode("reader");
@@ -214,7 +243,6 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- LABEL PRINT (WITH TOGGLE) ---
 const LabelPrint = ({ data, onClose }) => {
   const canvasRef = useRef(null);
   const [showBrand, setShowBrand] = useState(true);
@@ -228,7 +256,6 @@ const LabelPrint = ({ data, onClose }) => {
       <div className="bg-white p-4 rounded-lg w-full max-w-md text-center">
         <h2 className="font-bold mb-4">Label Preview</h2>
         
-        {/* Toggle Switch */}
         <div className="flex items-center justify-center gap-2 mb-4">
             <button onClick={() => setShowBrand(!showBrand)} className="flex items-center gap-2 text-sm font-bold text-gray-600">
                 {showBrand ? <ToggleRight className="text-blue-600" size={30}/> : <ToggleLeft className="text-gray-400" size={30}/>}
@@ -237,7 +264,6 @@ const LabelPrint = ({ data, onClose }) => {
         </div>
 
         <div className="border-2 border-black p-4 text-left font-mono text-sm mb-4 bg-white">
-            {/* Conditional Header */}
             {showBrand && <div className="font-bold text-center text-lg mb-2">KSF NON WOVEN</div>}
             
             <div className="grid grid-cols-2 gap-2 text-base">
@@ -427,8 +453,6 @@ const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
 
 const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
-  
-  // Search States
   const [textSearch, setTextSearch] = useState('');
   const [filterQuality, setFilterQuality] = useState('');
   const [filterColor, setFilterColor] = useState('');
@@ -439,10 +463,8 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   
   const filtered = useMemo(() => {
       return safeRolls.filter(r => {
-          // 1. Check Status
           if (r.status !== 'in_stock') return false;
           
-          // 2. SMART TEXT SEARCH (Matches ALL words typed)
           if (textSearch) {
               const searchTerms = textSearch.toLowerCase().split(' ').filter(t => t.trim() !== '');
               const searchableText = `
@@ -453,13 +475,10 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
                 ${r.gsm || ''} 
                 ${r.width_inches || ''}
               `.toLowerCase();
-              
-              // Every word typed must appear somewhere
               const allTermsMatch = searchTerms.every(term => searchableText.includes(term));
               if (!allTermsMatch) return false;
           }
 
-          // 3. Check Dropdown Filters (Combined Logic AND)
           if (filterQuality && r.quality !== filterQuality) return false;
           if (filterColor && r.color !== filterColor) return false;
           if (filterGSM && String(r.gsm) !== String(filterGSM)) return false;
@@ -481,8 +500,6 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
 
   return (
       <div className="space-y-4 h-full flex flex-col relative">
-          
-          {/* SEARCH & FILTER BAR */}
           <div className="bg-white p-3 rounded shadow-sm flex flex-col gap-3">
               <div className="flex gap-2">
                 <div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center">
@@ -495,7 +512,6 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
                 <button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button>
               </div>
 
-              {/* EXPANDABLE FILTERS */}
               {showFilters && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2">
                       <select className="border p-2 rounded text-sm" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}>
@@ -536,7 +552,6 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
               ))}
           </div>
 
-          {/* Sticky Footer Summary */}
           <div className="fixed bottom-20 left-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-xl flex justify-between items-center z-40 max-w-7xl mx-auto">
              <div>
                 <div className="text-gray-400 text-xs uppercase">Found</div>
@@ -551,7 +566,6 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   );
 };
 
-// --- DISPATCH VIEW (WITH UNDO) ---
 const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
@@ -570,7 +584,6 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }
         const query = idToSearch || scanId;
         const roll = (rolls || []).find(r => r.product_id === query && r.status === 'in_stock');
         if (roll) { 
-             // FIX: Prevent Duplicate Add
             if(sessionList.some(r => r.id === roll.id)) {
                 alert("This roll is already in the dispatch list!");
                 setScanId('');
@@ -591,7 +604,7 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }
 
     const handleRemoveFromManifest = async (index, item) => {
         if(confirm("Remove this roll from dispatch and return to stock?")) {
-            await onUndoDispatch(item.id); // Reverts DB status
+            await onUndoDispatch(item.id); 
             const newList = [...sessionList];
             newList.splice(index, 1);
             setSessionList(newList);
@@ -604,7 +617,6 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }
         }
     };
 
-    // Camera Handler
     const handleCameraScan = (decodedText) => {
         setIsScanning(false);
         handleSearch(decodedText);
@@ -679,14 +691,13 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }
 };
 
 const HistoryView = ({ rolls, onExport, onSelectRoll }) => {
-    // History Filters
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
     const history = useMemo(() => {
         let list = (rolls || []).filter(r => r.status === 'dispatched');
         if (startDate) list = list.filter(r => new Date(r.dispatched_at) >= new Date(startDate));
-        if (endDate) list = list.filter(r => new Date(r.dispatched_at) <= new Date(endDate + 'T23:59:59')); // Include end of day
+        if (endDate) list = list.filter(r => new Date(r.dispatched_at) <= new Date(endDate + 'T23:59:59'));
         return list;
     }, [rolls, startDate, endDate]);
 
@@ -697,7 +708,6 @@ const HistoryView = ({ rolls, onExport, onSelectRoll }) => {
                 <button onClick={() => onExport(history)} className="bg-blue-100 text-blue-700 px-3 py-1 rounded font-bold text-sm">Export List</button>
             </div>
             
-            {/* Date Filters */}
             <div className="grid grid-cols-2 gap-2 mb-4 bg-white p-3 rounded shadow-sm">
                 <div>
                     <label className="text-xs font-bold text-gray-400">Start Date</label>
@@ -726,29 +736,80 @@ const HistoryView = ({ rolls, onExport, onSelectRoll }) => {
     );
 };
 
+// --- UPDATED MATERIALS VIEW WITH TABS ---
 const MaterialsView = ({ materials, isGuest, onUpdate, onAdd }) => { 
+    const [activeCat, setActiveCat] = useState('Colour');
+    const [isAddModalOpen, setAddModalOpen] = useState(false);
+
+    // Filter materials based on selected category (Handling legacy data without category as 'Others')
+    const filteredMaterials = useMemo(() => {
+        return (materials || []).filter(m => {
+            if (activeCat === 'Others') {
+                return m.category === 'Others' || !m.category; // Catch legacy items here
+            }
+            return m.category === activeCat;
+        });
+    }, [materials, activeCat]);
+
     const handleUpdate = (id, type) => { const qty = prompt(`Enter Kg to ${type === 'add' ? 'add' : 'remove'}:`); if (qty) onUpdate(id, qty, type === 'add'); };
-    const handleAdd = () => { const name = prompt("Name:"); if(name) onAdd(name); };
+    
+    // Updated Add Handler to use Modal
+    const handleSaveNewMaterial = (name, category) => {
+        onAdd(name, category);
+        setAddModalOpen(false);
+    };
+
     return (
-        <div className="pb-20">
-            {!isGuest && <button onClick={handleAdd} className="w-full border-dashed border-2 border-gray-300 p-4 rounded-xl mb-6 text-gray-500 font-bold hover:bg-gray-50 transition-colors">+ Add New Raw Material</button>}
-            {(materials||[]).map(m => (
-                <div key={m.id} className="bg-white p-5 rounded-xl shadow-sm border mb-3 flex justify-between items-center">
-                    <div>
-                        <div className="font-bold text-lg text-gray-800">{m.name}</div>
-                        <div className="text-xs text-gray-400">Current Stock</div>
+        <div className="pb-24 flex flex-col h-full">
+            {/* Category Tabs */}
+            <div className="flex overflow-x-auto gap-2 pb-4 mb-2 hide-scrollbar">
+                {MAT_CATEGORIES.map(cat => (
+                    <button 
+                        key={cat} 
+                        onClick={() => setActiveCat(cat)}
+                        className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-colors ${activeCat === cat ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-500 border'}`}
+                    >
+                        {cat}
+                    </button>
+                ))}
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto">
+                {filteredMaterials.length === 0 ? (
+                    <div className="text-center text-gray-400 mt-10">No materials in this category.</div>
+                ) : filteredMaterials.map(m => (
+                    <div key={m.id} className="bg-white p-4 rounded-xl shadow-sm border mb-3 flex justify-between items-center">
+                        <div>
+                            <div className="font-bold text-lg text-gray-800">{m.name}</div>
+                            <div className="text-xs text-gray-400">{m.category || 'Others'}</div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <span className="text-2xl font-bold text-blue-600">{m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>
+                            {!isGuest && (
+                                <div className="flex flex-col gap-1">
+                                    <button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded flex items-center justify-center font-bold">+</button>
+                                    <button onClick={() => handleUpdate(m.id, 'sub')} className="bg-red-100 text-red-700 w-8 h-8 rounded flex items-center justify-center font-bold">-</button>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-2xl font-bold text-blue-600">{m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>
-                        {!isGuest && (
-                            <div className="flex flex-col gap-1">
-                                <button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded flex items-center justify-center font-bold">+</button>
-                                <button onClick={() => handleUpdate(m.id, 'sub')} className="bg-red-100 text-red-700 w-8 h-8 rounded flex items-center justify-center font-bold">-</button>
-                            </div>
-                        )}
-                    </div>
+                ))}
+            </div>
+
+            {/* Floating Add Button */}
+            {!isGuest && (
+                <div className="fixed bottom-24 right-6">
+                    <button 
+                        onClick={() => setAddModalOpen(true)}
+                        className="bg-blue-600 text-white p-4 rounded-full shadow-lg shadow-blue-300 flex items-center justify-center"
+                    >
+                        <Plus size={24} />
+                    </button>
                 </div>
-            ))}
+            )}
+
+            {isAddModalOpen && <AddMaterialModal onSave={handleSaveNewMaterial} onClose={() => setAddModalOpen(false)} />}
         </div>
     ); 
 };
@@ -793,7 +854,6 @@ const MainApp = () => {
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
   
-  // CHANGED: Use 'R-' prefix instead of 'KSF-'
   const handleSaveRoll = async (e) => { 
       e.preventDefault(); 
       const id = `R-${Math.floor(Math.random() * 1000000)}`; 
@@ -815,7 +875,7 @@ const MainApp = () => {
   const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
   const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
-  const handleAddMaterial = async (name) => { await DataService.addRawMaterial(name); fetchData(); };
+  const handleAddMaterial = async (name, category) => { await DataService.addRawMaterial(name, category); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
 
   if (!user && !isGuest) { return (<div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6"><div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100"><img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" /><h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1><p className="text-gray-500 mb-8">Manage your factory floor efficiently.</p><button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 shadow-lg shadow-blue-200">Login with Google</button><button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold border hover:bg-gray-50">View Only (Guest)</button></div></div>); }
