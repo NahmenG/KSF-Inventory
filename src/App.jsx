@@ -314,7 +314,6 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => (
     </div>
 );
 
-// --- UPDATED EDIT MODAL (ALL FIELDS EDITABLE) ---
 const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
@@ -386,7 +385,7 @@ const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
     );
 };
 
-// --- UPDATED STOCK VIEW (MULTI FILTER) ---
+// --- UPDATED STOCK VIEW (SMART SEARCH) ---
 const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
   
@@ -404,12 +403,21 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
           // 1. Check Status
           if (r.status !== 'in_stock') return false;
           
-          // 2. Check Text Search (ID or Customer)
+          // 2. SMART TEXT SEARCH (Matches ALL words typed)
           if (textSearch) {
-              const searchLower = textSearch.toLowerCase();
-              const matchesID = r.product_id.toLowerCase().includes(searchLower);
-              const matchesCust = (r.customer_name || '').toLowerCase().includes(searchLower);
-              if (!matchesID && !matchesCust) return false;
+              const searchTerms = textSearch.toLowerCase().split(' ').filter(t => t.trim() !== '');
+              const searchableText = `
+                ${r.product_id} 
+                ${r.customer_name || ''} 
+                ${r.quality || ''} 
+                ${r.color || ''} 
+                ${r.gsm || ''} 
+                ${r.width_inches || ''}
+              `.toLowerCase();
+
+              // EVERY word typed must appear somewhere in the roll's data
+              const allTermsMatch = searchTerms.every(term => searchableText.includes(term));
+              if (!allTermsMatch) return false;
           }
 
           // 3. Check Dropdown Filters (Combined Logic AND)
@@ -440,7 +448,7 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
               <div className="flex gap-2">
                 <div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center">
                     <Search className="text-gray-400" size={20} />
-                    <input className="w-full outline-none bg-transparent" placeholder="Search ID or Customer..." value={textSearch} onChange={e => setTextSearch(e.target.value)} />
+                    <input className="w-full outline-none bg-transparent" placeholder="e.g. Reliance Red 40" value={textSearch} onChange={e => setTextSearch(e.target.value)} />
                 </div>
                 <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}>
                     <Filter size={20} />
