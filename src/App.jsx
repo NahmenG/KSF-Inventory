@@ -11,7 +11,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3, Settings, Type, Bold, AlignLeft, AlignCenter, AlignRight, Minus, Scale
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3, Settings, Bold, AlignLeft, AlignCenter, AlignRight, Minus, Scale
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -22,7 +22,6 @@ const safeJSONParse = (key, fallback) => {
     if (!item || item === 'undefined' || item === 'null') return fallback;
     return JSON.parse(item);
   } catch (e) {
-    console.warn(`Corrupted data found for ${key}, resetting.`);
     localStorage.removeItem(key); 
     return fallback;
   }
@@ -394,6 +393,8 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
         </div>
     );
 };
+
+const MaterialsView = ({ materials, isGuest, onUpdate, onAdd }) => { const handleUpdate = (id, type) => { const qty = prompt(`Enter quantity to ${type} (Kg):`); if (qty && !isNaN(qty)) onUpdate(id, qty, type === 'add'); }; const handleAdd = () => { const name = prompt("Enter Material Name:"); if(name) onAdd(name); }; return (<div className="pb-20">{!isGuest && <button onClick={handleAdd} className="w-full bg-white border-2 border-dashed border-gray-300 text-gray-500 py-3 rounded-xl font-bold mb-4 hover:border-blue-400 hover:text-blue-500 transition-colors">+ Add New Material</button>}<div className="grid grid-cols-1 gap-3">{materials.map(m => (<div key={m.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between"><div><h3 className="font-bold text-gray-700 text-sm">{m.name}</h3><div className="text-2xl font-black text-gray-900">{m.stock_quantity} <span className="text-xs font-medium text-gray-400">{m.unit}</span></div></div>{!isGuest && <div className="flex gap-2"><button onClick={() => handleUpdate(m.id, 'issue')} className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-bold border border-red-100">-</button><button onClick={() => handleUpdate(m.id, 'add')} className="w-10 h-10 flex items-center justify-center bg-green-50 text-green-600 rounded-lg font-bold border border-green-100">+</button></div>}</div>))}</div></div>); };
 
 // --- MAIN APP ---
 export default function App() {
