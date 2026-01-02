@@ -13,7 +13,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -103,7 +103,6 @@ const DataService = {
 const generateChallan = (rolls, details) => {
     try {
         const doc = new jsPDF();
-        // LOGO ON PDF - Optional: You can try to addImage here if you have base64
         doc.setFontSize(22);
         doc.text("KSF NON WOVEN", 105, 20, null, null, "center");
         doc.setFontSize(10);
@@ -132,12 +131,10 @@ const generateChallan = (rolls, details) => {
 
 // --- COMPONENTS ---
 
-// UPDATED HEADER WITH LOGO
 const Header = ({ user, isGuest, deviceName, onLogout, setTab, activeTab, onEditDeviceName }) => (
   <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
     <div className="flex justify-between items-center px-4 h-16">
       <div className="font-bold text-xl cursor-pointer flex items-center gap-3" onClick={() => setTab('dashboard')}>
-         {/* COMPANY LOGO */}
          <img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" />
          <span className="text-gray-900 tracking-tight hidden md:block">KSF Inventory</span>
       </div>
@@ -222,11 +219,9 @@ const LabelPrint = ({ data, onClose }) => {
 
 // --- VIEWS ---
 const DashboardView = ({ rolls }) => {
-    // 1. Calculate Summary Stats
     const inStock = rolls.filter(r => r.status === 'in_stock');
     const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
 
-    // 2. Prepare Chart Data (Group by Quality)
     const qualityData = useMemo(() => {
         const counts = {};
         inStock.forEach(r => {
@@ -236,14 +231,12 @@ const DashboardView = ({ rolls }) => {
         return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
     }, [inStock]);
 
-    // 3. Prepare Chart Data (Group by Color)
     const colorData = useMemo(() => {
         const counts = {};
         inStock.forEach(r => {
             const c = r.color || 'Unknown';
             counts[c] = (counts[c] || 0) + (parseFloat(r.net_weight) || 0);
         });
-        // Sort and take top 8
         return Object.keys(counts)
             .map(key => ({ name: key, count: counts[key] }))
             .sort((a, b) => b.count - a.count)
@@ -252,7 +245,6 @@ const DashboardView = ({ rolls }) => {
 
     return (
         <div className="space-y-6 pb-20">
-            {/* KPI CARDS */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-4 rounded-xl shadow border border-blue-100">
                     <div className="text-gray-500 text-xs font-bold uppercase">Total Rolls</div>
@@ -264,7 +256,6 @@ const DashboardView = ({ rolls }) => {
                 </div>
             </div>
 
-            {/* CHARTS */}
             <div className="bg-white p-4 rounded-xl shadow border">
                 <h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3>
                 <div className="h-64">
@@ -323,21 +314,66 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => (
     </div>
 );
 
+// --- UPDATED EDIT MODAL (ALL FIELDS EDITABLE) ---
 const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
+    
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-            <div className="bg-white p-6 rounded-lg w-full max-w-lg">
+            <div className="bg-white p-6 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between mb-4 items-center border-b pb-2">
                     <h2 className="font-bold text-lg">Edit Roll {roll.product_id}</h2>
                     <button onClick={onClose} className="bg-gray-100 p-2 rounded-full"><X size={20}/></button>
                 </div>
+                
                 <div className="grid grid-cols-2 gap-3 mb-6">
-                    <div className="col-span-2"><label className="text-xs font-bold">Customer</label><input disabled={isGuest} className="w-full border p-2 rounded" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold">Net Kg</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold">Gross Kg</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} /></div>
+                    <div className="col-span-2">
+                        <label className="text-xs font-bold text-gray-500">Customer</label>
+                        <input disabled={isGuest} className="w-full border p-2 rounded" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} />
+                    </div>
+                    
+                    <div>
+                        <label className="text-xs font-bold text-gray-500">Quality</label>
+                        <select disabled={isGuest} className="w-full border p-2 rounded bg-white" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})}>
+                            {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-gray-500">Color</label>
+                        <select disabled={isGuest} className="w-full border p-2 rounded bg-white" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})}>
+                            {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-gray-500">GSM</label>
+                        <input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.gsm} onChange={e => setEditData({...editData, gsm: e.target.value})} />
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-gray-500">Width (in)</label>
+                        <input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.width_inches} onChange={e => setEditData({...editData, width_inches: e.target.value})} />
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-gray-500">Length (m)</label>
+                        <input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.length_meters} onChange={e => setEditData({...editData, length_meters: e.target.value})} />
+                    </div>
+
+                    <div className="border-t col-span-2 my-2"></div>
+
+                    <div>
+                        <label className="text-xs font-bold text-gray-500">Net Kg</label>
+                        <input disabled={isGuest} type="number" className="w-full border-2 border-blue-100 p-2 rounded font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-gray-500">Gross Kg</label>
+                        <input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} />
+                    </div>
                 </div>
+
                 {!isGuest && (
                     <div className="flex flex-col gap-2">
                         {roll.status === 'dispatched' && <button onClick={() => onSave({ ...editData, status: 'in_stock', dispatched_at: null })} className="bg-orange-100 text-orange-700 p-3 rounded font-bold">Return to Stock</button>}
@@ -350,28 +386,91 @@ const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
     );
 };
 
+// --- UPDATED STOCK VIEW (MULTI FILTER) ---
 const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
-  const [search, setSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Search States
+  const [textSearch, setTextSearch] = useState('');
+  const [filterQuality, setFilterQuality] = useState('');
+  const [filterColor, setFilterColor] = useState('');
+  const [filterGSM, setFilterGSM] = useState('');
+  const [filterWidth, setFilterWidth] = useState('');
+
   const safeRolls = Array.isArray(rolls) ? rolls : [];
   
   const filtered = useMemo(() => {
-      return safeRolls.filter(r => r.status === 'in_stock' && (
-          !search || JSON.stringify(r).toLowerCase().includes(search.toLowerCase())
-      ));
-  }, [safeRolls, search]);
+      return safeRolls.filter(r => {
+          // 1. Check Status
+          if (r.status !== 'in_stock') return false;
+          
+          // 2. Check Text Search (ID or Customer)
+          if (textSearch) {
+              const searchLower = textSearch.toLowerCase();
+              const matchesID = r.product_id.toLowerCase().includes(searchLower);
+              const matchesCust = (r.customer_name || '').toLowerCase().includes(searchLower);
+              if (!matchesID && !matchesCust) return false;
+          }
+
+          // 3. Check Dropdown Filters (Combined Logic AND)
+          if (filterQuality && r.quality !== filterQuality) return false;
+          if (filterColor && r.color !== filterColor) return false;
+          if (filterGSM && String(r.gsm) !== String(filterGSM)) return false;
+          if (filterWidth && String(r.width_inches) !== String(filterWidth)) return false;
+
+          return true;
+      });
+  }, [safeRolls, textSearch, filterQuality, filterColor, filterGSM, filterWidth]);
 
   const totalFilteredWeight = filtered.reduce((s, r) => s + (Number(r.net_weight)||0), 0);
   
+  const clearFilters = () => {
+      setTextSearch('');
+      setFilterQuality('');
+      setFilterColor('');
+      setFilterGSM('');
+      setFilterWidth('');
+  };
+
   return (
       <div className="space-y-4 h-full flex flex-col relative">
-          <div className="flex gap-2 bg-white p-2 rounded shadow-sm">
-              <Search className="text-gray-400" />
-              <input className="w-full outline-none" placeholder="Search ID, Quality, Color..." value={search} onChange={e => setSearch(e.target.value)} />
-              <button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button>
+          
+          {/* SEARCH & FILTER BAR */}
+          <div className="bg-white p-3 rounded shadow-sm flex flex-col gap-3">
+              <div className="flex gap-2">
+                <div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center">
+                    <Search className="text-gray-400" size={20} />
+                    <input className="w-full outline-none bg-transparent" placeholder="Search ID or Customer..." value={textSearch} onChange={e => setTextSearch(e.target.value)} />
+                </div>
+                <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}>
+                    <Filter size={20} />
+                </button>
+                <button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button>
+              </div>
+
+              {/* EXPANDABLE FILTERS */}
+              {showFilters && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2">
+                      <select className="border p-2 rounded text-sm" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}>
+                          <option value="">All Qualities</option>
+                          {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
+                      </select>
+                      <select className="border p-2 rounded text-sm" value={filterColor} onChange={e => setFilterColor(e.target.value)}>
+                          <option value="">All Colors</option>
+                          {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <input className="border p-2 rounded text-sm" placeholder="GSM (e.g. 40)" value={filterGSM} onChange={e => setFilterGSM(e.target.value)} type="number" />
+                      <input className="border p-2 rounded text-sm" placeholder="Width (e.g. 63)" value={filterWidth} onChange={e => setFilterWidth(e.target.value)} type="number" />
+                      
+                      <button onClick={clearFilters} className="col-span-2 md:col-span-4 text-xs text-red-500 font-bold text-center mt-1">Clear All Filters</button>
+                  </div>
+              )}
           </div>
 
           <div className="flex-1 overflow-y-auto pb-24">
-              {filtered.map(r => (
+              {filtered.length === 0 ? (
+                  <div className="text-center text-gray-400 mt-10">No matching rolls found.</div>
+              ) : filtered.map(r => (
                   <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl border border-gray-100 mb-2 shadow-sm flex justify-between items-center cursor-pointer active:bg-blue-50">
                       <div>
                           <div className="font-bold text-blue-600 text-lg">{r.product_id}</div> 
@@ -393,7 +492,7 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
           {/* Sticky Footer Summary */}
           <div className="fixed bottom-20 left-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-xl flex justify-between items-center z-40 max-w-7xl mx-auto">
              <div>
-                <div className="text-gray-400 text-xs uppercase">Filtered Count</div>
+                <div className="text-gray-400 text-xs uppercase">Found</div>
                 <div className="font-bold">{filtered.length} Rolls</div>
              </div>
              <div className="text-right">
