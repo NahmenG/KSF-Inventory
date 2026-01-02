@@ -13,7 +13,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter, Undo2
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter, Undo2, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -189,17 +189,32 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
+// --- UPDATED LABEL PRINT WITH TOGGLE ---
 const LabelPrint = ({ data, onClose }) => {
   const canvasRef = useRef(null);
+  const [showBrand, setShowBrand] = useState(true);
+
   useEffect(() => {
       if (data && canvasRef.current) try { JsBarcode(canvasRef.current, data.product_id, { format: "CODE128", displayValue: false }); } catch (e) {}
   }, [data]);
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
       <div className="bg-white p-4 rounded-lg w-full max-w-md text-center">
         <h2 className="font-bold mb-4">Label Preview</h2>
-        <div className="border-2 border-black p-4 text-left font-mono text-sm mb-4">
-            <div className="font-bold text-center text-lg mb-2">KSF NON WOVEN</div>
+        
+        {/* Toggle Switch */}
+        <div className="flex items-center justify-center gap-2 mb-4">
+            <button onClick={() => setShowBrand(!showBrand)} className="flex items-center gap-2 text-sm font-bold text-gray-600">
+                {showBrand ? <ToggleRight className="text-blue-600" size={30}/> : <ToggleLeft className="text-gray-400" size={30}/>}
+                Show Brand Header
+            </button>
+        </div>
+
+        <div className="border-2 border-black p-4 text-left font-mono text-sm mb-4 bg-white">
+            {/* Conditional Header */}
+            {showBrand && <div className="font-bold text-center text-lg mb-2">KSF NON WOVEN</div>}
+            
             <div className="grid grid-cols-2 gap-2 text-base">
                 <div>Q: {data.quality}</div><div>GSM: {data.gsm}</div>
                 <div>Col: {data.color}</div><div>Sz: {data.width_inches} in</div>
@@ -511,7 +526,7 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   );
 };
 
-// --- UPDATED DISPATCH VIEW (WITH UNDO) ---
+// --- DISPATCH VIEW (WITH UNDO) ---
 const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
@@ -743,10 +758,23 @@ const MainApp = () => {
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
   
-  const handleSaveRoll = async (e) => { e.preventDefault(); const id = `KSF-${Math.floor(Math.random() * 1000000)}`; const newRoll = { ...formData, product_id: id, status: 'in_stock' }; try { await DataService.addRoll(newRoll, deviceName); setPrintData(newRoll); fetchData(); setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); } catch (err) { alert('Error: ' + err.message); } };
+  // CHANGED: Use 'R-' prefix instead of 'KSF-'
+  const handleSaveRoll = async (e) => { 
+      e.preventDefault(); 
+      const id = `R-${Math.floor(Math.random() * 1000000)}`; 
+      const newRoll = { ...formData, product_id: id, status: 'in_stock' }; 
+      try { 
+          await DataService.addRoll(newRoll, deviceName); 
+          setPrintData(newRoll); 
+          fetchData(); 
+          setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); 
+      } catch (err) { 
+          alert('Error: ' + err.message); 
+      } 
+  };
+  
   const handleDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
   
-  // NEW: UNDO DISPATCH
   const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
 
   const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
