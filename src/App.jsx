@@ -11,7 +11,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit3, Settings, Bold, AlignLeft, AlignCenter, AlignRight, Minus, Scale
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit, Settings, Bold, AlignLeft, AlignCenter, AlignRight, Minus
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -122,7 +122,7 @@ const Header = React.memo(({ user, isGuest, deviceName, onLogout, setTab, active
                 <>
                     <div className="flex items-center justify-end gap-1 group cursor-pointer" onClick={onEditDeviceName} title="Edit Device Name">
                         <div className="text-xs font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{deviceName}</div>
-                        <Edit3 size={10} className="text-gray-400 group-hover:text-blue-600"/>
+                        <Edit size={10} className="text-gray-400 group-hover:text-blue-600"/>
                     </div>
                     <div className="text-[10px] text-gray-500">{user?.email}</div>
                 </>
@@ -318,7 +318,7 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
           <div className="sticky top-0 bg-slate-50 z-10 pb-2 space-y-2">
               <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-3 text-gray-400" size={18}/><input className="w-full pl-10 p-2.5 bg-white border-gray-200 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Search (Cust 38 60...)" value={search} onChange={e => setSearch(e.target.value)} /></div><button onClick={onExport} className="bg-white border border-green-200 text-green-700 p-2.5 rounded-xl shadow-sm"><Download size={20} /></button></div>
               <div className="flex gap-2 overflow-x-auto no-scrollbar"><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.color} onChange={e => setFilters({...filters, color: e.target.value})}>{uniqueColors.map(c => <option key={c} value={c}>Color: {c}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[100px]" value={filters.quality} onChange={e => setFilters({...filters, quality: e.target.value})}>{uniqueQualities.map(q => <option key={q} value={q}>Qual: {q}</option>)}</select><select className="bg-white border p-2 rounded-lg text-xs font-bold text-gray-600 min-w-[80px]" value={filters.gsm} onChange={e => setFilters({...filters, gsm: e.target.value})}>{uniqueGSM.map(g => <option key={g} value={g}>GSM: {g}</option>)}</select></div>
-              <div className="bg-blue-600 text-white p-3 rounded-xl flex justify-between items-center shadow-sm shadow-blue-200"><div className="text-xs font-bold opacity-80 uppercase">Filtered Stock</div><div className="flex items-center gap-4"><div className="text-right"><div className="text-xs opacity-70">Count</div><div className="font-bold">{filtered.length}</div></div><div className="text-right"><div className="text-xs opacity-70">Total Kg</div><div className="font-bold text-lg"><Scale size={14} className="inline mb-1 mr-1"/>{totalWeight.toLocaleString()}</div></div></div></div>
+              <div className="bg-blue-600 text-white p-3 rounded-xl flex justify-between items-center shadow-sm shadow-blue-200"><div className="text-xs font-bold opacity-80 uppercase">Filtered Stock</div><div className="flex items-center gap-4"><div className="text-right"><div className="text-xs opacity-70">Count</div><div className="font-bold">{filtered.length}</div></div><div className="text-right"><div className="text-xs opacity-70">Total Kg</div><div className="font-bold text-lg">{totalWeight.toLocaleString()}</div></div></div></div>
           </div>
           <div className="flex-1 overflow-y-auto pb-20">{filtered.map(r => (<div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex justify-between items-center active:bg-blue-50 transition-colors cursor-pointer"><div><div className="flex flex-wrap items-center gap-2 mb-1"><span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{r.product_id}</span><span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide">{r.customer_name}</span></div><div className="text-gray-900 font-medium text-sm">{r.quality} • {r.color} • {r.width_inches}" • {r.gsm} GSM</div><div className="text-sm text-gray-500 mt-1">Wt: <strong>{r.net_weight}kg</strong> • Len: {r.length_meters}m</div></div><button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="p-3 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-lg"><Printer size={20}/></button></div>))}{filtered.length === 0 && <div className="text-center text-gray-400 py-10">No Stock Found</div>}</div>
       </div>
