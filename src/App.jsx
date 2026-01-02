@@ -8,12 +8,10 @@ import 'jspdf-autotable';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
-// --- FIXED IMPORTS: ALL ICONS RESTORED ---
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, 
-  Settings, Minus, RotateCcw, ZoomIn
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit, Settings, Bold, AlignLeft, AlignCenter, AlignRight, Minus
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -162,108 +160,134 @@ const DeviceNameModal = ({ onSave, initialName, onClose }) => {
 
 const BarcodeScanner = ({ onScan, onClose }) => {
     const scannerRef = useRef(null);
-    const [isMounted, setIsMounted] = useState(true);
-    const [zoom, setZoom] = useState(1);
-    const [capabilities, setCapabilities] = useState(null);
-
     useEffect(() => {
-        setIsMounted(true);
         const initTimer = setTimeout(() => {
-            if (!isMounted) return;
             const html5QrCode = new Html5Qrcode("reader");
             scannerRef.current = html5QrCode;
             const config = { fps: 15, qrbox: { width: 280, height: 180 }, aspectRatio: 1.0, formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128 ] };
-            html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => { if (isMounted) onScan(decodedText); }, () => {} ).then(() => {
-                const track = html5QrCode.getRunningTrackCameraCapabilities();
-                if(track && track.zoomFeature()) { setCapabilities(track); }
-            }).catch(err => console.log("Camera Error", err));
+            html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => onScan(decodedText), () => {}).catch(err => console.log("Camera Error", err));
         }, 300);
-        return () => {
-            setIsMounted(false);
-            clearTimeout(initTimer);
-            if (scannerRef.current) { try { scannerRef.current.stop().then(() => scannerRef.current.clear()).catch(e => console.log(e)); } catch (e) { console.log(e); } }
-        };
+        return () => { clearTimeout(initTimer); if (scannerRef.current) try { scannerRef.current.stop().then(() => scannerRef.current.clear()).catch(e => console.log(e)); } catch (e) { console.log(e); } };
     }, [onScan]);
-
-    const handleZoomChange = (e) => {
-        const newZoom = Number(e.target.value);
-        setZoom(newZoom);
-        if(scannerRef.current && capabilities) { scannerRef.current.applyVideoConstraints({ focusMode: "continuous", advanced: [{ zoom: newZoom }] }); }
-    };
 
     return (
         <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-sm bg-white rounded-xl overflow-hidden p-4">
                  <h3 className="text-center font-bold mb-2">Scan Roll Barcode</h3>
                  <div id="reader" className="w-full bg-black min-h-[300px]"></div>
-                 {capabilities && (<div className="mt-4 px-2"><div className="flex justify-between text-xs font-bold text-gray-500 mb-1"><span>1x</span> <span className="flex items-center gap-1"><ZoomIn size={12}/> Zoom</span> <span>Max</span></div><input type="range" min={capabilities.zoomFeature().min()} max={capabilities.zoomFeature().max()} step="0.1" value={zoom} onChange={handleZoomChange} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" /></div>)}
                  <button onClick={onClose} className="w-full mt-4 bg-red-100 text-red-600 py-3 rounded-lg font-bold">Close Scanner</button>
             </div>
         </div>
     );
 };
 
-// --- LABEL PRINT COMPONENT ---
+// --- OPTIMIZED 4x3 LABEL PRINT ---
 const LabelPrint = ({ data, onClose }) => {
-  const savedDesign = safeJSONParse('ksf_label_design_v6', {});
-  const savedLabels = safeJSONParse('ksf_label_labels_v6', {});
+  const savedDesign = safeJSONParse('ksf_label_design_v8', {});
+  const savedLabels = safeJSONParse('ksf_label_labels_v8', {});
   const [showLogo, setShowLogo] = useState(savedDesign.showLogo ?? true);
-  const [labelSize, setLabelSize] = useState(savedDesign.labelSize || '4in-3in');
-  const [baseFontSize, setBaseFontSize] = useState(savedDesign.baseFontSize || 14); 
-  const [logoSize, setLogoSize] = useState(savedDesign.logoSize || 50);
-  const [barcodeScale, setBarcodeScale] = useState(savedDesign.barcodeScale || 50);
+  const [baseFontSize, setBaseFontSize] = useState(savedDesign.baseFontSize || 11); 
+  const [logoSize, setLogoSize] = useState(savedDesign.logoSize || 45);
+  const [barcodeScale, setBarcodeScale] = useState(savedDesign.barcodeScale || 40);
+
+  // Content state allows user to edit labels on the fly
   const [content, setContent] = useState({
-      qualityLabel: savedLabels.qualityLabel || 'Quality:', qualityVal: data.quality,
-      gsmLabel: savedLabels.gsmLabel || 'GSM:', gsmVal: data.gsm,
-      colorLabel: savedLabels.colorLabel || 'Color:', colorVal: data.color,
-      widthLabel: savedLabels.widthLabel || 'Width:', widthVal: `${data.width_inches}"`,
-      lengthLabel: savedLabels.lengthLabel || 'Length:', lengthVal: `${data.length_meters}m`,
-      netLabel: savedLabels.netLabel || 'Net Wt:', netVal: `${data.net_weight}kg`,
-      grossLabel: savedLabels.grossLabel || 'Gross Wt:', grossVal: `${data.gross_weight}kg`
+      qualityLabel: 'Quality:', qualityVal: data.quality,
+      gsmLabel: 'GSM:', gsmVal: data.gsm,
+      colorLabel: 'Color:', colorVal: data.color,
+      widthLabel: 'Width:', widthVal: `${data.width_inches}"`,
+      lengthLabel: 'Length:', lengthVal: `${data.length_meters}m`,
+      netLabel: 'Net Wt:', netVal: `${data.net_weight}kg`,
+      grossLabel: 'Gross Wt:', grossVal: `${data.gross_weight}kg`
   });
+
   const canvasRef = useRef(null);
+
   useEffect(() => {
-      const designSettings = { showLogo, labelSize, baseFontSize, logoSize, barcodeScale };
-      const labelSettings = { ...content };
-      localStorage.setItem('ksf_label_design_v6', JSON.stringify(designSettings));
-      localStorage.setItem('ksf_label_labels_v6', JSON.stringify(labelSettings));
-  }, [showLogo, labelSize, baseFontSize, logoSize, barcodeScale, content]);
+      localStorage.setItem('ksf_label_design_v8', JSON.stringify({ showLogo, baseFontSize, logoSize, barcodeScale }));
+      localStorage.setItem('ksf_label_labels_v8', JSON.stringify(content));
+  }, [showLogo, baseFontSize, logoSize, barcodeScale, content]);
+
   useEffect(() => {
       if (data && canvasRef.current) {
-          try { JsBarcode(canvasRef.current, data.product_id, { format: "CODE128", width: 2.5, height: barcodeScale, displayValue: false, margin: 0 }); } catch (e) { console.error(e); }
+          try { JsBarcode(canvasRef.current, data.product_id, { format: "CODE128", width: 2, height: barcodeScale, displayValue: false, margin: 0 }); } catch (e) { console.error(e); }
       }
   }, [data, barcodeScale]);
+
   const handlePrint = () => window.print();
   const handleChange = (field, val) => setContent(prev => ({...prev, [field]: val}));
+
   if (!data) return null;
-  const [width, height] = labelSize.split('-');
-  const fontStyle = { fontFamily: "'Courier New', Courier, monospace" };
-  const labelInputStyle = { ...fontStyle, background: 'transparent', border: 'none', width: 'auto', outline: 'none', padding: 0, margin: 0, color: '#000', fontSize: `${baseFontSize}px`, fontWeight: '900', textAlign: 'left', minWidth: '60px' };
-  const valueInputStyle = { ...fontStyle, background: 'transparent', border: 'none', width: '100%', outline: 'none', padding: 0, margin: 0, color: '#000', fontSize: `${baseFontSize}px`, fontWeight: '500', textAlign: 'left' };
-  const printStyle = { width: width, height: height, backgroundColor: 'white', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', padding: '10px', border: '6px solid black', boxSizing: 'border-box', ...fontStyle };
-  const rowStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '4px' };
-  const colStyle = { display: 'flex', gap: '4px', flex: 1 };
+
+  // --- STYLES FOR 4x3 LAYOUT ---
+  const fontStyle = { fontFamily: "'Courier New', Courier, monospace", lineHeight: '1.1' };
+  
+  // Compact Input Style
+  const inputStyle = { 
+      ...fontStyle, background: 'transparent', border: 'none', outline: 'none', 
+      padding: 0, margin: 0, color: '#000', fontSize: `${baseFontSize}px` 
+  };
+  const labelStyle = { ...inputStyle, fontWeight: '900', width: 'auto', marginRight: '4px' };
+  const valueStyle = { ...inputStyle, fontWeight: '600', flex: 1, minWidth: 0 };
+
+  // Main Container locked to 4in x 3in
+  const printContainerStyle = { 
+      width: '4in', height: '3in', backgroundColor: 'white', overflow: 'hidden', 
+      display: 'flex', flexDirection: 'column', padding: '0.1in', 
+      border: '3px solid black', boxSizing: 'border-box' 
+  };
+
+  const rowStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '2px', alignItems: 'baseline' };
+  const colStyle = { display: 'flex', width: '48%', alignItems: 'baseline', whiteSpace: 'nowrap' }; // 2 columns
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 overflow-y-auto">
-      <style>{`@media print { body * { visibility: hidden; } #print-wrapper, #print-wrapper * { visibility: visible; } #print-wrapper { position: absolute; top: 0; left: 0; margin: 0; border: none !important; } #print-controls { display: none !important; } }`}</style>
+      {/* PRINT MEDIA QUERY */}
+      <style>{`@media print { @page { size: 4in 3in; margin: 0; } body * { visibility: hidden; } #print-wrapper, #print-wrapper * { visibility: visible; } #print-wrapper { position: absolute; top: 0; left: 0; margin: 0; border: none !important; padding: 0 !important; width: 4in !important; height: 3in !important; } #print-controls { display: none !important; } }`}</style>
+      
       <div className="bg-white p-4 rounded-xl max-w-lg w-full flex flex-col items-center animate-in fade-in zoom-in-95 my-auto">
+        {/* CONTROLS */}
         <div id="print-controls" className="w-full mb-4 space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
-             <div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-500 uppercase"><Settings size={14} className="inline mr-1"/>Settings</span><select className="border rounded p-1 text-xs font-bold" value={labelSize} onChange={(e) => setLabelSize(e.target.value)}><option value="4in-3in">4" x 3"</option><option value="4in-4in">4" x 4"</option><option value="4in-2in">4" x 2"</option></select></div>
-             <div className="flex items-center justify-between border-t border-slate-200 pt-2"><span className="text-xs font-bold text-slate-500">Font Size</span><div className="flex gap-1 bg-white p-1 rounded border"><button onClick={() => setBaseFontSize(f => Math.max(10, f-1))} className="p-1 hover:bg-slate-100 rounded font-bold"><Minus size={14}/></button><span className="text-xs font-bold w-6 text-center pt-0.5">{baseFontSize}</span><button onClick={() => setBaseFontSize(f => Math.min(30, f+1))} className="p-1 hover:bg-slate-100 rounded font-bold"><Plus size={14}/></button></div></div>
-            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-slate-200"><div><label className="text-[10px] font-bold text-slate-400 block mb-1">Logo Size</label><input type="range" min="30" max="100" value={logoSize} onChange={e => setLogoSize(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div><div><label className="text-[10px] font-bold text-slate-400 block mb-1">Barcode</label><input type="range" min="30" max="120" value={barcodeScale} onChange={e => setBarcodeScale(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div></div>
+             <div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-500 uppercase"><Settings size={14} className="inline mr-1"/>Settings</span><div className="text-xs font-bold bg-slate-200 px-2 py-1 rounded">4" x 3" Label</div></div>
+             <div className="flex items-center justify-between border-t border-slate-200 pt-2"><span className="text-xs font-bold text-slate-500">Font Size</span><div className="flex gap-1 bg-white p-1 rounded border"><button onClick={() => setBaseFontSize(f => Math.max(8, f-1))} className="p-1 hover:bg-slate-100 rounded"><Minus size={14}/></button><span className="text-xs font-bold w-6 text-center pt-0.5">{baseFontSize}</span><button onClick={() => setBaseFontSize(f => Math.min(24, f+1))} className="p-1 hover:bg-slate-100 rounded"><Plus size={14}/></button></div></div>
+            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-slate-200"><div><label className="text-[10px] font-bold text-slate-400 block mb-1">Logo</label><input type="range" min="20" max="80" value={logoSize} onChange={e => setLogoSize(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div><div><label className="text-[10px] font-bold text-slate-400 block mb-1">Barcode</label><input type="range" min="20" max="80" value={barcodeScale} onChange={e => setBarcodeScale(Number(e.target.value))} className="w-full h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"/></div></div>
              <div className="flex items-center justify-between border-t border-slate-200 pt-2"><span className="text-xs font-bold text-slate-500">Show Logo</span><button onClick={() => setShowLogo(!showLogo)} className={`w-8 h-4 rounded-full transition-colors ${showLogo ? 'bg-green-500' : 'bg-slate-300'}`}></button></div>
         </div>
-        <div id="print-wrapper" className="flex items-center justify-center bg-gray-200 p-6 rounded-lg border border-dashed border-gray-400 overflow-auto max-h-[70vh] w-full">
-            <div id="print-area" style={printStyle}>
-                <div className="w-full flex justify-center pb-2">{showLogo && <img src="/logo.png" style={{ height: `${logoSize}px`, objectFit: 'contain' }} alt="Logo" />}{!showLogo && <div style={{height: '10px'}}></div>}</div>
-                <div style={{ width: '100%', borderTop: '3px solid black', marginBottom: '8px' }}></div>
-                <div style={rowStyle}><div style={colStyle}><input style={labelInputStyle} value={content.qualityLabel} onChange={e => handleChange('qualityLabel', e.target.value)} /><input style={valueInputStyle} value={content.qualityVal} onChange={e => handleChange('qualityVal', e.target.value)} /></div><div style={{...colStyle, justifyContent: 'flex-start', flex: 0.6}}><input style={{...labelInputStyle, minWidth: '40px'}} value={content.gsmLabel} onChange={e => handleChange('gsmLabel', e.target.value)} /><input style={valueInputStyle} value={content.gsmVal} onChange={e => handleChange('gsmVal', e.target.value)} /></div></div>
-                <div style={rowStyle}><div style={colStyle}><input style={labelInputStyle} value={content.colorLabel} onChange={e => handleChange('colorLabel', e.target.value)} /><input style={valueInputStyle} value={content.colorVal} onChange={e => handleChange('colorVal', e.target.value)} /></div><div style={{...colStyle, justifyContent: 'flex-start', flex: 0.6}}><input style={{...labelInputStyle, minWidth: '60px'}} value={content.widthLabel} onChange={e => handleChange('widthLabel', e.target.value)} /><input style={valueInputStyle} value={content.widthVal} onChange={e => handleChange('widthVal', e.target.value)} /></div></div>
-                <div style={rowStyle}><div style={colStyle}><input style={labelInputStyle} value={content.lengthLabel} onChange={e => handleChange('lengthLabel', e.target.value)} /><input style={valueInputStyle} value={content.lengthVal} onChange={e => handleChange('lengthVal', e.target.value)} /></div><div style={{...colStyle, justifyContent: 'flex-start', flex: 0.6}}><input style={{...labelInputStyle, minWidth: '70px'}} value={content.netLabel} onChange={e => handleChange('netLabel', e.target.value)} /><input style={valueInputStyle} value={content.netVal} onChange={e => handleChange('netVal', e.target.value)} /></div></div>
-                <div style={{ marginTop: '4px', marginBottom: '8px', display: 'flex', gap: '4px' }}><input style={{...labelInputStyle, width: 'auto'}} value={content.grossLabel} onChange={e => handleChange('grossLabel', e.target.value)} /><input style={valueInputStyle} value={content.grossVal} onChange={e => handleChange('grossVal', e.target.value)} /></div>
-                <div className="w-full flex flex-col items-center justify-end mt-auto pt-2"><canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas><div style={{ fontWeight: 'bold', fontSize: `${baseFontSize * 1.3}px`, marginTop: '2px', ...fontStyle }}>{data.product_id}</div></div>
+
+        {/* PREVIEW AREA */}
+        <div id="print-wrapper" className="flex items-center justify-center bg-gray-200 p-4 rounded-lg border border-dashed border-gray-400 overflow-auto w-full">
+            <div id="print-area" style={printContainerStyle}>
+                {/* Header */}
+                <div className="w-full flex justify-center pb-1" style={{minHeight: showLogo ? 'auto' : '10px'}}>
+                    {showLogo && <img src="/logo.png" style={{ height: `${logoSize}px`, objectFit: 'contain' }} alt="Logo" />}
+                </div>
+                <div style={{ width: '100%', borderTop: '2px solid black', marginBottom: '4px' }}></div>
+                
+                {/* Content Grid */}
+                <div style={rowStyle}>
+                    <div style={colStyle}><input style={labelStyle} value={content.qualityLabel} onChange={e=>handleChange('qualityLabel',e.target.value)}/><input style={valueStyle} value={content.qualityVal} onChange={e=>handleChange('qualityVal',e.target.value)}/></div>
+                    <div style={colStyle}><input style={labelStyle} value={content.gsmLabel} onChange={e=>handleChange('gsmLabel',e.target.value)}/><input style={valueStyle} value={content.gsmVal} onChange={e=>handleChange('gsmVal',e.target.value)}/></div>
+                </div>
+                <div style={rowStyle}>
+                    <div style={colStyle}><input style={labelStyle} value={content.colorLabel} onChange={e=>handleChange('colorLabel',e.target.value)}/><input style={valueStyle} value={content.colorVal} onChange={e=>handleChange('colorVal',e.target.value)}/></div>
+                    <div style={colStyle}><input style={labelStyle} value={content.widthLabel} onChange={e=>handleChange('widthLabel',e.target.value)}/><input style={valueStyle} value={content.widthVal} onChange={e=>handleChange('widthVal',e.target.value)}/></div>
+                </div>
+                <div style={rowStyle}>
+                    <div style={colStyle}><input style={labelStyle} value={content.lengthLabel} onChange={e=>handleChange('lengthLabel',e.target.value)}/><input style={valueStyle} value={content.lengthVal} onChange={e=>handleChange('lengthVal',e.target.value)}/></div>
+                    <div style={colStyle}><input style={labelStyle} value={content.netLabel} onChange={e=>handleChange('netLabel',e.target.value)}/><input style={valueStyle} value={content.netVal} onChange={e=>handleChange('netVal',e.target.value)}/></div>
+                </div>
+                <div style={{...rowStyle, justifyContent: 'flex-start', marginTop: '2px'}}>
+                    <input style={{...labelStyle, width: 'auto'}} value={content.grossLabel} onChange={e=>handleChange('grossLabel',e.target.value)}/><input style={valueStyle} value={content.grossVal} onChange={e=>handleChange('grossVal',e.target.value)}/>
+                </div>
+
+                {/* Footer Barcode */}
+                <div className="w-full flex flex-col items-center justify-end mt-auto pt-1">
+                    <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }}></canvas>
+                    <div style={{ fontWeight: 'bold', fontSize: `${baseFontSize * 1.2}px`, marginTop: '1px', ...fontStyle }}>{data.product_id}</div>
+                </div>
             </div>
         </div>
+
         <div id="print-controls" className="flex gap-3 w-full mt-4"><button onClick={handlePrint} className="flex-1 bg-blue-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"><Printer size={20} /> Print Label</button><button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close</button></div>
       </div>
     </div>
@@ -478,7 +502,6 @@ export default function App() {
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading ? ( <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div> ) : (
             <>
-                {/* PASSING DEFAULT EMPTY ARRAYS TO PREVENT CRASHES */}
                 {activeTab === 'dashboard' && <Dashboard rolls={rolls || []} materials={materials || []} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
