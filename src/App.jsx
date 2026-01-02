@@ -4,7 +4,7 @@ import JsBarcode from 'jsbarcode';
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable'; // FIX: Changed import style
 // Recharts import
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
@@ -99,31 +99,56 @@ const DataService = {
   }
 };
 
-// --- HELPER: GENERATE PDF ---
+// --- HELPER: GENERATE PDF (FIXED) ---
 const generateChallan = (rolls, details) => {
     try {
         const doc = new jsPDF();
+        
+        // Header
         doc.setFontSize(22);
         doc.text("KSF NON WOVEN", 105, 20, null, null, "center");
+        
         doc.setFontSize(10);
         doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 40);
         doc.text(`Time: ${new Date().toLocaleTimeString()}`, 14, 46);
         doc.text(`Buyer: ${details.buyer}`, 14, 56);
         doc.text(`Vehicle: ${details.vehicle}`, 14, 62);
         
-        const tableData = rolls.map((r, i) => [i + 1, r.product_id, r.quality, r.color, r.width_inches, r.gsm, r.net_weight]);
-        doc.autoTable({ startY: 75, head: [['#', 'ID', 'Qual', 'Col', 'Size', 'GSM', 'Kg']], body: tableData });
+        // Table Data
+        const tableData = rolls.map((r, i) => [
+            i + 1, 
+            r.product_id, 
+            r.quality, 
+            r.color, 
+            r.width_inches, 
+            r.gsm, 
+            r.net_weight
+        ]);
+
+        // FIX: Using autoTable(doc, options) instead of doc.autoTable
+        autoTable(doc, {
+            startY: 75,
+            head: [['#', 'ID', 'Qual', 'Col', 'Size', 'GSM', 'Kg']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185] }, // Blue header
+        });
         
+        // Footer (Total Weight)
         const totalWt = rolls.reduce((sum, r) => sum + Number(r.net_weight || 0), 0);
-        doc.setFontSize(14);
-        doc.text(`Total Weight: ${totalWt} kg`, 14, doc.lastAutoTable.finalY + 15);
+        // lastAutoTable.finalY helps position text right after the table
+        const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 150; 
         
-        doc.setFontSize(8);
-        doc.text("Authorized Signatory", 150, doc.lastAutoTable.finalY + 40);
+        doc.setFontSize(14);
+        doc.text(`Total Weight: ${formatCurrency(totalWt)} kg`, 14, finalY + 15);
+        
+        doc.setFontSize(10);
+        doc.text("Authorized Signatory", 150, finalY + 40);
         
         doc.save(`GatePass_${new Date().getTime()}.pdf`);
         return true;
     } catch (err) {
+        console.error(err);
         alert("PDF Error: " + err.message);
         return false;
     }
@@ -189,7 +214,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT WITH TOGGLE ---
+// --- LABEL PRINT (WITH TOGGLE) ---
 const LabelPrint = ({ data, onClose }) => {
   const canvasRef = useRef(null);
   const [showBrand, setShowBrand] = useState(true);
@@ -544,7 +569,17 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }
     const handleSearch = (idToSearch) => {
         const query = idToSearch || scanId;
         const roll = (rolls || []).find(r => r.product_id === query && r.status === 'in_stock');
-        if (roll) { setFoundRoll(roll); } else { alert('Roll not found or already dispatched.'); }
+        if (roll) { 
+             // FIX: Prevent Duplicate Add
+            if(sessionList.some(r => r.id === roll.id)) {
+                alert("This roll is already in the dispatch list!");
+                setScanId('');
+                return;
+            }
+            setFoundRoll(roll); 
+        } else { 
+            alert('Roll not found or already dispatched.'); 
+        }
         setScanId('');
     };
 
