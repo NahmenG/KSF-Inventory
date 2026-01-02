@@ -136,13 +136,15 @@ const generateChallan = (rolls, details) => {
 
 // --- COMPONENTS ---
 
-// 1. SIMPLIFIED TOP HEADER (Logo + Profile Only)
+// 1. UPDATED HEADER (LOGO ONLY)
 const Header = ({ isGuest, deviceName, onLogout, onEditDeviceName }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center">
-      <div className="font-bold text-xl flex items-center gap-3">
-         <img src="/logo.png" alt="KSF" className="h-8 w-auto object-contain" />
-         <span className="text-gray-900 tracking-tight text-lg">KSF Inventory</span>
+      {/* LEFT: LOGO ONLY */}
+      <div className="flex items-center pl-1">
+         <img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" />
       </div>
+      
+      {/* RIGHT: PROFILE */}
       <div className="flex items-center gap-3 text-sm">
         {!isGuest && <div onClick={onEditDeviceName} className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm">{deviceName || 'Device'} ✎</div>}
         <button onClick={onLogout} className="text-red-600 font-bold hover:bg-red-50 px-2 py-1 rounded">
@@ -152,11 +154,11 @@ const Header = ({ isGuest, deviceName, onLogout, onEditDeviceName }) => (
   </header>
 );
 
-// 2. NEW BOTTOM NAVIGATION BAR
+// 2. BOTTOM NAV
 const BottomNav = ({ activeTab, setTab, isGuest }) => {
     const tabs = [
         { id: 'dashboard', label: 'Home', icon: Activity },
-        !isGuest && { id: 'entry', label: 'Add', icon: Plus }, // Use Plus icon for better context
+        !isGuest && { id: 'entry', label: 'Add', icon: Plus }, 
         { id: 'stock', label: 'Stock', icon: Database },
         { id: 'dispatch', label: 'Disp', icon: Truck },
         { id: 'history', label: 'Hist', icon: Clock },
@@ -264,7 +266,7 @@ const LabelPrint = ({ data, onClose }) => {
   );
 };
 
-// --- ENHANCED DASHBOARD VIEW ---
+// --- ENHANCED DASHBOARD VIEW (NOW WITH RECENT ACTIVITY) ---
 const DashboardView = ({ rolls, materials }) => {
     // 1. Core Metrics
     const inStock = rolls.filter(r => r.status === 'in_stock');
@@ -345,7 +347,28 @@ const DashboardView = ({ rolls, materials }) => {
                 </div>
             )}
 
-            {/* 4. CHARTS */}
+            {/* 4. RECENT ACTIVITY LIST (NEW) */}
+            <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
+                <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18}/> Recent Activity</h3>
+                {rolls.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (
+                    <div className="space-y-3">
+                        {rolls.slice(0, 5).map(r => (
+                            <div key={r.id} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0">
+                                <div>
+                                    <div className="font-bold text-sm text-gray-800">{r.product_id}</div>
+                                    <div className="text-xs text-gray-500">{r.quality} • {r.color}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="font-bold text-sm">{r.net_weight} kg</div>
+                                    <div className="text-[10px] text-gray-400">{new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* 5. CHARTS */}
             <div className="bg-white p-4 rounded-xl shadow border">
                 <h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3>
                 <div className="h-64">
@@ -384,8 +407,6 @@ const DashboardView = ({ rolls, materials }) => {
         </div>
     );
 };
-
-// ... (Rest of the components: NewProductView, EditModal, StockView, DispatchView, HistoryView, MaterialsView remain mostly same, just ensuring padding for bottom tab)
 
 const NewProductView = ({ formData, setFormData, onSubmit }) => (
     <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24">
