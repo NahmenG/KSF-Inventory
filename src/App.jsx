@@ -201,10 +201,10 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- LABEL PRINT COMPONENT ---
+// --- LABEL PRINT COMPONENT (V4 KEY) ---
 const LabelPrint = ({ data, onClose }) => {
-  const savedDesign = safeJSONParse('ksf_label_design_v3', {});
-  const savedLabels = safeJSONParse('ksf_label_labels_v3', {});
+  const savedDesign = safeJSONParse('ksf_label_design_v4', {});
+  const savedLabels = safeJSONParse('ksf_label_labels_v4', {});
   const [showLogo, setShowLogo] = useState(savedDesign.showLogo ?? true);
   const [labelSize, setLabelSize] = useState(savedDesign.labelSize || '4in-3in');
   const [baseFontSize, setBaseFontSize] = useState(savedDesign.baseFontSize || 14); 
@@ -223,8 +223,8 @@ const LabelPrint = ({ data, onClose }) => {
   useEffect(() => {
       const designSettings = { showLogo, labelSize, baseFontSize, logoSize, barcodeScale };
       const labelSettings = { ...content };
-      localStorage.setItem('ksf_label_design_v3', JSON.stringify(designSettings));
-      localStorage.setItem('ksf_label_labels_v3', JSON.stringify(labelSettings));
+      localStorage.setItem('ksf_label_design_v4', JSON.stringify(designSettings));
+      localStorage.setItem('ksf_label_labels_v4', JSON.stringify(labelSettings));
   }, [showLogo, labelSize, baseFontSize, logoSize, barcodeScale, content]);
   useEffect(() => {
       if (data && canvasRef.current) {
@@ -339,20 +339,25 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
     const [foundRoll, setFoundRoll] = useState(null);
     const [editedRoll, setEditedRoll] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
-    const [sessionList, setSessionList] = useState(() => safeJSONParse('ksf_dispatch_list', []));
+    
+    // SAFE PARSE for List
+    const [sessionList, setSessionList] = useState(() => safeJSONParse('ksf_dispatch_list_v4', []));
     const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer') || '');
     const [vehicleNo, setVehicleNo] = useState(() => localStorage.getItem('ksf_dispatch_vehicle') || '');
+
     useEffect(() => {
-        localStorage.setItem('ksf_dispatch_list', JSON.stringify(sessionList));
+        localStorage.setItem('ksf_dispatch_list_v4', JSON.stringify(sessionList));
         localStorage.setItem('ksf_dispatch_customer', customerName);
         localStorage.setItem('ksf_dispatch_vehicle', vehicleNo);
     }, [sessionList, customerName, vehicleNo]);
+
     const handleSearch = useCallback((idOverride) => {
         const query = idOverride || scanId;
         const roll = (rolls || []).find(r => r.product_id === query && r.status === 'in_stock');
         if (roll) { setFoundRoll(roll); setEditedRoll({ ...roll }); setScanId(query); setShowScanner(false); } 
         else { alert('Roll not found or already dispatched.'); }
     }, [rolls, scanId]);
+
     const handleConfirmDispatch = async () => {
         if (editedRoll.net_weight !== foundRoll.net_weight || editedRoll.customer_name !== foundRoll.customer_name) { await onUpdateRoll(editedRoll); }
         onDispatch(editedRoll.id);
@@ -362,6 +367,7 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
         setEditedRoll(null);
         setScanId('');
     };
+
     const handleRemoveFromList = async (itemToRemove) => {
         if(!window.confirm(`Remove ${itemToRemove.product_id} from this list? It will be marked as 'In Stock' again.`)) return;
         try {
@@ -372,24 +378,71 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
             alert("Error removing item: " + e.message);
         }
     };
+
     const handlePrintChallan = () => {
         if(!customerName) return alert("Please enter a Customer Name for the List!");
         if(!vehicleNo) return alert("Please enter Vehicle Number!");
         if(sessionList.length === 0) return alert("List is empty!");
         if(generateChallan(sessionList, { buyer: customerName, vehicle: vehicleNo, device: deviceName })) {
              if(window.confirm("Gate Pass Generated. Start a new batch? (This clears the current list)")) { 
-                setSessionList([]); setCustomerName(''); setVehicleNo(''); 
+                setSessionList([]); 
+                setCustomerName(''); 
+                setVehicleNo(''); 
             }
         }
     };
+
     const totalWeight = sessionList.reduce((acc, r) => acc + parseFloat(r.net_weight || 0), 0);
+
     return (
         <div className="max-w-xl mx-auto space-y-4 pb-20">
             {showScanner && <BarcodeScanner onScan={(text) => { if(text) handleSearch(text); else setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
-            <div className="bg-blue-600 p-4 rounded-xl text-white shadow-lg shadow-blue-200"><h3 className="font-bold text-sm opacity-80 uppercase mb-2 flex items-center gap-2"><FileText size={16}/> Dispatch Manifest</h3><input className="w-full bg-blue-700/50 border border-blue-500 rounded p-2 text-white placeholder-blue-300 font-bold mb-2 outline-none focus:bg-blue-700" placeholder="Customer Name (e.g. Supreme Pack)" value={customerName} onChange={e => setCustomerName(e.target.value)} /><input className="w-full bg-blue-700/50 border border-blue-500 rounded p-2 text-white placeholder-blue-300 text-sm outline-none focus:bg-blue-700" placeholder="Vehicle No (e.g. UP 27 AA 0000)" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} /><div className="flex justify-between items-end mt-3 border-t border-blue-500 pt-2"><div><div className="text-xs opacity-70">Date</div><div className="font-bold text-sm">{new Date().toLocaleDateString()}</div></div><div className="text-right"><div className="text-xs opacity-70">Total List Weight</div><div className="font-black text-2xl">{totalWeight.toLocaleString()} <span className="text-sm font-normal">kg</span></div></div></div></div>
-            {!foundRoll && (<div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center"><div className="mb-4"><h2 className="text-lg font-bold mb-2 text-gray-800">Add to List</h2><input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Scan Barcode" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/></div><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button><button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button></div></div>)}
-            {foundRoll && editedRoll && (<div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4"><h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Confirm Item</h3><div className="bg-white/70 p-4 rounded-lg grid grid-cols-2 gap-3 text-sm mb-4 border border-green-100"><div className="col-span-2 text-center border-b pb-2 mb-1"><span className="text-gray-500 text-xs">ID:</span> <span className="font-mono font-bold text-lg">{foundRoll.product_id}</span></div><div><label className="text-xs text-gray-500 font-bold uppercase">Customer</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.customer_name || ''} onChange={e => setEditedRoll({...editedRoll, customer_name: e.target.value})} /></div><div><label className="text-xs text-gray-500 font-bold uppercase">Weight (Kg)</label><input type="number" className="w-full border p-2 rounded bg-white font-bold text-green-800" value={editedRoll.net_weight} onChange={e => setEditedRoll({...editedRoll, net_weight: e.target.value})} /></div><div><label className="text-xs text-gray-500 font-bold uppercase">Quality</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.quality} onChange={e => setEditedRoll({...editedRoll, quality: e.target.value})} /></div><div><label className="text-xs text-gray-500 font-bold uppercase">Color</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.color} onChange={e => setEditedRoll({...editedRoll, color: e.target.value})} /></div></div>{isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (<div className="flex gap-2"><button onClick={() => { setFoundRoll(null); setScanId(''); }} className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">Cancel</button><button onClick={handleConfirmDispatch} className="flex-[2] bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Plus size={20}/> Add to List</button></div>)}</div>)}
-            {sessionList.length > 0 && (<div className="space-y-2"><div className="flex justify-between items-center px-2"><h4 className="font-bold text-gray-500 text-xs uppercase">Items in this Batch ({sessionList.length})</h4></div>{sessionList.map((item, idx) => (<div key={idx} className="bg-white p-3 rounded-lg border border-gray-100 flex justify-between items-center shadow-sm"><div><div className="font-mono font-bold text-sm text-blue-600">{item.product_id}</div><div className="text-xs text-gray-500">{item.quality} • {item.width_inches}" • {item.color}</div></div><div className="flex items-center gap-3"><div className="text-right"><div className="font-bold text-gray-900">{item.net_weight} kg</div></div><button onClick={() => handleRemoveFromList(item)} className="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"><Trash2 size={16}/></button></div></div>))}<button onClick={handlePrintChallan} className="w-full mt-4 bg-gray-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl"><Printer size={20}/> Generate Gate Pass PDF</button></div>)}
+            
+            <div className="bg-blue-600 p-4 rounded-xl text-white shadow-lg shadow-blue-200">
+                <h3 className="font-bold text-sm opacity-80 uppercase mb-2 flex items-center gap-2"><FileText size={16}/> Dispatch Manifest</h3>
+                <input className="w-full bg-blue-700/50 border border-blue-500 rounded p-2 text-white placeholder-blue-300 font-bold mb-2 outline-none focus:bg-blue-700" placeholder="Customer Name (e.g. Supreme Pack)" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+                <input className="w-full bg-blue-700/50 border border-blue-500 rounded p-2 text-white placeholder-blue-300 text-sm outline-none focus:bg-blue-700" placeholder="Vehicle No (e.g. UP 27 AA 0000)" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
+                <div className="flex justify-between items-end mt-3 border-t border-blue-500 pt-2">
+                    <div><div className="text-xs opacity-70">Date</div><div className="font-bold text-sm">{new Date().toLocaleDateString()}</div></div>
+                    <div className="text-right"><div className="text-xs opacity-70">Total List Weight</div><div className="font-black text-2xl">{totalWeight.toLocaleString()} <span className="text-sm font-normal">kg</span></div></div>
+                </div>
+            </div>
+
+            {!foundRoll && (
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <div className="mb-4"><h2 className="text-lg font-bold mb-2 text-gray-800">Add to List</h2><input className="w-full bg-gray-50 border-2 border-gray-200 p-4 text-center text-xl font-mono tracking-widest rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Scan Barcode" value={scanId} onChange={(e) => setScanId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/></div>
+                    <div className="grid grid-cols-2 gap-3"><button onClick={() => setShowScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Camera size={20}/> Camera</button><button onClick={() => handleSearch()} className="bg-gray-900 text-white py-3 rounded-xl font-bold">Search</button></div>
+                </div>
+            )}
+
+            {foundRoll && editedRoll && (
+                <div className="bg-green-50 border border-green-200 p-5 rounded-xl animate-in fade-in slide-in-from-bottom-4">
+                    <h3 className="font-bold text-green-900 mb-4 flex items-center gap-2"><Package size={20}/> Confirm Item</h3>
+                    <div className="bg-white/70 p-4 rounded-lg grid grid-cols-2 gap-3 text-sm mb-4 border border-green-100">
+                        <div className="col-span-2 text-center border-b pb-2 mb-1"><span className="text-gray-500 text-xs">ID:</span> <span className="font-mono font-bold text-lg">{foundRoll.product_id}</span></div>
+                        <div><label className="text-xs text-gray-500 font-bold uppercase">Customer</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.customer_name || ''} onChange={e => setEditedRoll({...editedRoll, customer_name: e.target.value})} /></div>
+                        <div><label className="text-xs text-gray-500 font-bold uppercase">Weight (Kg)</label><input type="number" className="w-full border p-2 rounded bg-white font-bold text-green-800" value={editedRoll.net_weight} onChange={e => setEditedRoll({...editedRoll, net_weight: e.target.value})} /></div>
+                        <div><label className="text-xs text-gray-500 font-bold uppercase">Quality</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.quality} onChange={e => setEditedRoll({...editedRoll, quality: e.target.value})} /></div>
+                         <div><label className="text-xs text-gray-500 font-bold uppercase">Color</label><input className="w-full border p-2 rounded bg-white" value={editedRoll.color} onChange={e => setEditedRoll({...editedRoll, color: e.target.value})} /></div>
+                    </div>
+                    {isGuest ? (<div className="bg-orange-100 text-orange-700 p-3 rounded-lg font-bold text-center">Login to Dispatch</div>) : (
+                        <div className="flex gap-2"><button onClick={() => { setFoundRoll(null); setScanId(''); }} className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">Cancel</button><button onClick={handleConfirmDispatch} className="flex-[2] bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Plus size={20}/> Add to List</button></div>
+                    )}
+                </div>
+            )}
+
+            {sessionList.length > 0 && (
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center px-2"><h4 className="font-bold text-gray-500 text-xs uppercase">Items in this Batch ({sessionList.length})</h4></div>
+                    {sessionList.map((item, idx) => (
+                        <div key={idx} className="bg-white p-3 rounded-lg border border-gray-100 flex justify-between items-center shadow-sm">
+                            <div><div className="font-mono font-bold text-sm text-blue-600">{item.product_id}</div><div className="text-xs text-gray-500">{item.quality} • {item.width_inches}" • {item.color}</div></div>
+                            <div className="flex items-center gap-3"><div className="text-right"><div className="font-bold text-gray-900">{item.net_weight} kg</div></div><button onClick={() => handleRemoveFromList(item)} className="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"><Trash2 size={16}/></button></div>
+                        </div>
+                    ))}
+                    <button onClick={handlePrintChallan} className="w-full mt-4 bg-gray-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl"><Printer size={20}/> Generate Gate Pass PDF</button>
+                </div>
+            )}
         </div>
     );
 };
