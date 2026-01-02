@@ -10,8 +10,9 @@ import {
 } from 'recharts';
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
-  Download, Plus, Database, AlertCircle, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, Filter, RotateCcw, CheckCircle, ZoomIn, Edit, Settings, Bold, AlignLeft, AlignCenter, AlignRight, Minus
+  Download, Database, Calendar, Clock, 
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, 
+  Settings, Minus, Plus, RotateCcw, ZoomIn
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -181,32 +182,52 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- OPTIMIZED 4x3 LABEL PRINT ---
+// --- LABEL PRINT COMPONENT (FIXED DATA LOADING) ---
 const LabelPrint = ({ data, onClose }) => {
-  const savedDesign = safeJSONParse('ksf_label_design_v8', {});
-  const savedLabels = safeJSONParse('ksf_label_labels_v8', {});
+  const savedDesign = safeJSONParse('ksf_label_design_v9', {});
+  const savedLabels = safeJSONParse('ksf_label_labels_v9', {});
+  
   const [showLogo, setShowLogo] = useState(savedDesign.showLogo ?? true);
+  const [labelSize, setLabelSize] = useState(savedDesign.labelSize || '4in-3in');
   const [baseFontSize, setBaseFontSize] = useState(savedDesign.baseFontSize || 11); 
   const [logoSize, setLogoSize] = useState(savedDesign.logoSize || 45);
   const [barcodeScale, setBarcodeScale] = useState(savedDesign.barcodeScale || 40);
 
-  // Content state allows user to edit labels on the fly
+  // FIX: Explicitly initialize Values from DATA prop, Labels from SAVED prop
   const [content, setContent] = useState({
-      qualityLabel: 'Quality:', qualityVal: data.quality,
-      gsmLabel: 'GSM:', gsmVal: data.gsm,
-      colorLabel: 'Color:', colorVal: data.color,
-      widthLabel: 'Width:', widthVal: `${data.width_inches}"`,
-      lengthLabel: 'Length:', lengthVal: `${data.length_meters}m`,
-      netLabel: 'Net Wt:', netVal: `${data.net_weight}kg`,
-      grossLabel: 'Gross Wt:', grossVal: `${data.gross_weight}kg`
+      qualityLabel: savedLabels.qualityLabel || 'Quality:', 
+      qualityVal: data?.quality || '', 
+      gsmLabel: savedLabels.gsmLabel || 'GSM:', 
+      gsmVal: data?.gsm || '',
+      colorLabel: savedLabels.colorLabel || 'Color:', 
+      colorVal: data?.color || '',
+      widthLabel: savedLabels.widthLabel || 'Width:', 
+      widthVal: `${data?.width_inches || ''}"`,
+      lengthLabel: savedLabels.lengthLabel || 'Length:', 
+      lengthVal: `${data?.length_meters || ''}m`,
+      netLabel: savedLabels.netLabel || 'Net Wt:', 
+      netVal: `${data?.net_weight || ''}kg`,
+      grossLabel: savedLabels.grossLabel || 'Gross Wt:', 
+      grossVal: `${data?.gross_weight || ''}kg`
   });
 
   const canvasRef = useRef(null);
 
+  // SAVE ONLY DESIGN & LABELS - NEVER VALUES
   useEffect(() => {
-      localStorage.setItem('ksf_label_design_v8', JSON.stringify({ showLogo, baseFontSize, logoSize, barcodeScale }));
-      localStorage.setItem('ksf_label_labels_v8', JSON.stringify(content));
-  }, [showLogo, baseFontSize, logoSize, barcodeScale, content]);
+      localStorage.setItem('ksf_label_design_v9', JSON.stringify({ showLogo, labelSize, baseFontSize, logoSize, barcodeScale }));
+      
+      const labelsOnly = {
+          qualityLabel: content.qualityLabel,
+          gsmLabel: content.gsmLabel,
+          colorLabel: content.colorLabel,
+          widthLabel: content.widthLabel,
+          lengthLabel: content.lengthLabel,
+          netLabel: content.netLabel,
+          grossLabel: content.grossLabel
+      };
+      localStorage.setItem('ksf_label_labels_v9', JSON.stringify(labelsOnly));
+  }, [showLogo, labelSize, baseFontSize, logoSize, barcodeScale, content]);
 
   useEffect(() => {
       if (data && canvasRef.current) {
@@ -219,10 +240,10 @@ const LabelPrint = ({ data, onClose }) => {
 
   if (!data) return null;
 
-  // --- STYLES FOR 4x3 LAYOUT ---
+  const [width, height] = labelSize.split('-');
   const fontStyle = { fontFamily: "'Courier New', Courier, monospace", lineHeight: '1.1' };
   
-  // Compact Input Style
+  // Input styles
   const inputStyle = { 
       ...fontStyle, background: 'transparent', border: 'none', outline: 'none', 
       padding: 0, margin: 0, color: '#000', fontSize: `${baseFontSize}px` 
@@ -230,7 +251,6 @@ const LabelPrint = ({ data, onClose }) => {
   const labelStyle = { ...inputStyle, fontWeight: '900', width: 'auto', marginRight: '4px' };
   const valueStyle = { ...inputStyle, fontWeight: '600', flex: 1, minWidth: 0 };
 
-  // Main Container locked to 4in x 3in
   const printContainerStyle = { 
       width: '4in', height: '3in', backgroundColor: 'white', overflow: 'hidden', 
       display: 'flex', flexDirection: 'column', padding: '0.1in', 
@@ -238,11 +258,10 @@ const LabelPrint = ({ data, onClose }) => {
   };
 
   const rowStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '2px', alignItems: 'baseline' };
-  const colStyle = { display: 'flex', width: '48%', alignItems: 'baseline', whiteSpace: 'nowrap' }; // 2 columns
+  const colStyle = { display: 'flex', width: '48%', alignItems: 'baseline', whiteSpace: 'nowrap' };
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 overflow-y-auto">
-      {/* PRINT MEDIA QUERY */}
       <style>{`@media print { @page { size: 4in 3in; margin: 0; } body * { visibility: hidden; } #print-wrapper, #print-wrapper * { visibility: visible; } #print-wrapper { position: absolute; top: 0; left: 0; margin: 0; border: none !important; padding: 0 !important; width: 4in !important; height: 3in !important; } #print-controls { display: none !important; } }`}</style>
       
       <div className="bg-white p-4 rounded-xl max-w-lg w-full flex flex-col items-center animate-in fade-in zoom-in-95 my-auto">
@@ -442,7 +461,6 @@ export default function App() {
       if (!isBackground) setLoading(true);
       const r = await DataService.getStock();
       const m = await DataService.getRawMaterials();
-      // ALWAYS return array, never null
       setRolls(r || []);
       setMaterials(m || []);
       if (!isBackground) setLoading(false);
@@ -469,7 +487,6 @@ export default function App() {
     return () => { subscription.unsubscribe(); clearInterval(interval); };
   }, [fetchData]);
 
-  // Force open modal if device name is missing on login
   useEffect(() => {
       if(user && !isGuest && !deviceName) {
           setDeviceModalOpen(true);
@@ -502,6 +519,7 @@ export default function App() {
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading ? ( <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div> ) : (
             <>
+                {/* PASSING DEFAULT EMPTY ARRAYS TO PREVENT CRASHES */}
                 {activeTab === 'dashboard' && <Dashboard rolls={rolls || []} materials={materials || []} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
