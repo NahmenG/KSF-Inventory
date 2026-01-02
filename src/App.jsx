@@ -103,6 +103,7 @@ const DataService = {
 const generateChallan = (rolls, details) => {
     try {
         const doc = new jsPDF();
+        // LOGO ON PDF - Optional: You can try to addImage here if you have base64
         doc.setFontSize(22);
         doc.text("KSF NON WOVEN", 105, 20, null, null, "center");
         doc.setFontSize(10);
@@ -130,11 +131,15 @@ const generateChallan = (rolls, details) => {
 };
 
 // --- COMPONENTS ---
+
+// UPDATED HEADER WITH LOGO
 const Header = ({ user, isGuest, deviceName, onLogout, setTab, activeTab, onEditDeviceName }) => (
   <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
     <div className="flex justify-between items-center px-4 h-16">
-      <div className="font-bold text-xl cursor-pointer flex items-center gap-2" onClick={() => setTab('dashboard')}>
-         <Layers className="text-blue-600" /> KSF Inventory
+      <div className="font-bold text-xl cursor-pointer flex items-center gap-3" onClick={() => setTab('dashboard')}>
+         {/* COMPANY LOGO */}
+         <img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" />
+         <span className="text-gray-900 tracking-tight hidden md:block">KSF Inventory</span>
       </div>
       <div className="flex items-center gap-3 text-sm">
         {!isGuest && <div onClick={onEditDeviceName} className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full">{deviceName || 'Device'} ✎</div>}
@@ -215,7 +220,7 @@ const LabelPrint = ({ data, onClose }) => {
   );
 };
 
-// --- NEW FEATURES: DASHBOARD WITH CHARTS ---
+// --- VIEWS ---
 const DashboardView = ({ rolls }) => {
     // 1. Calculate Summary Stats
     const inStock = rolls.filter(r => r.status === 'in_stock');
@@ -238,14 +243,12 @@ const DashboardView = ({ rolls }) => {
             const c = r.color || 'Unknown';
             counts[c] = (counts[c] || 0) + (parseFloat(r.net_weight) || 0);
         });
-        // Sort and take top 5 for cleaner chart
+        // Sort and take top 8
         return Object.keys(counts)
             .map(key => ({ name: key, count: counts[key] }))
             .sort((a, b) => b.count - a.count)
             .slice(0, 8);
     }, [inStock]);
-
-    
 
     return (
         <div className="space-y-6 pb-20">
