@@ -13,7 +13,7 @@ import {
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter
+  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter, Undo2
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -385,7 +385,6 @@ const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
     );
 };
 
-// --- UPDATED STOCK VIEW (SMART SEARCH) ---
 const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
   
@@ -414,8 +413,8 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
                 ${r.gsm || ''} 
                 ${r.width_inches || ''}
               `.toLowerCase();
-
-              // EVERY word typed must appear somewhere in the roll's data
+              
+              // Every word typed must appear somewhere
               const allTermsMatch = searchTerms.every(term => searchableText.includes(term));
               if (!allTermsMatch) return false;
           }
@@ -512,7 +511,8 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   );
 };
 
-const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) => {
+// --- UPDATED DISPATCH VIEW (WITH UNDO) ---
+const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
     const [isScanning, setIsScanning] = useState(false);
@@ -537,6 +537,15 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
         await onDispatch(foundRoll.id);
         setSessionList(prev => [foundRoll, ...prev]);
         setFoundRoll(null);
+    };
+
+    const handleRemoveFromManifest = async (index, item) => {
+        if(confirm("Remove this roll from dispatch and return to stock?")) {
+            await onUndoDispatch(item.id); // Reverts DB status
+            const newList = [...sessionList];
+            newList.splice(index, 1);
+            setSessionList(newList);
+        }
     };
 
     const handlePrint = () => {
@@ -597,9 +606,17 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUpdateRoll }) 
                         <span>Total: {sessionList.reduce((s,r)=>s+(parseFloat(r.net_weight)||0),0)} kg</span>
                     </div>
                     {sessionList.map((item, i) => (
-                        <div key={i} className="p-3 border-b flex justify-between items-center last:border-0">
-                            <span className="font-mono text-gray-600">{item.product_id}</span>
-                            <span className="font-bold">{item.net_weight}kg</span>
+                        <div key={i} className="p-3 border-b flex justify-between items-center last:border-0 hover:bg-gray-50">
+                            <div>
+                                <div className="font-mono text-gray-600 text-sm">{item.product_id}</div>
+                                <div className="font-bold">{item.net_weight}kg</div>
+                            </div>
+                            <button 
+                                onClick={() => handleRemoveFromManifest(i, item)} 
+                                className="bg-red-50 text-red-600 p-2 rounded-full hover:bg-red-100 border border-red-200"
+                            >
+                                <Trash2 size={18} />
+                            </button>
                         </div>
                     ))}
                     <div className="p-4">
@@ -728,6 +745,10 @@ const MainApp = () => {
   
   const handleSaveRoll = async (e) => { e.preventDefault(); const id = `KSF-${Math.floor(Math.random() * 1000000)}`; const newRoll = { ...formData, product_id: id, status: 'in_stock' }; try { await DataService.addRoll(newRoll, deviceName); setPrintData(newRoll); fetchData(); setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); } catch (err) { alert('Error: ' + err.message); } };
   const handleDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
+  
+  // NEW: UNDO DISPATCH
+  const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
+
   const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
   const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
@@ -745,7 +766,7 @@ const MainApp = () => {
                 {activeTab === 'dashboard' && <DashboardView rolls={rolls} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
-                {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUpdateRoll={handleEditRoll} />}
+                {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} />}
                 {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
             </>
