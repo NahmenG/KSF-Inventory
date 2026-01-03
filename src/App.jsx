@@ -10,7 +10,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Calendar, Clock, 
   Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter, Undo2, ToggleLeft, ToggleRight, Plus,
-  AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings
+  AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -82,7 +82,6 @@ const DataService = {
     const { data, error } = await supabase.from('raw_materials').select('*').order('name');
     return error ? [] : data;
   },
-  // UPDATED: Accepts min_level
   async addRawMaterial(name, category, minLevel) {
       const newMat = { name, category, min_level: minLevel, stock_quantity: 0, unit: 'kg' };
       await supabase.from('raw_materials').insert([newMat]);
@@ -93,7 +92,6 @@ const DataService = {
     const newQty = currentQty + (isAddition ? parseFloat(qty) : -parseFloat(qty));
     await supabase.from('raw_materials').update({ stock_quantity: newQty, last_updated_by: deviceName }).eq('id', id);
   },
-  // NEW: Delete Material
   async deleteRawMaterial(id) {
       await supabase.from('raw_materials').delete().eq('id', id);
   }
@@ -178,7 +176,6 @@ const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
     );
 });
 
-// --- SETTINGS MODAL (BACKUP) ---
 const SettingsModal = ({ visible, onClose, onBackup }) => {
     if (!visible) return null;
     return (
@@ -216,11 +213,10 @@ const DeviceNameModal = ({ onSave, initialName }) => {
     );
 };
 
-// --- UPDATED ADD MATERIAL MODAL (WITH MIN LEVEL) ---
 const AddMaterialModal = ({ onSave, onClose }) => {
     const [name, setName] = useState('');
     const [category, setCategory] = useState('Colour');
-    const [minLevel, setMinLevel] = useState('100'); // Default alarm level
+    const [minLevel, setMinLevel] = useState('100');
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
@@ -229,18 +225,14 @@ const AddMaterialModal = ({ onSave, onClose }) => {
                     <h2 className="text-xl font-bold">Add Material</h2>
                     <button onClick={onClose}><X size={20}/></button>
                 </div>
-                
                 <label className="text-xs font-bold text-gray-500">Material Name</label>
                 <input className="w-full border p-3 rounded mb-4" placeholder="e.g. Red Batch 202" value={name} onChange={e => setName(e.target.value)} />
-                
                 <label className="text-xs font-bold text-gray-500">Category</label>
                 <select className="w-full border p-3 rounded mb-4 bg-white" value={category} onChange={e => setCategory(e.target.value)}>
                     {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-
                 <label className="text-xs font-bold text-gray-500">Low Stock Alert (kg)</label>
                 <input className="w-full border p-3 rounded mb-6" type="number" placeholder="e.g. 100" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
-
                 <button disabled={!name} onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add to List</button>
             </div>
         </div>
@@ -305,7 +297,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const producedToday = rolls.filter(r => new Date(r.updated_at).toLocaleDateString() === today).length;
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
     
-    // UPDATED: Check each material against its specific min_level
+    // UPDATED: Check min_level
     const lowStockMaterials = (materials || []).filter(m => m.stock_quantity < (m.min_level || 100)).sort((a,b) => a.stock_quantity - b.stock_quantity);
 
     const activeDevices = useMemo(() => {
@@ -639,7 +631,6 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll }) => {
     );
 });
 
-// --- UPDATED MATERIALS VIEW ---
 const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onDelete }) => { 
     const [activeCat, setActiveCat] = useState('Colour');
     const [isAddModalOpen, setAddModalOpen] = useState(false);
@@ -768,6 +759,7 @@ const MainApp = () => {
   const handleDeleteMaterial = async (id) => { await DataService.deleteRawMaterial(id); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
 
+  // --- FULL DB BACKUP ---
   const handleFullBackup = async () => {
       setLoading(true);
       try {
