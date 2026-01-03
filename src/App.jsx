@@ -136,6 +136,7 @@ const generateChallan = (rolls, details) => {
 
 // --- COMPONENTS ---
 
+// 1. HEADER (LOGO ONLY)
 const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center">
       <div className="flex items-center pl-1">
@@ -150,6 +151,7 @@ const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName }) 
   </header>
 ));
 
+// 2. BOTTOM NAV
 const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
     const tabs = [
         { id: 'dashboard', label: 'Home', icon: Activity },
@@ -261,7 +263,7 @@ const LabelPrint = ({ data, onClose }) => {
   );
 };
 
-// --- ENHANCED DASHBOARD VIEW ---
+// --- DASHBOARD VIEW ---
 const DashboardView = React.memo(({ rolls, materials }) => {
     // 1. Core Metrics
     const inStock = rolls.filter(r => r.status === 'in_stock');
@@ -308,7 +310,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         return rolls.slice(0, 5).map(r => {
             let action = "Edited";
             if (r.status === 'dispatched') action = "Dispatched";
-            else if (Math.abs(new Date(r.created_at) - new Date(r.updated_at)) < 60000) action = "Produced"; // If created and updated within 1 min
+            else if (Math.abs(new Date(r.created_at) - new Date(r.updated_at)) < 60000) action = "Produced"; 
             
             return {
                 ...r,
@@ -421,7 +423,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     );
 });
 
-// --- SUB-VIEWS (Memoized for performance) ---
+// --- SUB-VIEWS ---
 const NewProductView = React.memo(({ formData, setFormData, onSubmit }) => (
     <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24">
       <h2 className="text-lg font-bold mb-6 flex items-center gap-2"><Package className="text-blue-600"/> New Roll Entry</h2>
@@ -720,98 +722,56 @@ const MainApp = () => {
   const [isGuest, setIsGuest] = useState(false);
   const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || '');
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [loading, setLoading] = useState(true);
-  
-  // CACHE-FIRST STATE: Initialize with local data if available
-  const [rolls, setRolls] = useState(() => safeJSONParse('ksf_cached_rolls', []));
-  const [materials, setMaterials] = useState(() => safeJSONParse('ksf_cached_materials', []));
-  
+  const [loading, setLoading] = useState(false);
+  const [rolls, setRolls] = useState([]);
+  const [materials, setMaterials] = useState([]);
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
 
-  // PERFORMANCE FIX: Background Fetch
-  const fetchData = useCallback(async () => {
-      // Don't show loading spinner if we have cached data
-      if (rolls.length === 0) setLoading(true);
-      
+  const fetchDataRef = useRef();
+  const fetchData = useCallback(async (isBackground = false) => {
+      if (!isBackground) setLoading(true);
       const r = await DataService.getStock();
       const m = await DataService.getRawMaterials();
-      
-      if (r) {
-          setRolls(r);
-          localStorage.setItem('ksf_cached_rolls', JSON.stringify(r));
-      }
-      if (m) {
-          setMaterials(m);
-          localStorage.setItem('ksf_cached_materials', JSON.stringify(m));
-      }
-      setLoading(false);
+      setRolls(r || []);
+      setMaterials(m || []);
+      if (!isBackground) setLoading(false);
   }, []);
+  fetchDataRef.current = fetchData;
 
   useEffect(() => {
-    const checkSession = async () => { 
-        const { data: { session } } = await supabase.auth.getSession(); 
-        if (session) { setUser(session.user); setIsGuest(false); fetchData(); } 
-        else { setLoading(false); }
-    };
+    const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } };
     checkSession();
-    
-    // Background Refresh every 30 seconds (less frequent than before)
-    const interval = setInterval(() => { if(user || isGuest) fetchData(); }, 30000);
-    return () => clearInterval(interval);
-  }, [fetchData, user, isGuest]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session && !user) { setIsGuest(false); fetchData(); } });
+    const interval = setInterval(() => { if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000);
+    return () => { subscription.unsubscribe(); clearInterval(interval); };
+  }, [fetchData]);
 
   useEffect(() => { if(user && !isGuest && !deviceName) setDeviceModalOpen(true); }, [user, isGuest, deviceName]);
 
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
   const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); localStorage.removeItem('ksf_cached_rolls'); };
+  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
   
   const handleSaveRoll = async (e) => { 
       e.preventDefault(); 
       const id = `R-${Math.floor(Math.random() * 1000000)}`; 
       const newRoll = { ...formData, product_id: id, status: 'in_stock' }; 
-      
-      // OPTIMISTIC UPDATE: Update UI immediately before DB
-      setRolls(prev => [newRoll, ...prev]);
-      
       try { 
           await DataService.addRoll(newRoll, deviceName); 
           setPrintData(newRoll); 
-          fetchData(); // Sync with DB
+          fetchData(); 
           setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); 
       } catch (err) { alert('Error: ' + err.message); } 
   };
   
-  const handleDispatch = useCallback(async (id) => { 
-      // Optimistic update
-      setRolls(prev => prev.map(r => r.id === id ? { ...r, status: 'dispatched', dispatched_at: new Date() } : r));
-      await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); 
-      fetchData(); 
-  }, [deviceName, fetchData]);
-  
-  const handleUndoDispatch = useCallback(async (id) => { 
-      setRolls(prev => prev.map(r => r.id === id ? { ...r, status: 'in_stock', dispatched_at: null } : r));
-      await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); 
-      fetchData(); 
-  }, [deviceName, fetchData]);
-
-  const handleDeleteRoll = async (id) => { 
-      setRolls(prev => prev.filter(r => r.id !== id));
-      await DataService.deleteRoll(id); 
-      fetchData(); 
-  };
-  
-  const handleEditRoll = useCallback(async (updates) => { 
-      setRolls(prev => prev.map(r => r.id === updates.id ? updates : r));
-      setEditRoll(null);
-      await DataService.updateRoll(updates.id, updates, deviceName); 
-      fetchData(); 
-  }, [deviceName, fetchData]);
-  
+  const handleDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
+  const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
+  const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
+  const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
   const handleAddMaterial = async (name, category) => { await DataService.addRawMaterial(name, category); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
@@ -822,8 +782,7 @@ const MainApp = () => {
     <div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20">
       <Header isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} onEditDeviceName={() => setDeviceModalOpen(true)} />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
-        {/* Render content immediately if we have cached data, even if loading is true */}
-        {(loading && rolls.length === 0) ? ( <div className="flex justify-center p-12 text-gray-400">Loading Data...</div> ) : (
+        {loading && activeTab !== 'dashboard' ? ( <div className="flex justify-center p-12 text-gray-400">Loading Data...</div> ) : (
             <>
                 {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
