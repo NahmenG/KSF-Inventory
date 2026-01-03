@@ -3,8 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import JsBarcode from 'jsbarcode';
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList 
 } from 'recharts';
@@ -12,7 +10,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Calendar, Clock, 
   Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter, Undo2, ToggleLeft, ToggleRight, Plus,
-  AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw
+  AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -96,40 +94,70 @@ const DataService = {
   }
 };
 
-// --- HELPER: GENERATE PDF ---
-const generateChallan = (rolls, details) => {
+// --- HELPER: GENERATE EXCEL GATE PASS ---
+const generateChallanExcel = (rolls, details) => {
     try {
-        const doc = new jsPDF();
-        doc.setFontSize(22);
-        doc.text("KSF NON WOVEN", 105, 20, null, null, "center");
-        doc.setFontSize(10);
-        doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 40);
-        doc.text(`Time: ${new Date().toLocaleTimeString()}`, 14, 46);
-        doc.text(`Buyer: ${details.buyer}`, 14, 56);
-        doc.text(`Vehicle: ${details.vehicle}`, 14, 62);
-        
-        const tableData = rolls.map((r, i) => [i + 1, r.product_id, r.quality, r.color, r.width_inches, r.gsm, r.net_weight]);
-        autoTable(doc, {
-            startY: 75,
-            head: [['#', 'ID', 'Qual', 'Col', 'Size', 'GSM', 'Kg']],
-            body: tableData,
-            theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185] }, 
-        });
-        
-        const totalWt = rolls.reduce((sum, r) => sum + Number(r.net_weight || 0), 0);
-        const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 150; 
-        
-        doc.setFontSize(14);
-        doc.text(`Total Weight: ${formatCurrency(totalWt)} kg`, 14, finalY + 15);
-        doc.setFontSize(10);
-        doc.text("Authorized Signatory", 150, finalY + 40);
-        
-        doc.save(`GatePass_${new Date().getTime()}.pdf`);
+        // 1. Create Data Structure
+        const header = [
+            ["KSF NON WOVEN"], // Row 1: Title
+            [], // Row 2: Empty
+            ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()], // Row 3
+            ["Buyer:", details.buyer, "Vehicle:", details.vehicle], // Row 4
+            [], // Row 5: Empty
+            ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "GSM", "Net Kg"] // Row 6: Table Header
+        ];
+
+        // 2. Add Roll Data
+        const body = rolls.map((r, i) => [
+            i + 1,
+            r.product_id,
+            r.quality,
+            r.color,
+            r.width_inches,
+            r.gsm,
+            parseFloat(r.net_weight) || 0
+        ]);
+
+        // 3. Calculate Total
+        const totalWt = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
+        const footer = [
+            [], // Empty Row
+            ["", "", "", "", "", "Total Weight:", totalWt] // Total Row
+        ];
+
+        // 4. Combine All
+        const finalData = [...header, ...body, ...footer];
+
+        // 5. Create Workbook
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(finalData);
+
+        // 6. Formatting (Column Widths)
+        ws['!cols'] = [
+            { wch: 8 },  // Sr No
+            { wch: 15 }, // Roll ID
+            { wch: 12 }, // Quality
+            { wch: 12 }, // Color
+            { wch: 10 }, // Size
+            { wch: 8 },  // GSM
+            { wch: 10 }  // Net Kg
+        ];
+
+        // 7. Merge Title Cell
+        ws['!merges'] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } } // Merge Row 0, Col 0 to 6
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, "GatePass");
+
+        // 8. Save File
+        const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
+        XLSX.writeFile(wb, fileName);
         return true;
+
     } catch (err) {
         console.error(err);
-        alert("PDF Error: " + err.message);
+        alert("Excel Error: " + err.message);
         return false;
     }
 };
@@ -263,13 +291,19 @@ const LabelPrint = ({ data, onClose }) => {
 
 // --- DASHBOARD VIEW ---
 const DashboardView = React.memo(({ rolls, materials }) => {
+    // 1. Core Metrics
     const inStock = rolls.filter(r => r.status === 'in_stock');
     const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
+    
+    // 2. Velocity Metrics (Today)
     const today = new Date().toLocaleDateString();
     const producedToday = rolls.filter(r => new Date(r.updated_at).toLocaleDateString() === today).length;
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
+    
+    // 3. Low Stock Materials (< 100kg)
     const lowStockMaterials = (materials || []).filter(m => m.stock_quantity < 100).sort((a,b) => a.stock_quantity - b.stock_quantity);
 
+    // 4. Active Devices (Last 7 Days)
     const activeDevices = useMemo(() => {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -278,59 +312,139 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         return devices;
     }, [rolls]);
 
+    // 5. Chart Data
     const qualityData = useMemo(() => {
         const counts = {};
-        inStock.forEach(r => { const q = r.quality || 'Unknown'; counts[q] = (counts[q] || 0) + (parseFloat(r.net_weight) || 0); });
+        inStock.forEach(r => {
+            const q = r.quality || 'Unknown';
+            counts[q] = (counts[q] || 0) + (parseFloat(r.net_weight) || 0);
+        });
         return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
     }, [inStock]);
 
     const colorData = useMemo(() => {
         const counts = {};
-        inStock.forEach(r => { const c = r.color || 'Unknown'; counts[c] = (counts[c] || 0) + (parseFloat(r.net_weight) || 0); });
+        inStock.forEach(r => {
+            const c = r.color || 'Unknown';
+            counts[c] = (counts[c] || 0) + (parseFloat(r.net_weight) || 0);
+        });
         return Object.keys(counts).map(key => ({ name: key, count: counts[key] })).sort((a, b) => b.count - a.count).slice(0, 8);
     }, [inStock]);
 
+    // 6. Recent Activity Logic
     const recentActivity = useMemo(() => {
         return rolls.slice(0, 5).map(r => {
             let action = "Edited";
             if (r.status === 'dispatched') action = "Dispatched";
             else if (Math.abs(new Date(r.created_at) - new Date(r.updated_at)) < 60000) action = "Produced"; 
-            return { ...r, action, time: new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) };
+            
+            return {
+                ...r,
+                action,
+                time: new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            };
         });
     }, [rolls]);
 
     return (
         <div className="space-y-6 pb-20">
+            {/* FACTORY VELOCITY */}
             <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-600">
                 <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18}/> Factory Velocity (Today)</h3>
                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-green-50 p-3 rounded-lg"><div className="text-xs text-green-700 font-bold uppercase flex items-center gap-1"><ArrowDownRight size={14}/> Produced</div><div className="text-2xl font-bold text-green-800">{producedToday} <span className="text-xs font-normal">Rolls</span></div></div>
-                    <div className="bg-orange-50 p-3 rounded-lg"><div className="text-xs text-orange-700 font-bold uppercase flex items-center gap-1"><ArrowUpRight size={14}/> Dispatched</div><div className="text-2xl font-bold text-orange-800">{dispatchedToday} <span className="text-xs font-normal">Rolls</span></div></div>
+                    <div className="bg-green-50 p-3 rounded-lg">
+                        <div className="text-xs text-green-700 font-bold uppercase flex items-center gap-1"><ArrowDownRight size={14}/> Produced</div>
+                        <div className="text-2xl font-bold text-green-800">{producedToday} <span className="text-xs font-normal">Rolls</span></div>
+                    </div>
+                    <div className="bg-orange-50 p-3 rounded-lg">
+                        <div className="text-xs text-orange-700 font-bold uppercase flex items-center gap-1"><ArrowUpRight size={14}/> Dispatched</div>
+                        <div className="text-2xl font-bold text-orange-800">{dispatchedToday} <span className="text-xs font-normal">Rolls</span></div>
+                    </div>
                 </div>
             </div>
+
+            {/* INVENTORY OVERVIEW */}
             <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Count</div><div className="text-3xl font-bold text-blue-600">{inStock.length}</div></div>
-                <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div><div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400">kg</span></div></div>
+                <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
+                    <div className="text-gray-500 text-xs font-bold uppercase">Stock Count</div>
+                    <div className="text-3xl font-bold text-blue-600">{inStock.length}</div>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
+                    <div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div>
+                    <div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400">kg</span></div>
+                </div>
             </div>
+
+            {/* ACTIVE DEVICES */}
             {activeDevices.length > 0 && (
                 <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
                     <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wifi size={18}/> Active Devices</h3>
-                    <div className="flex flex-wrap gap-2">{activeDevices.map(d => (<span key={d} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">{d}</span>))}</div>
+                    <div className="flex flex-wrap gap-2">
+                        {activeDevices.map(d => (
+                            <span key={d} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">{d}</span>
+                        ))}
+                    </div>
                 </div>
             )}
+
+            {/* RECENT ACTIVITY */}
             <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
                 <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18}/> Recent Activity</h3>
                 {recentActivity.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (
-                    <div className="space-y-3">{recentActivity.map(r => (
-                        <div key={r.id} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0">
-                            <div><div className="font-bold text-sm text-gray-800">{r.product_id} <span className={`text-[10px] uppercase px-1 rounded ${r.action === 'Produced' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.action}</span></div><div className="text-xs text-gray-500">by {r.device_name || 'Unknown'}</div></div>
-                            <div className="text-right"><div className="font-bold text-sm">{r.net_weight} kg</div><div className="text-[10px] text-gray-400">{r.time}</div></div>
-                        </div>
-                    ))}</div>
+                    <div className="space-y-3">
+                        {recentActivity.map(r => (
+                            <div key={r.id} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0">
+                                <div>
+                                    <div className="font-bold text-sm text-gray-800">{r.product_id} <span className={`text-[10px] uppercase px-1 rounded ${r.action === 'Produced' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.action}</span></div>
+                                    <div className="text-xs text-gray-500">by {r.device_name || 'Unknown'}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="font-bold text-sm">{r.net_weight} kg</div>
+                                    <div className="text-[10px] text-gray-400">{r.time}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 )}
             </div>
-            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>{qualityData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Pie><RechartsTooltip /><Legend /></PieChart></ResponsiveContainer></div></div>
-            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Top Colors in Stock (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={colorData} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} /><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} /><RechartsTooltip /><Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />{colorData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Bar></BarChart></ResponsiveContainer></div></div>
+
+            {/* CHARTS */}
+            <div className="bg-white p-4 rounded-xl shadow border">
+                <h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3>
+                <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>
+                                {qualityData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <RechartsTooltip />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow border">
+                <h3 className="font-bold mb-4 text-gray-700">Top Colors in Stock (kg)</h3>
+                <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={colorData} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                            <XAxis type="number" hide />
+                            <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} />
+                            <RechartsTooltip />
+                            <Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}>
+                                <LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />
+                                {colorData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
         </div>
     );
 });
@@ -515,7 +629,7 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
     };
 
     const handlePrint = () => {
-        if(generateChallan(sessionList, { buyer: customerName, vehicle: vehicleNo, device: deviceName })) {
+        if(generateChallanExcel(sessionList, { buyer: customerName, vehicle: vehicleNo, device: deviceName })) {
              if(confirm("Start new batch?")) { setSessionList([]); setCustomerName(''); setVehicleNo(''); }
         }
     };
@@ -563,7 +677,7 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
                         </div>
                     ))}
                     <div className="p-4">
-                        <button onClick={handlePrint} className="w-full bg-black text-white py-4 rounded-xl font-bold flex justify-center gap-2 items-center"><FileText size={20}/> Generate Gate Pass</button>
+                        <button onClick={handlePrint} className="w-full bg-green-700 text-white py-4 rounded-xl font-bold flex justify-center gap-2 items-center hover:bg-green-800 shadow-lg"><FileSpreadsheet size={20}/> Generate Excel Gate Pass</button>
                     </div>
                 </div>
             )}
@@ -685,7 +799,6 @@ const MainApp = () => {
           await DataService.addRoll(newRoll, deviceName); 
           setPrintData(newRoll); 
           fetchData(); 
-          // UPDATED: Only reset weights, keep other batch details
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); 
       } catch (err) { alert('Error: ' + err.message); } 
   };
