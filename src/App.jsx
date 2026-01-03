@@ -6,13 +6,13 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList 
 } from 'recharts';
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Calendar, Clock, 
   Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter, Undo2, ToggleLeft, ToggleRight, Plus,
-  AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight
+  AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Wifi
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -67,7 +67,7 @@ const DataService = {
     return error ? [] : data;
   },
   async addRoll(roll, deviceName) {
-    const rollWithDevice = { ...roll, device_name: deviceName, updated_at: new Date() };
+    const rollWithDevice = { ...roll, device_name: deviceName, updated_at: new Date(), created_at: new Date() };
     const { data, error } = await supabase.from('rolls').insert([rollWithDevice]).select();
     if (error) throw error;
     return data[0];
@@ -136,15 +136,11 @@ const generateChallan = (rolls, details) => {
 
 // --- COMPONENTS ---
 
-// 1. UPDATED HEADER (LOGO ONLY)
-const Header = ({ isGuest, deviceName, onLogout, onEditDeviceName }) => (
+const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center">
-      {/* LEFT: LOGO ONLY */}
       <div className="flex items-center pl-1">
          <img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" />
       </div>
-      
-      {/* RIGHT: PROFILE */}
       <div className="flex items-center gap-3 text-sm">
         {!isGuest && <div onClick={onEditDeviceName} className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm">{deviceName || 'Device'} ✎</div>}
         <button onClick={onLogout} className="text-red-600 font-bold hover:bg-red-50 px-2 py-1 rounded">
@@ -152,10 +148,9 @@ const Header = ({ isGuest, deviceName, onLogout, onEditDeviceName }) => (
         </button>
       </div>
   </header>
-);
+));
 
-// 2. BOTTOM NAV
-const BottomNav = ({ activeTab, setTab, isGuest }) => {
+const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
     const tabs = [
         { id: 'dashboard', label: 'Home', icon: Activity },
         !isGuest && { id: 'entry', label: 'Add', icon: Plus }, 
@@ -179,7 +174,7 @@ const BottomNav = ({ activeTab, setTab, isGuest }) => {
             ))}
         </nav>
     );
-};
+});
 
 const DeviceNameModal = ({ onSave, initialName }) => {
     const [name, setName] = useState(initialName || '');
@@ -266,8 +261,8 @@ const LabelPrint = ({ data, onClose }) => {
   );
 };
 
-// --- ENHANCED DASHBOARD VIEW (NOW WITH RECENT ACTIVITY) ---
-const DashboardView = ({ rolls, materials }) => {
+// --- ENHANCED DASHBOARD VIEW ---
+const DashboardView = React.memo(({ rolls, materials }) => {
     // 1. Core Metrics
     const inStock = rolls.filter(r => r.status === 'in_stock');
     const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
@@ -277,10 +272,19 @@ const DashboardView = ({ rolls, materials }) => {
     const producedToday = rolls.filter(r => new Date(r.updated_at).toLocaleDateString() === today).length;
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
     
-    // 3. Low Stock Materials (< 100kg threshold)
+    // 3. Low Stock Materials (< 100kg)
     const lowStockMaterials = (materials || []).filter(m => m.stock_quantity < 100).sort((a,b) => a.stock_quantity - b.stock_quantity);
 
-    // 4. Charts Data
+    // 4. Active Devices (Last 7 Days)
+    const activeDevices = useMemo(() => {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const recentRolls = rolls.filter(r => new Date(r.updated_at) > sevenDaysAgo);
+        const devices = [...new Set(recentRolls.map(r => r.device_name))].filter(Boolean);
+        return devices;
+    }, [rolls]);
+
+    // 5. Chart Data
     const qualityData = useMemo(() => {
         const counts = {};
         inStock.forEach(r => {
@@ -296,15 +300,27 @@ const DashboardView = ({ rolls, materials }) => {
             const c = r.color || 'Unknown';
             counts[c] = (counts[c] || 0) + (parseFloat(r.net_weight) || 0);
         });
-        return Object.keys(counts)
-            .map(key => ({ name: key, count: counts[key] }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 8);
+        return Object.keys(counts).map(key => ({ name: key, count: counts[key] })).sort((a, b) => b.count - a.count).slice(0, 8);
     }, [inStock]);
+
+    // 6. Recent Activity Logic
+    const recentActivity = useMemo(() => {
+        return rolls.slice(0, 5).map(r => {
+            let action = "Edited";
+            if (r.status === 'dispatched') action = "Dispatched";
+            else if (Math.abs(new Date(r.created_at) - new Date(r.updated_at)) < 60000) action = "Produced"; // If created and updated within 1 min
+            
+            return {
+                ...r,
+                action,
+                time: new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            };
+        });
+    }, [rolls]);
 
     return (
         <div className="space-y-6 pb-20">
-            {/* 1. FACTORY VELOCITY CARD */}
+            {/* FACTORY VELOCITY */}
             <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-600">
                 <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18}/> Factory Velocity (Today)</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -319,7 +335,7 @@ const DashboardView = ({ rolls, materials }) => {
                 </div>
             </div>
 
-            {/* 2. INVENTORY OVERVIEW */}
+            {/* INVENTORY OVERVIEW */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
                     <div className="text-gray-500 text-xs font-bold uppercase">Stock Count</div>
@@ -331,36 +347,32 @@ const DashboardView = ({ rolls, materials }) => {
                 </div>
             </div>
 
-            {/* 3. LOW STOCK ALERTS */}
-            {lowStockMaterials.length > 0 && (
-                <div className="bg-red-50 p-4 rounded-xl border border-red-200">
-                    <h3 className="font-bold text-red-800 flex items-center gap-2 mb-3"><AlertTriangle size={18}/> Low Material Alert</h3>
-                    <div className="space-y-2">
-                        {lowStockMaterials.slice(0, 3).map(m => (
-                            <div key={m.id} className="flex justify-between items-center bg-white p-2 rounded shadow-sm">
-                                <span className="text-sm font-semibold">{m.name}</span>
-                                <span className="text-red-600 font-bold text-sm">{m.stock_quantity} kg</span>
-                            </div>
+            {/* ACTIVE DEVICES */}
+            {activeDevices.length > 0 && (
+                <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
+                    <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wifi size={18}/> Active Devices</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {activeDevices.map(d => (
+                            <span key={d} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">{d}</span>
                         ))}
-                        {lowStockMaterials.length > 3 && <div className="text-center text-xs text-red-600 mt-2">+{lowStockMaterials.length - 3} more items low</div>}
                     </div>
                 </div>
             )}
 
-            {/* 4. RECENT ACTIVITY LIST (NEW) */}
+            {/* RECENT ACTIVITY */}
             <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
                 <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18}/> Recent Activity</h3>
-                {rolls.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (
+                {recentActivity.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (
                     <div className="space-y-3">
-                        {rolls.slice(0, 5).map(r => (
+                        {recentActivity.map(r => (
                             <div key={r.id} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0">
                                 <div>
-                                    <div className="font-bold text-sm text-gray-800">{r.product_id}</div>
-                                    <div className="text-xs text-gray-500">{r.quality} • {r.color}</div>
+                                    <div className="font-bold text-sm text-gray-800">{r.product_id} <span className={`text-[10px] uppercase px-1 rounded ${r.action === 'Produced' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.action}</span></div>
+                                    <div className="text-xs text-gray-500">by {r.device_name || 'Unknown'}</div>
                                 </div>
                                 <div className="text-right">
                                     <div className="font-bold text-sm">{r.net_weight} kg</div>
-                                    <div className="text-[10px] text-gray-400">{new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                    <div className="text-[10px] text-gray-400">{r.time}</div>
                                 </div>
                             </div>
                         ))}
@@ -368,13 +380,13 @@ const DashboardView = ({ rolls, materials }) => {
                 )}
             </div>
 
-            {/* 5. CHARTS */}
+            {/* CHARTS */}
             <div className="bg-white p-4 rounded-xl shadow border">
                 <h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3>
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                            <Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>
                                 {qualityData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                                 ))}
@@ -396,6 +408,7 @@ const DashboardView = ({ rolls, materials }) => {
                             <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} />
                             <RechartsTooltip />
                             <Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}>
+                                <LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />
                                 {colorData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                                 ))}
@@ -406,9 +419,10 @@ const DashboardView = ({ rolls, materials }) => {
             </div>
         </div>
     );
-};
+});
 
-const NewProductView = ({ formData, setFormData, onSubmit }) => (
+// --- SUB-VIEWS (Memoized for performance) ---
+const NewProductView = React.memo(({ formData, setFormData, onSubmit }) => (
     <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24">
       <h2 className="text-lg font-bold mb-6 flex items-center gap-2"><Package className="text-blue-600"/> New Roll Entry</h2>
       <form onSubmit={onSubmit} className="grid grid-cols-2 gap-4">
@@ -425,9 +439,9 @@ const NewProductView = ({ formData, setFormData, onSubmit }) => (
         <button type="submit" className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-xl font-bold mt-4 shadow-lg shadow-blue-200 transition-all transform active:scale-95">Save & Print Label</button>
       </form>
     </div>
-);
+));
 
-const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
+const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
     return (
@@ -458,9 +472,9 @@ const EditModal = ({ roll, isGuest, onClose, onSave, onDelete }) => {
             </div>
         </div>
     );
-};
+});
 
-const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
+const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [textSearch, setTextSearch] = useState('');
   const [filterQuality, setFilterQuality] = useState('');
@@ -536,9 +550,9 @@ const StockView = ({ rolls = [], onPrint, onExport, onSelectRoll }) => {
           </div>
       </div>
   );
-};
+});
 
-const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
+const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
     const [scanId, setScanId] = useState('');
     const [foundRoll, setFoundRoll] = useState(null);
     const [isScanning, setIsScanning] = useState(false);
@@ -632,9 +646,9 @@ const DispatchView = ({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }
             )}
         </div>
     );
-};
+});
 
-const HistoryView = ({ rolls, onExport, onSelectRoll }) => {
+const HistoryView = React.memo(({ rolls, onExport, onSelectRoll }) => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const history = useMemo(() => {
@@ -663,9 +677,9 @@ const HistoryView = ({ rolls, onExport, onSelectRoll }) => {
             ))}
         </div>
     );
-};
+});
 
-const MaterialsView = ({ materials, isGuest, onUpdate, onAdd }) => { 
+const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd }) => { 
     const [activeCat, setActiveCat] = useState('Colour');
     const [isAddModalOpen, setAddModalOpen] = useState(false);
     const filteredMaterials = useMemo(() => (materials || []).filter(m => (activeCat === 'Others' ? (m.category === 'Others' || !m.category) : m.category === activeCat)), [materials, activeCat]);
@@ -698,7 +712,7 @@ const MaterialsView = ({ materials, isGuest, onUpdate, onAdd }) => {
             {isAddModalOpen && <AddMaterialModal onSave={handleSaveNewMaterial} onClose={() => setAddModalOpen(false)} />}
         </div>
     ); 
-};
+});
 
 // --- MAIN CONTAINER ---
 const MainApp = () => {
@@ -706,56 +720,98 @@ const MainApp = () => {
   const [isGuest, setIsGuest] = useState(false);
   const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || '');
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [loading, setLoading] = useState(false);
-  const [rolls, setRolls] = useState([]);
-  const [materials, setMaterials] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // CACHE-FIRST STATE: Initialize with local data if available
+  const [rolls, setRolls] = useState(() => safeJSONParse('ksf_cached_rolls', []));
+  const [materials, setMaterials] = useState(() => safeJSONParse('ksf_cached_materials', []));
+  
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
 
-  const fetchDataRef = useRef();
-  const fetchData = useCallback(async (isBackground = false) => {
-      if (!isBackground) setLoading(true);
+  // PERFORMANCE FIX: Background Fetch
+  const fetchData = useCallback(async () => {
+      // Don't show loading spinner if we have cached data
+      if (rolls.length === 0) setLoading(true);
+      
       const r = await DataService.getStock();
       const m = await DataService.getRawMaterials();
-      setRolls(r || []);
-      setMaterials(m || []);
-      if (!isBackground) setLoading(false);
+      
+      if (r) {
+          setRolls(r);
+          localStorage.setItem('ksf_cached_rolls', JSON.stringify(r));
+      }
+      if (m) {
+          setMaterials(m);
+          localStorage.setItem('ksf_cached_materials', JSON.stringify(m));
+      }
+      setLoading(false);
   }, []);
-  fetchDataRef.current = fetchData;
 
   useEffect(() => {
-    const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } };
+    const checkSession = async () => { 
+        const { data: { session } } = await supabase.auth.getSession(); 
+        if (session) { setUser(session.user); setIsGuest(false); fetchData(); } 
+        else { setLoading(false); }
+    };
     checkSession();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session && !user) { setIsGuest(false); fetchData(); } });
-    const interval = setInterval(() => { if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000);
-    return () => { subscription.unsubscribe(); clearInterval(interval); };
-  }, [fetchData]);
+    
+    // Background Refresh every 30 seconds (less frequent than before)
+    const interval = setInterval(() => { if(user || isGuest) fetchData(); }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchData, user, isGuest]);
 
   useEffect(() => { if(user && !isGuest && !deviceName) setDeviceModalOpen(true); }, [user, isGuest, deviceName]);
 
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
   const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
+  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); localStorage.removeItem('ksf_cached_rolls'); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
   
   const handleSaveRoll = async (e) => { 
       e.preventDefault(); 
       const id = `R-${Math.floor(Math.random() * 1000000)}`; 
       const newRoll = { ...formData, product_id: id, status: 'in_stock' }; 
+      
+      // OPTIMISTIC UPDATE: Update UI immediately before DB
+      setRolls(prev => [newRoll, ...prev]);
+      
       try { 
           await DataService.addRoll(newRoll, deviceName); 
           setPrintData(newRoll); 
-          fetchData(); 
+          fetchData(); // Sync with DB
           setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); 
       } catch (err) { alert('Error: ' + err.message); } 
   };
   
-  const handleDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
-  const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
-  const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
-  const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
+  const handleDispatch = useCallback(async (id) => { 
+      // Optimistic update
+      setRolls(prev => prev.map(r => r.id === id ? { ...r, status: 'dispatched', dispatched_at: new Date() } : r));
+      await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); 
+      fetchData(); 
+  }, [deviceName, fetchData]);
+  
+  const handleUndoDispatch = useCallback(async (id) => { 
+      setRolls(prev => prev.map(r => r.id === id ? { ...r, status: 'in_stock', dispatched_at: null } : r));
+      await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); 
+      fetchData(); 
+  }, [deviceName, fetchData]);
+
+  const handleDeleteRoll = async (id) => { 
+      setRolls(prev => prev.filter(r => r.id !== id));
+      await DataService.deleteRoll(id); 
+      fetchData(); 
+  };
+  
+  const handleEditRoll = useCallback(async (updates) => { 
+      setRolls(prev => prev.map(r => r.id === updates.id ? updates : r));
+      setEditRoll(null);
+      await DataService.updateRoll(updates.id, updates, deviceName); 
+      fetchData(); 
+  }, [deviceName, fetchData]);
+  
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
   const handleAddMaterial = async (name, category) => { await DataService.addRawMaterial(name, category); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
@@ -766,7 +822,8 @@ const MainApp = () => {
     <div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20">
       <Header isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} onEditDeviceName={() => setDeviceModalOpen(true)} />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
-        {loading && activeTab !== 'dashboard' ? ( <div className="flex justify-center p-12 text-gray-400">Loading Data...</div> ) : (
+        {/* Render content immediately if we have cached data, even if loading is true */}
+        {(loading && rolls.length === 0) ? ( <div className="flex justify-center p-12 text-gray-400">Loading Data...</div> ) : (
             <>
                 {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
