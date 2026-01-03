@@ -82,8 +82,9 @@ const DataService = {
     const { data, error } = await supabase.from('raw_materials').select('*').order('name');
     return error ? [] : data;
   },
-  async addRawMaterial(name, category) {
-      const newMat = { name, category, stock_quantity: 0, unit: 'kg' };
+  // UPDATED: Accepts min_level
+  async addRawMaterial(name, category, minLevel) {
+      const newMat = { name, category, min_level: minLevel, stock_quantity: 0, unit: 'kg' };
       await supabase.from('raw_materials').insert([newMat]);
   },
   async updateRawMaterial(id, qty, isAddition, deviceName) {
@@ -91,6 +92,10 @@ const DataService = {
     const currentQty = data ? parseFloat(data.stock_quantity) : 0;
     const newQty = currentQty + (isAddition ? parseFloat(qty) : -parseFloat(qty));
     await supabase.from('raw_materials').update({ stock_quantity: newQty, last_updated_by: deviceName }).eq('id', id);
+  },
+  // NEW: Delete Material
+  async deleteRawMaterial(id) {
+      await supabase.from('raw_materials').delete().eq('id', id);
   }
 };
 
@@ -126,7 +131,6 @@ const generateChallanExcel = (rolls, details) => {
 
 // --- COMPONENTS ---
 
-// 1. HEADER (UPDATED WITH SETTINGS ICON)
 const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center">
       <div className="flex items-center pl-1">
@@ -135,7 +139,6 @@ const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, on
       <div className="flex items-center gap-3 text-sm">
         {!isGuest && <div onClick={onEditDeviceName} className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm">{deviceName || 'Device'} ✎</div>}
         
-        {/* NEW SETTINGS BUTTON */}
         {!isGuest && (
             <button onClick={onOpenSettings} className="text-gray-600 hover:bg-gray-100 p-2 rounded-full">
                 <Settings size={20} />
@@ -175,7 +178,7 @@ const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
     );
 });
 
-// --- NEW SETTINGS MODAL (BACKUP) ---
+// --- SETTINGS MODAL (BACKUP) ---
 const SettingsModal = ({ visible, onClose, onBackup }) => {
     if (!visible) return null;
     return (
@@ -185,22 +188,15 @@ const SettingsModal = ({ visible, onClose, onBackup }) => {
                     <h2 className="text-xl font-bold flex items-center gap-2"><Settings size={22}/> Settings</h2>
                     <button onClick={onClose} className="bg-gray-100 p-2 rounded-full"><X size={20}/></button>
                 </div>
-                
                 <div className="space-y-4">
                     <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
                         <h3 className="font-bold text-blue-800 mb-2">Data Management</h3>
                         <p className="text-xs text-gray-600 mb-3">Download a complete copy of your inventory and raw materials.</p>
-                        <button 
-                            onClick={onBackup} 
-                            className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 shadow hover:bg-blue-700"
-                        >
+                        <button onClick={onBackup} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 shadow hover:bg-blue-700">
                             <Download size={18} /> Backup Database (.xlsx)
                         </button>
                     </div>
-                    
-                    <div className="text-center text-xs text-gray-400 mt-4">
-                        App Version 2.1.0 (Stable)
-                    </div>
+                    <div className="text-center text-xs text-gray-400 mt-4">App Version 2.2.0</div>
                 </div>
             </div>
         </div>
@@ -220,9 +216,12 @@ const DeviceNameModal = ({ onSave, initialName }) => {
     );
 };
 
+// --- UPDATED ADD MATERIAL MODAL (WITH MIN LEVEL) ---
 const AddMaterialModal = ({ onSave, onClose }) => {
     const [name, setName] = useState('');
     const [category, setCategory] = useState('Colour');
+    const [minLevel, setMinLevel] = useState('100'); // Default alarm level
+
     return (
         <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
             <div className="bg-white p-6 rounded-lg w-full max-w-sm">
@@ -230,13 +229,19 @@ const AddMaterialModal = ({ onSave, onClose }) => {
                     <h2 className="text-xl font-bold">Add Material</h2>
                     <button onClick={onClose}><X size={20}/></button>
                 </div>
+                
                 <label className="text-xs font-bold text-gray-500">Material Name</label>
                 <input className="w-full border p-3 rounded mb-4" placeholder="e.g. Red Batch 202" value={name} onChange={e => setName(e.target.value)} />
+                
                 <label className="text-xs font-bold text-gray-500">Category</label>
-                <select className="w-full border p-3 rounded mb-6 bg-white" value={category} onChange={e => setCategory(e.target.value)}>
+                <select className="w-full border p-3 rounded mb-4 bg-white" value={category} onChange={e => setCategory(e.target.value)}>
                     {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-                <button disabled={!name} onClick={() => onSave(name, category)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add to List</button>
+
+                <label className="text-xs font-bold text-gray-500">Low Stock Alert (kg)</label>
+                <input className="w-full border p-3 rounded mb-6" type="number" placeholder="e.g. 100" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
+
+                <button disabled={!name} onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add to List</button>
             </div>
         </div>
     );
@@ -299,7 +304,9 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const today = new Date().toLocaleDateString();
     const producedToday = rolls.filter(r => new Date(r.updated_at).toLocaleDateString() === today).length;
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
-    const lowStockMaterials = (materials || []).filter(m => m.stock_quantity < 100).sort((a,b) => a.stock_quantity - b.stock_quantity);
+    
+    // UPDATED: Check each material against its specific min_level
+    const lowStockMaterials = (materials || []).filter(m => m.stock_quantity < (m.min_level || 100)).sort((a,b) => a.stock_quantity - b.stock_quantity);
 
     const activeDevices = useMemo(() => {
         const sevenDaysAgo = new Date();
@@ -419,7 +426,7 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
                     <div className="flex flex-col gap-2">
                         {roll.status === 'dispatched' && <button onClick={() => onSave({ ...editData, status: 'in_stock', dispatched_at: null })} className="bg-orange-100 text-orange-700 p-3 rounded font-bold">Return to Stock</button>}
                         <button onClick={() => onSave(editData)} className="bg-blue-600 text-white p-3 rounded font-bold">Save Changes</button>
-                        <button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold">Delete Roll</button>
+                        <button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold flex items-center justify-center gap-2"><Trash2 size={18}/> Delete Roll</button>
                     </div>
                 )}
             </div>
@@ -632,27 +639,59 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll }) => {
     );
 });
 
-const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd }) => { 
+// --- UPDATED MATERIALS VIEW ---
+const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onDelete }) => { 
     const [activeCat, setActiveCat] = useState('Colour');
     const [isAddModalOpen, setAddModalOpen] = useState(false);
-    const filteredMaterials = useMemo(() => (materials || []).filter(m => (activeCat === 'Others' ? (m.category === 'Others' || !m.category) : m.category === activeCat)), [materials, activeCat]);
+    const [textSearch, setTextSearch] = useState('');
+
+    const filteredMaterials = useMemo(() => {
+        return (materials || []).filter(m => {
+            const matchesCat = activeCat === 'Others' ? (m.category === 'Others' || !m.category) : m.category === activeCat;
+            const matchesSearch = !textSearch || m.name.toLowerCase().includes(textSearch.toLowerCase());
+            return matchesCat && matchesSearch;
+        });
+    }, [materials, activeCat, textSearch]);
+
     const handleUpdate = (id, type) => { const qty = prompt(`Enter Kg to ${type === 'add' ? 'add' : 'remove'}:`); if (qty) onUpdate(id, qty, type === 'add'); };
-    const handleSaveNewMaterial = (name, category) => { onAdd(name, category); setAddModalOpen(false); };
+    const handleSaveNewMaterial = (name, category, minLevel) => { onAdd(name, category, minLevel); setAddModalOpen(false); };
+    const handleDelete = (id) => { if(confirm("Delete this material permanently?")) onDelete(id); };
 
     return (
         <div className="pb-24 flex flex-col h-full">
+            <div className="bg-white p-2 mb-2 rounded shadow-sm flex items-center gap-2 border">
+                <Search size={18} className="text-gray-400" />
+                <input className="w-full outline-none text-sm" placeholder="Search materials..." value={textSearch} onChange={e => setTextSearch(e.target.value)} />
+            </div>
             <div className="flex overflow-x-auto gap-2 pb-4 mb-2 hide-scrollbar">
                 {MAT_CATEGORIES.map(cat => (
                     <button key={cat} onClick={() => setActiveCat(cat)} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-colors ${activeCat === cat ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-500 border'}`}>{cat}</button>
                 ))}
             </div>
             <div className="flex-1 overflow-y-auto">
-                {filteredMaterials.length === 0 ? (<div className="text-center text-gray-400 mt-10">No materials in this category.</div>) : filteredMaterials.map(m => (
-                    <div key={m.id} className="bg-white p-4 rounded-xl shadow-sm border mb-3 flex justify-between items-center">
-                        <div><div className="font-bold text-lg text-gray-800">{m.name}</div><div className="text-xs text-gray-400">{m.category || 'Others'}</div></div>
-                        <div className="flex items-center gap-4">
-                            <span className="text-2xl font-bold text-blue-600">{m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>
-                            {!isGuest && (<div className="flex flex-col gap-1"><button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded flex items-center justify-center font-bold">+</button><button onClick={() => handleUpdate(m.id, 'sub')} className="bg-red-100 text-red-700 w-8 h-8 rounded flex items-center justify-center font-bold">-</button></div>)}
+                {filteredMaterials.length === 0 ? (<div className="text-center text-gray-400 mt-10">No materials found.</div>) : filteredMaterials.map(m => (
+                    <div key={m.id} className={`bg-white p-4 rounded-xl shadow-sm border mb-3 flex justify-between items-center ${m.stock_quantity < (m.min_level || 100) ? 'border-l-4 border-l-red-500' : ''}`}>
+                        <div>
+                            <div className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                                {m.name}
+                                {m.stock_quantity < (m.min_level || 100) && <AlertCircle size={16} className="text-red-500" />}
+                            </div>
+                            <div className="text-xs text-gray-400 flex gap-2">
+                                <span>{m.category || 'Others'}</span>
+                                <span>• Alert: &lt; {m.min_level || 100} kg</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <span className={`text-2xl font-bold ${m.stock_quantity < (m.min_level || 100) ? 'text-red-600' : 'text-blue-600'}`}>{m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>
+                            {!isGuest && (
+                                <div className="flex flex-col gap-1 items-end">
+                                    <div className="flex gap-1">
+                                        <button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded flex items-center justify-center font-bold">+</button>
+                                        <button onClick={() => handleUpdate(m.id, 'sub')} className="bg-red-100 text-red-700 w-8 h-8 rounded flex items-center justify-center font-bold">-</button>
+                                    </div>
+                                    <button onClick={() => handleDelete(m.id)} className="text-gray-300 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
@@ -679,7 +718,7 @@ const MainApp = () => {
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
-  const [isSettingsOpen, setSettingsOpen] = useState(false); // NEW STATE
+  const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
 
   const fetchDataRef = useRef();
@@ -725,19 +764,16 @@ const MainApp = () => {
   const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
   const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
-  const handleAddMaterial = async (name, category) => { await DataService.addRawMaterial(name, category); fetchData(); };
+  const handleAddMaterial = async (name, category, minLevel) => { await DataService.addRawMaterial(name, category, minLevel); fetchData(); };
+  const handleDeleteMaterial = async (id) => { await DataService.deleteRawMaterial(id); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
 
-  // --- NEW: FULL DB BACKUP ---
   const handleFullBackup = async () => {
       setLoading(true);
       try {
           const allRolls = await DataService.getStock();
           const allMats = await DataService.getRawMaterials();
-          
           const wb = XLSX.utils.book_new();
-          
-          // Sheet 1: Rolls
           const rollsData = allRolls.map(r => ({
               ID: r.product_id, Customer: r.customer_name, Quality: r.quality, Color: r.color, GSM: r.gsm, 
               Width: r.width_inches, Length: r.length_meters, Net: r.net_weight, Gross: r.gross_weight, 
@@ -746,12 +782,9 @@ const MainApp = () => {
           }));
           const wsRolls = XLSX.utils.json_to_sheet(rollsData);
           XLSX.utils.book_append_sheet(wb, wsRolls, "Rolls Database");
-
-          // Sheet 2: Materials
           const matData = allMats.map(m => ({ ID: m.id, Name: m.name, Category: m.category, Stock: m.stock_quantity }));
           const wsMat = XLSX.utils.json_to_sheet(matData);
           XLSX.utils.book_append_sheet(wb, wsMat, "Raw Materials");
-
           XLSX.writeFile(wb, `KSF_Full_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
           alert("Backup downloaded successfully!");
       } catch (e) {
@@ -775,7 +808,7 @@ const MainApp = () => {
                 {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
                 {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} />}
-                {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} />}
+                {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onDelete={handleDeleteMaterial} />}
             </>
         )}
       </main>
