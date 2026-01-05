@@ -10,7 +10,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Clock, 
   Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -176,11 +176,11 @@ const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
     );
 });
 
-// --- NEW REPORT GENERATION MODAL ---
+// --- REPORTS MODAL ---
 const ReportsModal = ({ visible, onClose, rolls }) => {
     const [reportType, setReportType] = useState('production_daily');
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-    const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+    const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); 
 
     if (!visible) return null;
 
@@ -188,7 +188,6 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
         let filteredData = [];
         let filename = "Report.xlsx";
 
-        // Filter Logic
         if (reportType === 'production_daily') {
             filteredData = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === new Date(selectedDate).toLocaleDateString());
             filename = `Production_Daily_${selectedDate}.xlsx`;
@@ -205,7 +204,6 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
             return;
         }
 
-        // Generate Excel
         const dataForExcel = filteredData.map(r => ({
             "Roll ID": r.product_id,
             "Date": new Date(r.created_at).toLocaleDateString(),
@@ -233,7 +231,6 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
                     <h2 className="text-xl font-bold flex items-center gap-2"><FileText size={22}/> Reports Center</h2>
                     <button onClick={onClose} className="bg-gray-100 p-2 rounded-full"><X size={20}/></button>
                 </div>
-
                 <div className="space-y-4">
                     <div>
                         <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Report Type</label>
@@ -243,7 +240,6 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
                             <option value="dispatch_monthly">Monthly Dispatch Report</option>
                         </select>
                     </div>
-
                     {reportType === 'production_daily' ? (
                         <div>
                             <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Select Date</label>
@@ -255,7 +251,6 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
                             <input type="month" className="w-full border p-3 rounded" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} />
                         </div>
                     )}
-
                     <button onClick={handleDownload} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 shadow mt-4">
                         <Download size={18} /> Download Excel
                     </button>
@@ -343,21 +338,17 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (SAFE 3x4 PORTRAIT) ---
+// --- UPDATED LABEL PRINT COMPONENT (Mobile Fit + Date Toggle) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const [showBrand, setShowBrand] = useState(true);
+    const [showDate, setShowDate] = useState(true); // NEW STATE
   
-    // Generate Barcode on render
     useEffect(() => {
       if (data && canvasRef.current) {
         try {
           JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128",
-            displayValue: false, 
-            height: 50,
-            width: 2,
-            margin: 0
+            format: "CODE128", displayValue: false, height: 40, width: 2, margin: 0
           });
         } catch (e) { console.error(e); }
       }
@@ -366,28 +357,24 @@ const LabelPrint = ({ data, onClose }) => {
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 print:p-0 print:bg-white print:static print:block">
         
-        {/* PRINT STYLES: Strict sizing to prevent overflow */}
+        {/* PRINT STYLES */}
         <style>
           {`
             @media print {
-              @page { size: 3in 4in; margin: 0; }
-              
-              /* Hide EVERYTHING in the body */
+              @page { size: landscape; margin: 0; }
               body, html { height: 100%; overflow: hidden; margin: 0; padding: 0; }
               body * { visibility: hidden; height: 0; }
               
-              /* Show ONLY the printable label container */
               #printable-label, #printable-label * { visibility: visible; height: auto; }
               
-              /* Position it at top-left, slightly narrower than page to avoid spillover */
               #printable-label {
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 2.8in !important;  /* Strictly less than 3in */
-                height: 3.9in !important; /* Strictly less than 4in */
-                margin-left: 0.1in;       /* Center horizontally (0.1 + 2.8 + 0.1 = 3in) */
-                margin-top: 0;
+                width: 100% !important; /* MOBILE FIX: Fill available width */
+                height: 100% !important;
+                margin: 0;
+                padding: 10px;
                 box-sizing: border-box;
                 background: white;
                 border: none; 
@@ -395,7 +382,6 @@ const LabelPrint = ({ data, onClose }) => {
                 flex-direction: column;
                 justify-content: space-between;
               }
-              
               .no-print { display: none !important; }
             }
           `}
@@ -403,85 +389,55 @@ const LabelPrint = ({ data, onClose }) => {
   
         <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none">
           
-          {/* PREVIEW HEADER with TOGGLE (Hidden on Print via 'no-print' class) */}
+          {/* HEADER CONTROLS (Hidden on Print) */}
           <div className="p-4 border-b flex flex-col gap-3 no-print">
             <div className="flex justify-between items-center">
-                <h2 className="font-bold text-lg">Label Preview (3" x 4")</h2>
+                <h2 className="font-bold text-lg">Label Preview</h2>
                 <button onClick={onClose}><X size={20}/></button>
             </div>
-            {/* The Toggle Button - Visible in App, Invisible on Paper */}
-            <div className="flex items-center justify-center bg-gray-100 p-2 rounded">
-                 <button onClick={() => setShowBrand(!showBrand)} className="flex items-center gap-2 text-sm font-bold text-gray-700">
-                    {showBrand ? <ToggleRight className="text-blue-600" size={24}/> : <ToggleLeft className="text-gray-400" size={24}/>}
-                    {showBrand ? "Brand Name: ON" : "Brand Name: OFF"}
+            {/* TOGGLES */}
+            <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setShowBrand(!showBrand)} className={`flex items-center justify-center gap-1 text-xs font-bold p-2 rounded ${showBrand ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {showBrand ? <ToggleRight size={18}/> : <ToggleLeft size={18}/>} Brand
+                </button>
+                <button onClick={() => setShowDate(!showDate)} className={`flex items-center justify-center gap-1 text-xs font-bold p-2 rounded ${showDate ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {showDate ? <Eye size={18}/> : <EyeOff size={18}/>} Date
                 </button>
             </div>
           </div>
   
-          {/* THE LABEL ITSELF - ID 'printable-label' is KEY */}
+          {/* LABEL PREVIEW */}
           <div id="printable-label" className="flex flex-col items-center text-center p-4 bg-white mx-auto" style={{ width: '280px', height: '380px', border: '1px dashed gray', padding: '10px 20px' }}>
               
-              {/* Header - Conditionally rendered based on toggle */}
               <div className="w-full border-b-2 border-black pb-2 mb-2 h-10 flex items-center justify-center">
-                  {showBrand ? (
-                      <div className="font-black text-2xl tracking-tighter uppercase">KSF NON WOVEN</div>
-                  ) : (
-                      <div className="w-full h-full"></div> 
-                  )}
+                  {showBrand ? (<div className="font-black text-2xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
               </div>
   
-              {/* Main Details Grid - ADDED PADDING to safe-guard edges */}
               <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2 px-1">
-                  <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Quality</span>
-                      <span className="font-bold text-lg leading-none">{data.quality}</span>
-                  </div>
-                  <div className="text-right">
-                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Color</span>
-                      <span className="font-bold text-lg leading-none">{data.color}</span>
-                  </div>
-                  
-                  <div className="mt-2">
-                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Size</span>
-                      <span className="font-bold text-xl leading-none">{data.width_inches}"</span>
-                  </div>
-                  <div className="text-right mt-2">
-                      <span className="text-[10px] uppercase font-bold text-gray-500 block">GSM</span>
-                      <span className="font-bold text-xl leading-none">{data.gsm}</span>
-                  </div>
+                  <div><span className="text-[10px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-lg leading-none">{data.quality}</span></div>
+                  <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-lg leading-none">{data.color}</span></div>
+                  <div className="mt-2"><span className="text-[10px] uppercase font-bold text-gray-500 block">Size</span><span className="font-bold text-xl leading-none">{data.width_inches}"</span></div>
+                  <div className="text-right mt-2"><span className="text-[10px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-xl leading-none">{data.gsm}</span></div>
               </div>
   
-              {/* Big Weight Display */}
               <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
-                  <div className="text-left">
-                      <span className="text-[10px] uppercase font-bold block">Gross Wt</span>
-                      <span className="text-sm font-bold">{data.gross_weight} kg</span>
-                  </div>
-                  <div className="text-right">
-                      <span className="text-[10px] uppercase font-bold block text-gray-500">Net Weight</span>
-                      <span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span>
-                  </div>
+                  <div className="text-left"><span className="text-[10px] uppercase font-bold block">Gross Wt</span><span className="text-sm font-bold">{data.gross_weight} kg</span></div>
+                  <div className="text-right"><span className="text-[10px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span></div>
               </div>
   
-              {/* Barcode Section */}
               <div className="flex-1 flex flex-col justify-end w-full items-center">
                   <canvas ref={canvasRef} className="max-w-full h-12 mb-1"></canvas>
                   <div className="font-mono font-bold text-xl tracking-widest">{data.product_id}</div>
-                  <div className="text-[10px] text-gray-400 mt-1">{new Date().toLocaleString()}</div>
+                  {/* DATE TOGGLE LOGIC */}
+                  {showDate && <div className="text-[10px] text-gray-400 mt-1">{new Date().toLocaleString()}</div>}
               </div>
-  
           </div>
   
-          {/* FOOTER BUTTONS (Hidden on Print via 'no-print' class) */}
+          {/* FOOTER */}
           <div className="p-4 bg-gray-50 flex gap-2 no-print">
-              <button onClick={() => window.print()} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center">
-                  <Printer size={18}/> Print Label
-              </button>
-              <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50">
-                  Close
-              </button>
+              <button onClick={() => window.print()} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center"><Printer size={18}/> Print</button>
+              <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50">Close</button>
           </div>
-  
         </div>
       </div>
     );
@@ -494,8 +450,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const today = new Date().toLocaleDateString();
     const producedToday = rolls.filter(r => new Date(r.updated_at).toLocaleDateString() === today).length;
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
-    
-    // UPDATED: Check min_level
     const lowStockMaterials = (materials || []).filter(m => m.stock_quantity < (m.min_level || 100)).sort((a,b) => a.stock_quantity - b.stock_quantity);
 
     const activeDevices = useMemo(() => {
