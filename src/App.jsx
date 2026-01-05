@@ -10,7 +10,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Clock, 
   Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -175,6 +175,95 @@ const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
         </nav>
     );
 });
+
+// --- NEW REPORT GENERATION MODAL ---
+const ReportsModal = ({ visible, onClose, rolls }) => {
+    const [reportType, setReportType] = useState('production_daily');
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+
+    if (!visible) return null;
+
+    const handleDownload = () => {
+        let filteredData = [];
+        let filename = "Report.xlsx";
+
+        // Filter Logic
+        if (reportType === 'production_daily') {
+            filteredData = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === new Date(selectedDate).toLocaleDateString());
+            filename = `Production_Daily_${selectedDate}.xlsx`;
+        } else if (reportType === 'production_monthly') {
+            filteredData = rolls.filter(r => r.created_at.startsWith(selectedMonth));
+            filename = `Production_Monthly_${selectedMonth}.xlsx`;
+        } else if (reportType === 'dispatch_monthly') {
+            filteredData = rolls.filter(r => r.status === 'dispatched' && r.dispatched_at && r.dispatched_at.startsWith(selectedMonth));
+            filename = `Dispatch_Monthly_${selectedMonth}.xlsx`;
+        }
+
+        if (filteredData.length === 0) {
+            alert("No data found for the selected period.");
+            return;
+        }
+
+        // Generate Excel
+        const dataForExcel = filteredData.map(r => ({
+            "Roll ID": r.product_id,
+            "Date": new Date(r.created_at).toLocaleDateString(),
+            "Customer": r.customer_name || '-',
+            "Quality": r.quality,
+            "Color": r.color,
+            "Size": r.width_inches,
+            "GSM": r.gsm,
+            "Net Kg": r.net_weight,
+            "Status": r.status === 'dispatched' ? 'Dispatched' : 'In Stock',
+            "Dispatch Date": r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : '-'
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(dataForExcel);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Report");
+        XLSX.writeFile(wb, filename);
+        onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-lg w-full max-w-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold flex items-center gap-2"><FileText size={22}/> Reports Center</h2>
+                    <button onClick={onClose} className="bg-gray-100 p-2 rounded-full"><X size={20}/></button>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Report Type</label>
+                        <select className="w-full border p-3 rounded bg-white" value={reportType} onChange={e => setReportType(e.target.value)}>
+                            <option value="production_daily">Daily Production Report</option>
+                            <option value="production_monthly">Monthly Production Report</option>
+                            <option value="dispatch_monthly">Monthly Dispatch Report</option>
+                        </select>
+                    </div>
+
+                    {reportType === 'production_daily' ? (
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Select Date</label>
+                            <input type="date" className="w-full border p-3 rounded" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+                        </div>
+                    ) : (
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Select Month</label>
+                            <input type="month" className="w-full border p-3 rounded" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} />
+                        </div>
+                    )}
+
+                    <button onClick={handleDownload} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 shadow mt-4">
+                        <Download size={18} /> Download Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const SettingsModal = ({ visible, onClose, onBackup }) => {
     if (!visible) return null;
@@ -775,31 +864,91 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
     );
 });
 
-const HistoryView = React.memo(({ rolls, onExport, onSelectRoll }) => {
+// --- UPDATED HISTORY VIEW (With Search & Reports) ---
+const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }) => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [searchText, setSearchText] = useState(''); // NEW: Search State
+
     const history = useMemo(() => {
         let list = (rolls || []).filter(r => r.status === 'dispatched');
+        
+        // Date Filtering
         if (startDate) list = list.filter(r => new Date(r.dispatched_at) >= new Date(startDate));
         if (endDate) list = list.filter(r => new Date(r.dispatched_at) <= new Date(endDate + 'T23:59:59'));
+        
+        // NEW: Search Filtering
+        if (searchText) {
+            const lower = searchText.toLowerCase();
+            list = list.filter(r => 
+                (r.customer_name && r.customer_name.toLowerCase().includes(lower)) ||
+                (r.product_id && r.product_id.toLowerCase().includes(lower)) ||
+                (r.quality && r.quality.toLowerCase().includes(lower))
+            );
+        }
+        
         return list;
-    }, [rolls, startDate, endDate]);
+    }, [rolls, startDate, endDate, searchText]);
+
+    const totalHistoryWeight = history.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
 
     return (
         <div className="pb-24">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="font-bold text-xl">History</h2>
-                <button onClick={() => onExport(history)} className="bg-blue-100 text-blue-700 px-3 py-1 rounded font-bold text-sm">Export List</button>
+                <div className="flex gap-2">
+                    <button onClick={onOpenReports} className="bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow">
+                        <FileText size={16}/> Reports
+                    </button>
+                    <button onClick={() => onExport(history)} className="bg-green-100 text-green-700 px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-1">
+                        <Download size={16}/> List
+                    </button>
+                </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 mb-4 bg-white p-3 rounded shadow-sm">
-                <div><label className="text-xs font-bold text-gray-400">Start Date</label><input type="date" className="w-full border p-1 rounded text-sm" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
-                <div><label className="text-xs font-bold text-gray-400">End Date</label><input type="date" className="w-full border p-1 rounded text-sm" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
+
+            {/* NEW: Search & Filter Bar */}
+            <div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3">
+                <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center">
+                    <Search className="text-gray-400" size={20} />
+                    <input 
+                        className="w-full outline-none bg-transparent text-sm" 
+                        placeholder="Search Customer, ID, or Quality..." 
+                        value={searchText} 
+                        onChange={e => setSearchText(e.target.value)} 
+                    />
+                    {searchText && <button onClick={() => setSearchText('')}><X size={16} className="text-gray-400"/></button>}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                    <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Start Date</label>
+                        <input type="date" className="w-full border p-2 rounded text-sm" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">End Date</label>
+                        <input type="date" className="w-full border p-2 rounded text-sm" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                    </div>
+                </div>
             </div>
+
+            {/* NEW: Summary Bar */}
+            <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center mb-3 text-sm border border-gray-200">
+                <span className="font-bold text-gray-600">{history.length} Rolls</span>
+                <span className="font-bold text-blue-700">{formatCurrency(totalHistoryWeight)} kg</span>
+            </div>
+
+            {/* List */}
             {history.length === 0 ? <div className="text-center text-gray-400 mt-10">No records found.</div> : 
              history.map(r => (
-                <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-3 rounded border mb-2 text-sm shadow-sm hover:bg-gray-50 cursor-pointer">
-                    <div className="flex justify-between mb-1"><span className="font-bold text-gray-800">{r.customer_name}</span><span className="text-green-600 font-bold">{r.net_weight} kg</span></div>
-                    <div className="flex justify-between text-gray-500 text-xs"><span>{r.product_id}</span><span>{new Date(r.dispatched_at).toLocaleDateString()}</span></div>
+                <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-3 rounded-xl border mb-2 text-sm shadow-sm hover:bg-gray-50 cursor-pointer">
+                    <div className="flex justify-between mb-1">
+                        <span className="font-bold text-gray-800">{r.customer_name || 'Unknown'}</span>
+                        <span className="text-green-600 font-bold">{r.net_weight} kg</span>
+                    </div>
+                    <div className="flex justify-between text-gray-500 text-xs">
+                        <span>{r.product_id} • {r.quality}</span>
+                        <span>{new Date(r.dispatched_at).toLocaleDateString()}</span>
+                    </div>
                 </div>
             ))}
         </div>
@@ -885,6 +1034,7 @@ const MainApp = () => {
   const [editRoll, setEditRoll] = useState(null);
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
+  const [isReportsOpen, setReportsOpen] = useState(false); // NEW: Report Modal State
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
 
   const fetchDataRef = useRef();
@@ -984,14 +1134,20 @@ const MainApp = () => {
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
                 {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
-                {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} />}
+                {/* Updated HistoryView passing onOpenReports */}
+                {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}
                 {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onDelete={handleDeleteMaterial} />}
             </>
         )}
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
+      
+      {/* Modals */}
       {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
       {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}
+      {/* New Reports Modal */}
+      {isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(false)} rolls={rolls} />}
+      
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
       {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
