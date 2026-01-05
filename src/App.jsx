@@ -10,7 +10,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Clock, 
   Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -616,7 +616,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
 
 const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
     const [scanId, setScanId] = useState('');
-    const [foundRoll, setFoundRoll] = useState(null);
+    const [reviewData, setReviewData] = useState(null); // UPDATED: Holds data for review popup
     const [isScanning, setIsScanning] = useState(false);
     const [sessionList, setSessionList] = useState(() => safeJSONParse('ksf_dispatch_list_v10', []));
     const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer_v10') || '');
@@ -633,19 +633,26 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
         const roll = (rolls || []).find(r => r.product_id === query && r.status === 'in_stock');
         if (roll) { 
             if(sessionList.some(r => r.id === roll.id)) { alert("This roll is already in the dispatch list!"); setScanId(''); return; }
-            setFoundRoll(roll); 
+            setReviewData(roll); // UPDATED: Trigger review popup instead of simple found state
         } else { alert('Roll not found or already dispatched.'); }
         setScanId('');
     };
 
-    const handleAdd = async () => {
-        await onDispatch(foundRoll.id);
-        setSessionList(prev => [foundRoll, ...prev]);
-        setFoundRoll(null);
+    // UPDATED: New function to handle saving edits + dispatching
+    const handleConfirmDispatch = async () => {
+        if (!reviewData) return;
+        
+        // 1. Update the roll in DB (Save edits + Set Status)
+        await onDispatch(reviewData); 
+        
+        // 2. Add the *updated* data to the session list
+        setSessionList(prev => [reviewData, ...prev]);
+        setReviewData(null);
     };
 
     const handleRemoveFromManifest = async (index, item) => {
         if(confirm("Remove this roll from dispatch and return to stock?")) {
+            // Need to pass the ID to undo
             await onUndoDispatch(item.id); 
             const newList = [...sessionList];
             newList.splice(index, 1);
@@ -669,7 +676,9 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
                     <input className="w-full p-2 rounded text-black text-sm" placeholder="Vehicle No" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
                 </div>
             </div>
-            {!foundRoll && (
+            
+            {/* SEARCH BOX */}
+            {!reviewData && (
                 <div className="bg-white p-6 rounded-xl shadow-sm border text-center">
                     <div className="flex gap-2 mb-4">
                         <input className="flex-1 border-2 border-gray-200 p-3 rounded-lg text-center text-lg font-mono tracking-wider focus:border-blue-500 outline-none" placeholder="Enter / Scan ID" value={scanId} onChange={e => setScanId(e.target.value)} />
@@ -678,17 +687,64 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
                     <button onClick={() => handleSearch()} className="bg-blue-600 text-white w-full py-4 rounded-lg font-bold shadow-lg shadow-blue-200">Search Roll</button>
                 </div>
             )}
-            {foundRoll && (
-                <div className="bg-green-50 p-6 rounded-xl border-2 border-green-500 animate-in fade-in zoom-in duration-300">
-                    <div className="flex justify-center mb-2"><CheckCircle className="text-green-600" size={40} /></div>
-                    <div className="font-bold text-2xl text-green-800 text-center mb-1">{foundRoll.product_id}</div>
-                    <div className="text-center mb-6 text-gray-600">{foundRoll.quality} • {foundRoll.net_weight}kg</div>
-                    <div className="flex gap-3">
-                        <button onClick={() => setFoundRoll(null)} className="flex-1 bg-white border border-gray-300 py-3 rounded-lg font-bold text-gray-500">Cancel</button>
-                        <button onClick={handleAdd} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold shadow-lg shadow-green-200">Confirm Add</button>
+
+            {/* UPDATED: REVIEW & EDIT POPUP */}
+            {reviewData && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white p-6 rounded-xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4 border-b pb-2">
+                            <h3 className="font-bold text-lg flex items-center gap-2 text-blue-600"><Edit3 size={18}/> Verify & Dispatch</h3>
+                            <button onClick={() => setReviewData(null)} className="bg-gray-100 p-1 rounded-full"><X size={20}/></button>
+                        </div>
+                        
+                        <div className="bg-blue-50 p-3 rounded text-center mb-4 border border-blue-100">
+                            <div className="text-xs font-bold text-blue-400 uppercase">Roll ID</div>
+                            <div className="text-xl font-black text-blue-800 tracking-widest">{reviewData.product_id}</div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 mb-6">
+                            <div className="col-span-2">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">Customer</label>
+                                <input className="w-full border p-2 rounded bg-gray-50" value={reviewData.customer_name} onChange={e => setReviewData({...reviewData, customer_name: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">Quality</label>
+                                <select className="w-full border p-2 rounded bg-white text-sm" value={reviewData.quality} onChange={e => setReviewData({...reviewData, quality: e.target.value})}>
+                                    {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">Color</label>
+                                <select className="w-full border p-2 rounded bg-white text-sm" value={reviewData.color} onChange={e => setReviewData({...reviewData, color: e.target.value})}>
+                                    {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">GSM</label>
+                                <input type="number" className="w-full border p-2 rounded" value={reviewData.gsm} onChange={e => setReviewData({...reviewData, gsm: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">Size (in)</label>
+                                <input type="number" className="w-full border p-2 rounded" value={reviewData.width_inches} onChange={e => setReviewData({...reviewData, width_inches: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">Net Kg</label>
+                                <input type="number" className="w-full border-2 border-green-500 p-2 rounded font-bold text-green-700" value={reviewData.net_weight} onChange={e => setReviewData({...reviewData, net_weight: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">Gross Kg</label>
+                                <input type="number" className="w-full border p-2 rounded" value={reviewData.gross_weight} onChange={e => setReviewData({...reviewData, gross_weight: e.target.value})} />
+                            </div>
+                        </div>
+
+                        <button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg shadow-green-200 flex items-center justify-center gap-2">
+                            <CheckCircle size={20}/> Confirm & Add
+                        </button>
                     </div>
                 </div>
             )}
+
+            {/* UPDATED: MANIFEST TABLE with DETAILS */}
             {sessionList.length > 0 && (
                 <div className="bg-white rounded-xl shadow border overflow-hidden">
                     <div className="p-3 bg-gray-50 border-b flex justify-between font-bold text-gray-500 text-sm">
@@ -697,8 +753,17 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
                     </div>
                     {sessionList.map((item, i) => (
                         <div key={i} className="p-3 border-b flex justify-between items-center last:border-0 hover:bg-gray-50">
-                            <div><div className="font-mono text-gray-600 text-sm">{item.product_id}</div><div className="font-bold">{item.net_weight}kg</div></div>
-                            <button onClick={() => handleRemoveFromManifest(i, item)} className="bg-red-50 text-red-600 p-2 rounded-full hover:bg-red-100 border border-red-200"><Trash2 size={18} /></button>
+                            <div>
+                                <div className="font-mono text-gray-800 font-bold">{item.product_id}</div>
+                                {/* Added Detailed Line */}
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                    {item.quality} • {item.color} • {item.gsm} GSM • {item.width_inches}"
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="font-bold text-lg">{item.net_weight} <span className="text-xs font-normal text-gray-400">kg</span></div>
+                                <button onClick={() => handleRemoveFromManifest(i, item)} className="text-xs text-red-500 border border-red-100 bg-red-50 px-2 py-1 rounded mt-1">Remove</button>
+                            </div>
                         </div>
                     ))}
                     <div className="p-4">
@@ -860,7 +925,17 @@ const MainApp = () => {
       } catch (err) { alert('Error: ' + err.message); } 
   };
   
-  const handleDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
+  // UPDATED: handleDispatch now accepts an entire roll object (with potential edits)
+  const handleDispatch = useCallback(async (rollData) => { 
+      // Save updates AND set status to dispatched
+      await DataService.updateRoll(rollData.id, { 
+          ...rollData, 
+          status: 'dispatched', 
+          dispatched_at: new Date() 
+      }, deviceName); 
+      fetchData(true); 
+  }, [deviceName, fetchData]);
+
   const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
   const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
   const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
