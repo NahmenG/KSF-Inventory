@@ -338,7 +338,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- RESTORED LABEL PRINT (PORTRAIT 3x4 FIXED) ---
+// --- RESTORED LABEL PRINT (PORTRAIT 3x4 FIXED + REMOVED HEADERS) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const [showBrand, setShowBrand] = useState(true);
@@ -357,11 +357,12 @@ const LabelPrint = ({ data, onClose }) => {
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 print:p-0 print:bg-white print:static print:block">
         
-        {/* PRINT STYLES: FIXED PORTRAIT 3x4 */}
+        {/* PRINT STYLES: FIXED PORTRAIT 3x4 + NO HEADERS */}
         <style>
           {`
             @media print {
-              @page { size: 3in 4in; margin: 0; }
+              /* Ensure the page itself has 0 margin to hide browser headers */
+              @page { size: 3in 4in; margin: 0mm; }
               
               body, html { height: 100%; overflow: hidden; margin: 0; padding: 0; }
               body * { visibility: hidden; height: 0; }
@@ -433,7 +434,7 @@ const LabelPrint = ({ data, onClose }) => {
               <div className="flex-1 flex flex-col justify-end w-full items-center">
                   <canvas ref={canvasRef} className="max-w-full h-12 mb-1"></canvas>
                   <div className="font-mono font-bold text-xl tracking-widest">{data.product_id}</div>
-                  {showDate && <div className="text-[10px] text-gray-400 mt-1">{new Date().toLocaleString()}</div>}
+                  {showDate && <div className="text-[10px] text-gray-400 mt-1">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>}
               </div>
           </div>
   
