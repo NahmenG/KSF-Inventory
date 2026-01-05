@@ -254,7 +254,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- RESTORED LABEL PRINT (3x4 Portrait + Clean Print) ---
+// --- UPDATED LABEL PRINT COMPONENT (SAFE 3x4 PORTRAIT) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const [showBrand, setShowBrand] = useState(true);
@@ -277,30 +277,34 @@ const LabelPrint = ({ data, onClose }) => {
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 print:p-0 print:bg-white print:static print:block">
         
-        {/* PRINT STYLES: 3x4 inch PORTRAIT + Nuclear Clean Print */}
+        {/* PRINT STYLES: Strict sizing to prevent overflow */}
         <style>
           {`
             @media print {
               @page { size: 3in 4in; margin: 0; }
               
               /* Hide EVERYTHING in the body */
-              body * { visibility: hidden; }
+              body, html { height: 100%; overflow: hidden; margin: 0; padding: 0; }
+              body * { visibility: hidden; height: 0; }
               
               /* Show ONLY the printable label container */
-              #printable-label, #printable-label * { visibility: visible; }
+              #printable-label, #printable-label * { visibility: visible; height: auto; }
               
-              /* Position it at top-left for the printer */
+              /* Position it at top-left, slightly narrower than page to avoid spillover */
               #printable-label {
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 3in;
-                height: 4in;
-                margin: 0;
-                padding: 10px;
+                width: 2.8in !important;  /* Strictly less than 3in */
+                height: 3.9in !important; /* Strictly less than 4in */
+                margin-left: 0.1in;       /* Center horizontally (0.1 + 2.8 + 0.1 = 3in) */
+                margin-top: 0;
                 box-sizing: border-box;
                 background: white;
-                border: none; /* Remove border on print */
+                border: none; 
+                display: flex !important;
+                flex-direction: column;
+                justify-content: space-between;
               }
               
               .no-print { display: none !important; }
@@ -326,7 +330,7 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
   
           {/* THE LABEL ITSELF - ID 'printable-label' is KEY */}
-          <div id="printable-label" className="flex flex-col items-center text-center p-4 bg-white mx-auto" style={{ width: '300px', height: '400px', border: '1px dashed gray' }}>
+          <div id="printable-label" className="flex flex-col items-center text-center p-4 bg-white mx-auto" style={{ width: '280px', height: '380px', border: '1px dashed gray', padding: '10px 20px' }}>
               
               {/* Header - Conditionally rendered based on toggle */}
               <div className="w-full border-b-2 border-black pb-2 mb-2 h-10 flex items-center justify-center">
@@ -337,8 +341,8 @@ const LabelPrint = ({ data, onClose }) => {
                   )}
               </div>
   
-              {/* Main Details Grid */}
-              <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2">
+              {/* Main Details Grid - ADDED PADDING to safe-guard edges */}
+              <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2 px-1">
                   <div>
                       <span className="text-[10px] uppercase font-bold text-gray-500 block">Quality</span>
                       <span className="font-bold text-lg leading-none">{data.quality}</span>
@@ -359,7 +363,7 @@ const LabelPrint = ({ data, onClose }) => {
               </div>
   
               {/* Big Weight Display */}
-              <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end">
+              <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
                   <div className="text-left">
                       <span className="text-[10px] uppercase font-bold block">Gross Wt</span>
                       <span className="text-sm font-bold">{data.gross_weight} kg</span>
