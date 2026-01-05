@@ -8,9 +8,9 @@ import {
 } from 'recharts';
 import { 
   Package, Truck, Layers, LogOut, Printer, Search, 
-  Download, Database, Calendar, Clock, 
-  Pencil, Trash2, X, Camera, Smartphone, Activity, Eye, FileText, CheckCircle, Filter, Undo2, ToggleLeft, ToggleRight, Plus,
-  AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle
+  Download, Database, Clock, 
+  Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -130,7 +130,7 @@ const generateChallanExcel = (rolls, details) => {
 // --- COMPONENTS ---
 
 const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings }) => (
-  <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center">
+  <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center print:hidden">
       <div className="flex items-center pl-1">
          <img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" />
       </div>
@@ -161,7 +161,7 @@ const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
     ].filter(Boolean);
 
     return (
-        <nav className="bg-white border-t border-gray-200 fixed bottom-0 w-full z-50 h-16 flex justify-around items-center pb-1 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <nav className="bg-white border-t border-gray-200 fixed bottom-0 w-full z-50 h-16 flex justify-around items-center pb-1 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] print:hidden">
             {tabs.map(tab => (
                 <button 
                     key={tab.id} 
@@ -254,39 +254,137 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
+// --- UPDATED LABEL PRINT COMPONENT (3x4 Inch + Hidden Toggle) ---
 const LabelPrint = ({ data, onClose }) => {
-  const canvasRef = useRef(null);
-  const [showBrand, setShowBrand] = useState(true);
-  useEffect(() => {
-      if (data && canvasRef.current) try { JsBarcode(canvasRef.current, data.product_id, { format: "CODE128", displayValue: false }); } catch (e) {}
-  }, [data]);
-  return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white p-4 rounded-lg w-full max-w-md text-center">
-        <h2 className="font-bold mb-4">Label Preview</h2>
-        <div className="flex items-center justify-center gap-2 mb-4">
-            <button onClick={() => setShowBrand(!showBrand)} className="flex items-center gap-2 text-sm font-bold text-gray-600">
-                {showBrand ? <ToggleRight className="text-blue-600" size={30}/> : <ToggleLeft className="text-gray-400" size={30}/>}
-                Show Brand Header
-            </button>
-        </div>
-        <div className="border-2 border-black p-4 text-left font-mono text-sm mb-4 bg-white">
-            {showBrand && <div className="font-bold text-center text-lg mb-2">KSF NON WOVEN</div>}
-            <div className="grid grid-cols-2 gap-2 text-base">
-                <div>Q: {data.quality}</div><div>GSM: {data.gsm}</div>
-                <div>Col: {data.color}</div><div>Sz: {data.width_inches} in</div>
-                <div>Net: {data.net_weight}kg</div><div>Gr: {data.gross_weight}kg</div>
+    const canvasRef = useRef(null);
+    const [showBrand, setShowBrand] = useState(true);
+  
+    // Generate Barcode on render
+    useEffect(() => {
+      if (data && canvasRef.current) {
+        try {
+          JsBarcode(canvasRef.current, data.product_id, {
+            format: "CODE128",
+            displayValue: false, 
+            height: 50,
+            width: 2,
+            margin: 0
+          });
+        } catch (e) { console.error(e); }
+      }
+    }, [data]);
+  
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 print:p-0 print:bg-white print:static print:block">
+        
+        {/* PRINT STYLES: 3x4 inch sizing */}
+        <style>
+          {`
+            @media print {
+              @page { size: 3in 4in; margin: 0; }
+              body { margin: 0; padding: 0; }
+              .no-print { display: none !important; }
+              .print-container {
+                width: 3in;
+                height: 4in;
+                position: absolute;
+                top: 0;
+                left: 0;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                padding: 10px;
+                box-sizing: border-box;
+                background: white;
+              }
+            }
+          `}
+        </style>
+  
+        <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none">
+          
+          {/* PREVIEW HEADER with TOGGLE (Hidden on Print via 'no-print' class) */}
+          <div className="p-4 border-b flex flex-col gap-3 no-print">
+            <div className="flex justify-between items-center">
+                <h2 className="font-bold text-lg">Label Preview (3" x 4")</h2>
+                <button onClick={onClose}><X size={20}/></button>
             </div>
-            <div className="flex justify-center mt-4"><canvas ref={canvasRef} className="w-full h-16"></canvas></div>
-            <div className="text-center font-bold text-lg">{data.product_id}</div>
-        </div>
-        <div className="flex gap-2">
-            <button onClick={() => window.print()} className="flex-1 bg-blue-600 text-white p-3 rounded font-bold">Print</button>
-            <button onClick={onClose} className="flex-1 bg-gray-200 p-3 rounded font-bold">Close</button>
+            {/* The Toggle Button - Visible in App, Invisible on Paper */}
+            <div className="flex items-center justify-center bg-gray-100 p-2 rounded">
+                 <button onClick={() => setShowBrand(!showBrand)} className="flex items-center gap-2 text-sm font-bold text-gray-700">
+                    {showBrand ? <ToggleRight className="text-blue-600" size={24}/> : <ToggleLeft className="text-gray-400" size={24}/>}
+                    {showBrand ? "Brand Name: ON" : "Brand Name: OFF"}
+                </button>
+            </div>
+          </div>
+  
+          {/* THE LABEL ITSELF */}
+          <div className="print-container flex flex-col items-center text-center p-4 bg-white mx-auto" style={{ width: '300px', height: '400px', border: '1px dashed gray' }}>
+              
+              {/* Header - Conditionally rendered based on toggle */}
+              <div className="w-full border-b-2 border-black pb-2 mb-2 h-10 flex items-center justify-center">
+                  {showBrand ? (
+                      <div className="font-black text-2xl tracking-tighter uppercase">KSF NON WOVEN</div>
+                  ) : (
+                      <div className="w-full h-full"></div> // Empty space to keep layout stable
+                  )}
+              </div>
+  
+              {/* Main Details Grid */}
+              <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2">
+                  <div>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Quality</span>
+                      <span className="font-bold text-lg leading-none">{data.quality}</span>
+                  </div>
+                  <div className="text-right">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Color</span>
+                      <span className="font-bold text-lg leading-none">{data.color}</span>
+                  </div>
+                  
+                  <div className="mt-2">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Size</span>
+                      <span className="font-bold text-xl leading-none">{data.width_inches}"</span>
+                  </div>
+                  <div className="text-right mt-2">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">GSM</span>
+                      <span className="font-bold text-xl leading-none">{data.gsm}</span>
+                  </div>
+              </div>
+  
+              {/* Big Weight Display */}
+              <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end">
+                  <div className="text-left">
+                      <span className="text-[10px] uppercase font-bold block">Gross Wt</span>
+                      <span className="text-sm font-bold">{data.gross_weight} kg</span>
+                  </div>
+                  <div className="text-right">
+                      <span className="text-[10px] uppercase font-bold block text-gray-500">Net Weight</span>
+                      <span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span>
+                  </div>
+              </div>
+  
+              {/* Barcode Section */}
+              <div className="flex-1 flex flex-col justify-end w-full items-center">
+                  <canvas ref={canvasRef} className="max-w-full h-12 mb-1"></canvas>
+                  <div className="font-mono font-bold text-xl tracking-widest">{data.product_id}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">{new Date().toLocaleString()}</div>
+              </div>
+  
+          </div>
+  
+          {/* FOOTER BUTTONS (Hidden on Print via 'no-print' class) */}
+          <div className="p-4 bg-gray-50 flex gap-2 no-print">
+              <button onClick={() => window.print()} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center">
+                  <Printer size={18}/> Print Label
+              </button>
+              <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50">
+                  Close
+              </button>
+          </div>
+  
         </div>
       </div>
-    </div>
-  );
+    );
 };
 
 // --- DASHBOARD VIEW ---
@@ -673,7 +771,7 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onDelet
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
-                            <span className={`text-2xl font-bold ${m.stock_quantity < (m.min_level || 100) ? 'text-red-600' : 'text-blue-600'}`}>{m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>
+                            <span className={`text-2xl font-bold ${m.stock_quantity < (m.min_level || 100) ? 'text-red-600' : 'text-blue-600'}`}>{m.stock_quantity < 0 ? 0 : m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>
                             {!isGuest && (
                                 <div className="flex flex-col gap-1 items-end">
                                     <div className="flex gap-1">
