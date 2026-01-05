@@ -338,11 +338,11 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (Mobile Fit + Date Toggle) ---
+// --- RESTORED LABEL PRINT (3x4 FIXED LANDSCAPE + TOGGLES) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const [showBrand, setShowBrand] = useState(true);
-    const [showDate, setShowDate] = useState(true); // NEW STATE
+    const [showDate, setShowDate] = useState(true); // TOGGLE 2
   
     useEffect(() => {
       if (data && canvasRef.current) {
@@ -357,22 +357,25 @@ const LabelPrint = ({ data, onClose }) => {
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 print:p-0 print:bg-white print:static print:block">
         
-        {/* PRINT STYLES */}
+        {/* PRINT STYLES: 4x3 inch LANDSCAPE (3x4 Sideways) */}
         <style>
           {`
             @media print {
               @page { size: landscape; margin: 0; }
-              body, html { height: 100%; overflow: hidden; margin: 0; padding: 0; }
-              body * { visibility: hidden; height: 0; }
               
-              #printable-label, #printable-label * { visibility: visible; height: auto; }
+              /* Hide EVERYTHING in the body */
+              body * { visibility: hidden; }
               
+              /* Show ONLY the printable label container */
+              #printable-label, #printable-label * { visibility: visible; }
+              
+              /* Position it at top-left for the printer */
               #printable-label {
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 100% !important; /* MOBILE FIX: Fill available width */
-                height: 100% !important;
+                width: 4in !important;   /* FIXED 4 inch width */
+                height: 3in !important;  /* FIXED 3 inch height */
                 margin: 0;
                 padding: 10px;
                 box-sizing: border-box;
@@ -382,17 +385,18 @@ const LabelPrint = ({ data, onClose }) => {
                 flex-direction: column;
                 justify-content: space-between;
               }
+              
               .no-print { display: none !important; }
             }
           `}
         </style>
   
-        <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none">
+        <div className="bg-white rounded-lg w-full max-w-md overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none">
           
           {/* HEADER CONTROLS (Hidden on Print) */}
           <div className="p-4 border-b flex flex-col gap-3 no-print">
             <div className="flex justify-between items-center">
-                <h2 className="font-bold text-lg">Label Preview</h2>
+                <h2 className="font-bold text-lg">Preview (Sideways 4" x 3")</h2>
                 <button onClick={onClose}><X size={20}/></button>
             </div>
             {/* TOGGLES */}
@@ -406,30 +410,33 @@ const LabelPrint = ({ data, onClose }) => {
             </div>
           </div>
   
-          {/* LABEL PREVIEW */}
-          <div id="printable-label" className="flex flex-col items-center text-center p-4 bg-white mx-auto" style={{ width: '280px', height: '380px', border: '1px dashed gray', padding: '10px 20px' }}>
+          {/* THE LABEL ITSELF - ID 'printable-label' is KEY */}
+          <div id="printable-label" className="flex flex-col items-center text-center p-4 bg-white mx-auto relative" style={{ width: '400px', height: '300px', border: '1px dashed gray' }}>
               
-              <div className="w-full border-b-2 border-black pb-2 mb-2 h-10 flex items-center justify-center">
-                  {showBrand ? (<div className="font-black text-2xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
+              {/* Header */}
+              <div className="w-full border-b-2 border-black pb-1 mb-1 h-8 flex items-center justify-center">
+                  {showBrand ? <div className="font-black text-2xl tracking-tighter uppercase">KSF NON WOVEN</div> : <div className="w-full h-full"></div>}
               </div>
   
-              <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2 px-1">
+              {/* Details */}
+              <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-1">
                   <div><span className="text-[10px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-lg leading-none">{data.quality}</span></div>
                   <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-lg leading-none">{data.color}</span></div>
-                  <div className="mt-2"><span className="text-[10px] uppercase font-bold text-gray-500 block">Size</span><span className="font-bold text-xl leading-none">{data.width_inches}"</span></div>
-                  <div className="text-right mt-2"><span className="text-[10px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-xl leading-none">{data.gsm}</span></div>
+                  <div className="mt-1"><span className="text-[10px] uppercase font-bold text-gray-500 block">Size</span><span className="font-bold text-xl leading-none">{data.width_inches}"</span></div>
+                  <div className="text-right mt-1"><span className="text-[10px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-xl leading-none">{data.gsm}</span></div>
               </div>
   
-              <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
+              {/* Weight */}
+              <div className="w-full border-y-2 border-black py-1 my-1 flex justify-between items-end">
                   <div className="text-left"><span className="text-[10px] uppercase font-bold block">Gross Wt</span><span className="text-sm font-bold">{data.gross_weight} kg</span></div>
-                  <div className="text-right"><span className="text-[10px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span></div>
+                  <div className="text-right"><span className="text-[10px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-xl">kg</span></span></div>
               </div>
   
+              {/* Barcode */}
               <div className="flex-1 flex flex-col justify-end w-full items-center">
-                  <canvas ref={canvasRef} className="max-w-full h-12 mb-1"></canvas>
-                  <div className="font-mono font-bold text-xl tracking-widest">{data.product_id}</div>
-                  {/* DATE TOGGLE LOGIC */}
-                  {showDate && <div className="text-[10px] text-gray-400 mt-1">{new Date().toLocaleString()}</div>}
+                  <canvas ref={canvasRef} className="max-w-full h-10 mb-1"></canvas>
+                  <div className="font-mono font-bold text-lg tracking-widest leading-none">{data.product_id}</div>
+                  {showDate && <div className="text-[9px] text-gray-400">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>}
               </div>
           </div>
   
