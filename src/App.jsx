@@ -579,7 +579,8 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                   </div>
               ))}
           </div>
-          <div className="fixed bottom-20 left-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-xl flex justify-between items-center z-40 max-w-7xl mx-auto">
+          {/* --- ADDED print:hidden HERE to prevent sticky footer from appearing on labels --- */}
+          <div className="fixed bottom-20 left-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-xl flex justify-between items-center z-40 max-w-7xl mx-auto print:hidden">
              <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
              <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-xl text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
           </div>
