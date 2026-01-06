@@ -338,7 +338,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- RESTORED LABEL PRINT (PORTRAIT 3x4 FIXED + REMOVED HEADERS) ---
+// --- UPDATED LABEL PRINT COMPONENT (STRICT 62mm WIDTH) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const [showBrand, setShowBrand] = useState(true);
@@ -357,12 +357,12 @@ const LabelPrint = ({ data, onClose }) => {
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 print:p-0 print:bg-white print:static print:block">
         
-        {/* PRINT STYLES: FIXED PORTRAIT 3x4 + NO HEADERS */}
+        {/* PRINT STYLES: FORCED 2.4 INCH WIDTH (62mm) */}
         <style>
           {`
             @media print {
-              /* Ensure the page itself has 0 margin to hide browser headers */
-              @page { size: 3in 4in; margin: 0mm; }
+              /* FORCE the printer to recognize the page size as 62mm x 100mm */
+              @page { size: 62mm 100mm; margin: 0mm; }
               
               body, html { height: 100%; overflow: hidden; margin: 0; padding: 0; }
               body * { visibility: hidden; height: 0; }
@@ -374,11 +374,11 @@ const LabelPrint = ({ data, onClose }) => {
                 position: fixed;
                 top: 0;
                 left: 0;
-                /* Strictly slightly less than 3in to prevent overflow/extra pages */
-                width: 2.9in !important; 
-                height: 3.9in !important;
+                /* MAX WIDTH for Brother QL-810W is 2.4in / 62mm */
+                width: 60mm !important; 
+                height: 98mm !important;
                 margin: 0;
-                padding: 10px;
+                padding: 5px;
                 box-sizing: border-box;
                 background: white;
                 border: none; 
@@ -398,7 +398,7 @@ const LabelPrint = ({ data, onClose }) => {
           {/* HEADER CONTROLS (Hidden on Print) */}
           <div className="p-4 border-b flex flex-col gap-3 no-print">
             <div className="flex justify-between items-center">
-                <h2 className="font-bold text-lg">Label Preview (3" x 4")</h2>
+                <h2 className="font-bold text-lg">Label Preview</h2>
                 <button onClick={onClose}><X size={20}/></button>
             </div>
             {/* TOGGLES */}
@@ -412,29 +412,29 @@ const LabelPrint = ({ data, onClose }) => {
             </div>
           </div>
   
-          {/* THE LABEL ITSELF - PORTRAIT LAYOUT */}
-          <div id="printable-label" className="flex flex-col items-center text-center p-4 bg-white mx-auto" style={{ width: '280px', height: '380px', border: '1px dashed gray', padding: '10px 20px' }}>
+          {/* THE LABEL ITSELF - 2.4" WIDTH (62mm) */}
+          <div id="printable-label" className="flex flex-col items-center text-center bg-white mx-auto" style={{ width: '230px', height: '380px', border: '1px dashed gray', padding: '5px' }}>
               
               <div className="w-full border-b-2 border-black pb-2 mb-2 h-10 flex items-center justify-center">
-                  {showBrand ? (<div className="font-black text-2xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
+                  {showBrand ? (<div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
               </div>
   
               <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2 px-1">
-                  <div><span className="text-[10px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-lg leading-none">{data.quality}</span></div>
-                  <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-lg leading-none">{data.color}</span></div>
-                  <div className="mt-2"><span className="text-[10px] uppercase font-bold text-gray-500 block">Size</span><span className="font-bold text-xl leading-none">{data.width_inches}"</span></div>
-                  <div className="text-right mt-2"><span className="text-[10px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-xl leading-none">{data.gsm}</span></div>
+                  <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-base leading-none">{data.quality}</span></div>
+                  <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-base leading-none">{data.color}</span></div>
+                  <div className="mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Size</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
+                  <div className="text-right mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-lg leading-none">{data.gsm}</span></div>
               </div>
   
               <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
-                  <div className="text-left"><span className="text-[10px] uppercase font-bold block">Gross Wt</span><span className="text-sm font-bold">{data.gross_weight} kg</span></div>
-                  <div className="text-right"><span className="text-[10px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span></div>
+                  <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
+                  <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-3xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
               </div>
   
               <div className="flex-1 flex flex-col justify-end w-full items-center">
-                  <canvas ref={canvasRef} className="max-w-full h-12 mb-1"></canvas>
-                  <div className="font-mono font-bold text-xl tracking-widest">{data.product_id}</div>
-                  {showDate && <div className="text-[10px] text-gray-400 mt-1">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>}
+                  <canvas ref={canvasRef} className="max-w-full h-10 mb-1"></canvas>
+                  <div className="font-mono font-bold text-lg tracking-widest">{data.product_id}</div>
+                  {showDate && <div className="text-[9px] text-gray-400 mt-1">{new Date().toLocaleString()}</div>}
               </div>
           </div>
   
