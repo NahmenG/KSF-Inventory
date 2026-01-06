@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import JsBarcode from 'jsbarcode';
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf'; // NEW IMPORT
+import html2canvas from 'html2canvas'; // NEW IMPORT
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList 
 } from 'recharts';
@@ -338,11 +340,13 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (STRICT 62mm WIDTH) ---
+// --- UPDATED LABEL PRINT COMPONENT (USES PDF GENERATION) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
+    const labelRef = useRef(null); // Ref to capture the label div
     const [showBrand, setShowBrand] = useState(true);
     const [showDate, setShowDate] = useState(true);
+    const [isGenerating, setIsGenerating] = useState(false);
   
     useEffect(() => {
       if (data && canvasRef.current) {
@@ -354,49 +358,47 @@ const LabelPrint = ({ data, onClose }) => {
       }
     }, [data]);
   
-    return (
-      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 print:p-0 print:bg-white print:static print:block">
-        
-        {/* PRINT STYLES: FORCED 2.4 INCH WIDTH (62mm) */}
-        <style>
-          {`
-            @media print {
-              /* FORCE the printer to recognize the page size as 62mm x 100mm */
-              @page { size: 62mm 100mm; margin: 0mm; }
-              
-              body, html { height: 100%; overflow: hidden; margin: 0; padding: 0; }
-              body * { visibility: hidden; height: 0; }
-              
-              /* Only show printable label */
-              #printable-label, #printable-label * { visibility: visible; height: auto; }
-              
-              #printable-label {
-                position: fixed;
-                top: 0;
-                left: 0;
-                /* MAX WIDTH for Brother QL-810W is 2.4in / 62mm */
-                width: 60mm !important; 
-                height: 98mm !important;
-                margin: 0;
-                padding: 5px;
-                box-sizing: border-box;
-                background: white;
-                border: none; 
-                display: flex !important;
-                flex-direction: column;
-                justify-content: space-between;
-                z-index: 9999;
-                overflow: hidden;
-              }
-              .no-print { display: none !important; }
-            }
-          `}
-        </style>
+    const handleDownloadPDF = async () => {
+        if (!labelRef.current) return;
+        setIsGenerating(true);
+
+        try {
+            // 1. Capture the label as a high-quality image
+            const canvas = await html2canvas(labelRef.current, {
+                scale: 4, // Higher scale = sharper text
+                useCORS: true,
+                backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+
+            // 2. Create PDF with exact dimensions: 2.4in x 3.9in
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'in',
+                format: [2.4, 3.9] 
+            });
+
+            // 3. Add image to PDF (0 margins)
+            pdf.addImage(imgData, 'PNG', 0, 0, 2.4, 3.9);
+
+            // 4. Save and Download
+            pdf.save(`Label-${data.product_id}.pdf`);
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+            alert("Failed to generate PDF. Please try again.");
+        } finally {
+            setIsGenerating(false);
+        }
+    };
   
-        <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none">
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
+        
+        <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden flex flex-col max-h-screen">
           
-          {/* HEADER CONTROLS (Hidden on Print) */}
-          <div className="p-4 border-b flex flex-col gap-3 no-print">
+          {/* HEADER CONTROLS */}
+          <div className="p-4 border-b flex flex-col gap-3">
             <div className="flex justify-between items-center">
                 <h2 className="font-bold text-lg">Label Preview</h2>
                 <button onClick={onClose}><X size={20}/></button>
@@ -412,35 +414,54 @@ const LabelPrint = ({ data, onClose }) => {
             </div>
           </div>
   
-          {/* THE LABEL ITSELF - 2.4" WIDTH (62mm) */}
-          <div id="printable-label" className="flex flex-col items-center text-center bg-white mx-auto" style={{ width: '230px', height: '380px', border: '1px dashed gray', padding: '5px' }}>
-              
-              <div className="w-full border-b-2 border-black pb-2 mb-2 h-10 flex items-center justify-center">
-                  {showBrand ? (<div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
-              </div>
+          {/* SCROLLABLE AREA FOR THE LABEL */}
+          <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
+              {/* THE LABEL ITSELF - 2.4" WIDTH (62mm) */}
+              {/* using ref={labelRef} for html2canvas to capture */}
+              <div 
+                ref={labelRef} 
+                className="flex flex-col items-center text-center bg-white shadow-xl" 
+                style={{ 
+                    width: '2.4in', 
+                    height: '3.9in', 
+                    padding: '0.15in',
+                    boxSizing: 'border-box'
+                }}
+              >
+                  
+                  <div className="w-full border-b-2 border-black pb-2 mb-2 h-10 flex items-center justify-center">
+                      {showBrand ? (<div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
+                  </div>
   
-              <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2 px-1">
-                  <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-base leading-none">{data.quality}</span></div>
-                  <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-base leading-none">{data.color}</span></div>
-                  <div className="mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Size</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
-                  <div className="text-right mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-lg leading-none">{data.gsm}</span></div>
-              </div>
+                  <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2 px-1">
+                      <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-base leading-none">{data.quality}</span></div>
+                      <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-base leading-none">{data.color}</span></div>
+                      <div className="mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Size</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
+                      <div className="text-right mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-lg leading-none">{data.gsm}</span></div>
+                  </div>
   
-              <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
-                  <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
-                  <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-3xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
-              </div>
+                  <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
+                      <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
+                      <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-3xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
+                  </div>
   
-              <div className="flex-1 flex flex-col justify-end w-full items-center">
-                  <canvas ref={canvasRef} className="max-w-full h-10 mb-1"></canvas>
-                  <div className="font-mono font-bold text-lg tracking-widest">{data.product_id}</div>
-                  {showDate && <div className="text-[9px] text-gray-400 mt-1">{new Date().toLocaleString()}</div>}
+                  <div className="flex-1 flex flex-col justify-end w-full items-center">
+                      <canvas ref={canvasRef} className="max-w-full h-10 mb-1"></canvas>
+                      <div className="font-mono font-bold text-lg tracking-widest">{data.product_id}</div>
+                      {showDate && <div className="text-[9px] text-gray-400 mt-1">{new Date().toLocaleString()}</div>}
+                  </div>
               </div>
           </div>
   
           {/* FOOTER */}
-          <div className="p-4 bg-gray-50 flex gap-2 no-print">
-              <button onClick={() => window.print()} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center"><Printer size={18}/> Print</button>
+          <div className="p-4 bg-gray-50 flex gap-2">
+              <button 
+                onClick={handleDownloadPDF} 
+                disabled={isGenerating}
+                className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center"
+              >
+                  {isGenerating ? 'Generating...' : <><Printer size={18}/> Save PDF for Print</>}
+              </button>
               <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50">Close</button>
           </div>
         </div>
