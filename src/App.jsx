@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import JsBarcode from 'jsbarcode';
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf'; // NEW IMPORT
-import html2canvas from 'html2canvas'; // NEW IMPORT
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList 
 } from 'recharts';
@@ -12,7 +12,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Clock, 
   Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -51,7 +51,8 @@ const safeJSONParse = (key, fallback) => {
 const formatCurrency = (val) => new Intl.NumberFormat('en-IN').format(val);
 
 // --- CONSTANTS ---
-const QUALITIES = ['Virgin', 'Fresh', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
+// UPDATE 2: Added 'Semi' to this list
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
 const COLORS = [
   'White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 
   'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 
@@ -340,10 +341,10 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (USES PDF GENERATION) ---
+// --- UPDATED LABEL PRINT COMPONENT (WITH LENGTH FIELD) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
-    const labelRef = useRef(null); // Ref to capture the label div
+    const labelRef = useRef(null); 
     const [showBrand, setShowBrand] = useState(true);
     const [showDate, setShowDate] = useState(true);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -363,26 +364,20 @@ const LabelPrint = ({ data, onClose }) => {
         setIsGenerating(true);
 
         try {
-            // 1. Capture the label as a high-quality image
             const canvas = await html2canvas(labelRef.current, {
-                scale: 4, // Higher scale = sharper text
+                scale: 4, 
                 useCORS: true,
                 backgroundColor: '#ffffff'
             });
 
             const imgData = canvas.toDataURL('image/png');
-
-            // 2. Create PDF with exact dimensions: 2.4in x 3.9in
             const pdf = new jsPDF({
                 orientation: 'portrait',
                 unit: 'in',
                 format: [2.4, 3.9] 
             });
 
-            // 3. Add image to PDF (0 margins)
             pdf.addImage(imgData, 'PNG', 0, 0, 2.4, 3.9);
-
-            // 4. Save and Download
             pdf.save(`Label-${data.product_id}.pdf`);
         } catch (error) {
             console.error("Error generating PDF:", error);
@@ -397,13 +392,11 @@ const LabelPrint = ({ data, onClose }) => {
         
         <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden flex flex-col max-h-screen">
           
-          {/* HEADER CONTROLS */}
           <div className="p-4 border-b flex flex-col gap-3">
             <div className="flex justify-between items-center">
                 <h2 className="font-bold text-lg">Label Preview</h2>
                 <button onClick={onClose}><X size={20}/></button>
             </div>
-            {/* TOGGLES */}
             <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => setShowBrand(!showBrand)} className={`flex items-center justify-center gap-1 text-xs font-bold p-2 rounded ${showBrand ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
                     {showBrand ? <ToggleRight size={18}/> : <ToggleLeft size={18}/>} Brand
@@ -414,10 +407,7 @@ const LabelPrint = ({ data, onClose }) => {
             </div>
           </div>
   
-          {/* SCROLLABLE AREA FOR THE LABEL */}
           <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
-              {/* THE LABEL ITSELF - 2.4" WIDTH (62mm) */}
-              {/* using ref={labelRef} for html2canvas to capture */}
               <div 
                 ref={labelRef} 
                 className="flex flex-col items-center text-center bg-white shadow-xl" 
@@ -428,7 +418,6 @@ const LabelPrint = ({ data, onClose }) => {
                     boxSizing: 'border-box'
                 }}
               >
-                  
                   <div className="w-full border-b-2 border-black pb-2 mb-2 h-10 flex items-center justify-center">
                       {showBrand ? (<div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
                   </div>
@@ -436,8 +425,12 @@ const LabelPrint = ({ data, onClose }) => {
                   <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2 px-1">
                       <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-base leading-none">{data.quality}</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-base leading-none">{data.color}</span></div>
-                      <div className="mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Size</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
-                      <div className="text-right mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-lg leading-none">{data.gsm}</span></div>
+                      
+                      {/* UPDATE 1: Added Length Field */}
+                      <div className="mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Size (in)</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
+                      <div className="text-right mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Length</span><span className="font-bold text-lg leading-none">{data.length_meters}m</span></div>
+                      
+                      <div className="mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-lg leading-none">{data.gsm}</span></div>
                   </div>
   
                   <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
@@ -453,7 +446,6 @@ const LabelPrint = ({ data, onClose }) => {
               </div>
           </div>
   
-          {/* FOOTER */}
           <div className="p-4 bg-gray-50 flex gap-2">
               <button 
                 onClick={handleDownloadPDF} 
@@ -476,8 +468,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const today = new Date().toLocaleDateString();
     const producedToday = rolls.filter(r => new Date(r.updated_at).toLocaleDateString() === today).length;
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
-    const lowStockMaterials = (materials || []).filter(m => m.stock_quantity < (m.min_level || 100)).sort((a,b) => a.stock_quantity - b.stock_quantity);
-
+    
     const activeDevices = useMemo(() => {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -674,7 +665,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                   </div>
               ))}
           </div>
-          {/* --- ADDED print:hidden HERE to prevent sticky footer from appearing on labels --- */}
           <div className="fixed bottom-20 left-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-xl flex justify-between items-center z-40 max-w-7xl mx-auto print:hidden">
              <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
              <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-xl text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
@@ -685,7 +675,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
 
 const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
     const [scanId, setScanId] = useState('');
-    const [reviewData, setReviewData] = useState(null); // UPDATED: Holds data for review popup
+    const [reviewData, setReviewData] = useState(null); 
     const [isScanning, setIsScanning] = useState(false);
     const [sessionList, setSessionList] = useState(() => safeJSONParse('ksf_dispatch_list_v10', []));
     const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer_v10') || '');
@@ -702,26 +692,20 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
         const roll = (rolls || []).find(r => r.product_id === query && r.status === 'in_stock');
         if (roll) { 
             if(sessionList.some(r => r.id === roll.id)) { alert("This roll is already in the dispatch list!"); setScanId(''); return; }
-            setReviewData(roll); // UPDATED: Trigger review popup instead of simple found state
+            setReviewData(roll); 
         } else { alert('Roll not found or already dispatched.'); }
         setScanId('');
     };
 
-    // UPDATED: New function to handle saving edits + dispatching
     const handleConfirmDispatch = async () => {
         if (!reviewData) return;
-        
-        // 1. Update the roll in DB (Save edits + Set Status)
         await onDispatch(reviewData); 
-        
-        // 2. Add the *updated* data to the session list
         setSessionList(prev => [reviewData, ...prev]);
         setReviewData(null);
     };
 
     const handleRemoveFromManifest = async (index, item) => {
         if(confirm("Remove this roll from dispatch and return to stock?")) {
-            // Need to pass the ID to undo
             await onUndoDispatch(item.id); 
             const newList = [...sessionList];
             newList.splice(index, 1);
@@ -746,7 +730,6 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
                 </div>
             </div>
             
-            {/* SEARCH BOX */}
             {!reviewData && (
                 <div className="bg-white p-6 rounded-xl shadow-sm border text-center">
                     <div className="flex gap-2 mb-4">
@@ -757,7 +740,6 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
                 </div>
             )}
 
-            {/* UPDATED: REVIEW & EDIT POPUP */}
             {reviewData && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
                     <div className="bg-white p-6 rounded-xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
@@ -813,7 +795,6 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
                 </div>
             )}
 
-            {/* UPDATED: MANIFEST TABLE with DETAILS */}
             {sessionList.length > 0 && (
                 <div className="bg-white rounded-xl shadow border overflow-hidden">
                     <div className="p-3 bg-gray-50 border-b flex justify-between font-bold text-gray-500 text-sm">
@@ -824,7 +805,6 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
                         <div key={i} className="p-3 border-b flex justify-between items-center last:border-0 hover:bg-gray-50">
                             <div>
                                 <div className="font-mono text-gray-800 font-bold">{item.product_id}</div>
-                                {/* Added Detailed Line */}
                                 <div className="text-xs text-gray-500 mt-0.5">
                                     {item.quality} • {item.color} • {item.gsm} GSM • {item.width_inches}"
                                 </div>
@@ -848,16 +828,14 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
 const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }) => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [searchText, setSearchText] = useState(''); // NEW: Search State
+    const [searchText, setSearchText] = useState(''); 
 
     const history = useMemo(() => {
         let list = (rolls || []).filter(r => r.status === 'dispatched');
         
-        // Date Filtering
         if (startDate) list = list.filter(r => new Date(r.dispatched_at) >= new Date(startDate));
         if (endDate) list = list.filter(r => new Date(r.dispatched_at) <= new Date(endDate + 'T23:59:59'));
         
-        // NEW: Search Filtering
         if (searchText) {
             const lower = searchText.toLowerCase();
             list = list.filter(r => 
@@ -886,7 +864,6 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
                 </div>
             </div>
 
-            {/* NEW: Search & Filter Bar */}
             <div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3">
                 <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center">
                     <Search className="text-gray-400" size={20} />
@@ -911,13 +888,11 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
                 </div>
             </div>
 
-            {/* NEW: Summary Bar */}
             <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center mb-3 text-sm border border-gray-200">
                 <span className="font-bold text-gray-600">{history.length} Rolls</span>
                 <span className="font-bold text-blue-700">{formatCurrency(totalHistoryWeight)} kg</span>
             </div>
 
-            {/* List */}
             {history.length === 0 ? <div className="text-center text-gray-400 mt-10">No records found.</div> : 
              history.map(r => (
                 <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-3 rounded-xl border mb-2 text-sm shadow-sm hover:bg-gray-50 cursor-pointer">
@@ -1028,6 +1003,25 @@ const MainApp = () => {
   }, []);
   fetchDataRef.current = fetchData;
 
+  // --- UPDATE 3: AUTO SYNC OFFLINE DATA ---
+  useEffect(() => {
+    const syncOffline = async () => {
+         const offline = safeJSONParse('ksf_offline_rolls', []);
+         if (offline.length > 0 && navigator.onLine) {
+             const { error } = await supabase.from('rolls').insert(offline);
+             if (!error) {
+                 localStorage.removeItem('ksf_offline_rolls');
+                 fetchData();
+                 alert(`Synced ${offline.length} offline rolls to database!`);
+             }
+         }
+    }
+    // Check on load and when network comes back
+    window.addEventListener('online', syncOffline);
+    syncOffline();
+    return () => window.removeEventListener('online', syncOffline);
+  }, [fetchData]);
+
   useEffect(() => {
     const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } };
     checkSession();
@@ -1043,21 +1037,43 @@ const MainApp = () => {
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
   
+  // --- UPDATE 3: MODIFIED SAVE LOGIC FOR OFFLINE ---
   const handleSaveRoll = async (e) => { 
       e.preventDefault(); 
       const id = `R-${Math.floor(Math.random() * 1000000)}`; 
-      const newRoll = { ...formData, product_id: id, status: 'in_stock' }; 
+      // Ensure we have a created_at date immediately for offline use
+      const newRoll = { ...formData, product_id: id, status: 'in_stock', created_at: new Date().toISOString() }; 
+
+      // 1. OFFLINE CHECK
+      if (!navigator.onLine) {
+        const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
+        localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
+        setRolls(prev => [newRoll, ...prev]); // Show locally immediately
+        setPrintData(newRoll); // Allow printing
+        alert("Internet disconnected. Roll saved LOCALLY. It will sync when you restart the app with internet.");
+        setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+        return;
+      }
+
+      // 2. ONLINE SAVE
       try { 
           await DataService.addRoll(newRoll, deviceName); 
           setPrintData(newRoll); 
           fetchData(); 
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); 
-      } catch (err) { alert('Error: ' + err.message); } 
+      } catch (err) { 
+          // If the network call failed unexpectedly, fall back to offline save
+          console.error("Save failed, trying offline mode", err);
+          const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
+          localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
+          setRolls(prev => [newRoll, ...prev]);
+          setPrintData(newRoll);
+          alert("Network Error. Saved locally. Will sync later.");
+          setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+      } 
   };
   
-  // UPDATED: handleDispatch now accepts an entire roll object (with potential edits)
   const handleDispatch = useCallback(async (rollData) => { 
-      // Save updates AND set status to dispatched
       await DataService.updateRoll(rollData.id, { 
           ...rollData, 
           status: 'dispatched', 
@@ -1074,7 +1090,6 @@ const MainApp = () => {
   const handleDeleteMaterial = async (id) => { await DataService.deleteRawMaterial(id); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
 
-  // --- FULL DB BACKUP ---
   const handleFullBackup = async () => {
       setLoading(true);
       try {
@@ -1114,7 +1129,6 @@ const MainApp = () => {
                 {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
                 {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
                 {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
-                {/* Updated HistoryView passing onOpenReports */}
                 {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}
                 {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onDelete={handleDeleteMaterial} />}
             </>
@@ -1122,10 +1136,8 @@ const MainApp = () => {
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
       
-      {/* Modals */}
       {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
       {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}
-      {/* New Reports Modal */}
       {isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(false)} rolls={rolls} />}
       
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
