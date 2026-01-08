@@ -340,7 +340,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (WITH LENGTH FIELD) ---
+// --- UPDATED LABEL PRINT COMPONENT (COMPACTED TO FIT DATE) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -352,7 +352,7 @@ const LabelPrint = ({ data, onClose }) => {
       if (data && canvasRef.current) {
         try {
           JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128", displayValue: false, height: 50, width: 2, margin: 0
+            format: "CODE128", displayValue: false, height: 45, width: 2, margin: 0 // Decreased Height slightly
           });
         } catch (e) { console.error(e); }
       }
@@ -407,40 +407,44 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
   
           <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
+              {/* LABEL CONTAINER - Adjusted padding to fit content better */}
               <div 
                 ref={labelRef} 
                 className="flex flex-col items-center text-center bg-white shadow-xl" 
                 style={{ 
                     width: '2.4in', 
                     height: '3.9in', 
-                    padding: '0.15in',
+                    padding: '0.1in', // Reduced padding from 0.15 to 0.1
                     boxSizing: 'border-box'
                 }}
               >
-                  <div className="w-full border-b-2 border-black pb-2 mb-2 h-10 flex items-center justify-center">
-                      {showBrand ? (<div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
+                  {/* HEADER - Reduced bottom margin */}
+                  <div className="w-full border-b-2 border-black pb-1 mb-1 h-8 flex items-center justify-center">
+                      {showBrand ? (<div className="font-black text-lg tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
                   </div>
   
-                  <div className="w-full grid grid-cols-2 gap-y-1 text-left mb-2 px-1">
-                      <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-base leading-none">{data.quality}</span></div>
-                      <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-base leading-none">{data.color}</span></div>
+                  {/* GRID CONTENT - Tighter spacing */}
+                  <div className="w-full grid grid-cols-2 gap-y-0.5 text-left mb-1 px-1">
+                      <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-sm leading-none">{data.quality}</span></div>
+                      <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-sm leading-none">{data.color}</span></div>
                       
-                      {/* Added Length Field */}
-                      <div className="mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Size (in)</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
-                      <div className="text-right mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Length</span><span className="font-bold text-lg leading-none">{data.length_meters}m</span></div>
+                      <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">Size (in)</span><span className="font-bold text-base leading-none">{data.width_inches}"</span></div>
+                      <div className="text-right mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">Length</span><span className="font-bold text-base leading-none">{data.length_meters}m</span></div>
                       
-                      <div className="mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-lg leading-none">{data.gsm}</span></div>
+                      <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-base leading-none">{data.gsm}</span></div>
                   </div>
   
-                  <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
+                  {/* WEIGHT ROW - Reduced padding */}
+                  <div className="w-full border-y-2 border-black py-1 my-1 flex justify-between items-end px-1">
                       <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
-                      <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-3xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
+                      <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-2xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
                   </div>
   
-                  <div className="flex-1 flex flex-col justify-end w-full items-center">
-                      <canvas ref={canvasRef} className="max-w-full h-10 mb-1"></canvas>
-                      <div className="font-mono font-bold text-lg tracking-widest">{data.product_id}</div>
-                      {showDate && <div className="text-[9px] text-gray-400 mt-1">{new Date().toLocaleString()}</div>}
+                  {/* FOOTER - Ensures everything fits */}
+                  <div className="flex-1 flex flex-col justify-end w-full items-center overflow-hidden">
+                      <canvas ref={canvasRef} className="max-w-full h-10 mb-0.5"></canvas>
+                      <div className="font-mono font-bold text-sm tracking-widest">{data.product_id}</div>
+                      {showDate && <div className="text-[8px] text-gray-500 mt-0.5">{new Date().toLocaleString()}</div>}
                   </div>
               </div>
           </div>
@@ -479,14 +483,12 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const qualityData = useMemo(() => {
         const counts = {};
         inStock.forEach(r => { const q = r.quality || 'Unknown'; counts[q] = (counts[q] || 0) + (parseFloat(r.net_weight) || 0); });
-        // UPDATE: Rounding to 1 decimal place here
         return Object.keys(counts).map(key => ({ name: key, value: parseFloat(counts[key].toFixed(1)) }));
     }, [inStock]);
 
     const colorData = useMemo(() => {
         const counts = {};
         inStock.forEach(r => { const c = r.color || 'Unknown'; counts[c] = (counts[c] || 0) + (parseFloat(r.net_weight) || 0); });
-        // UPDATE: Rounding to 1 decimal place here
         return Object.keys(counts).map(key => ({ name: key, count: parseFloat(counts[key].toFixed(1)) })).sort((a, b) => b.count - a.count).slice(0, 8);
     }, [inStock]);
 
@@ -637,6 +639,13 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                 <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button>
                 <button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button>
               </div>
+              
+              {/* --- UPDATE: MOVED SUMMARY BAR HERE --- */}
+              <div className="bg-gray-900 text-white p-3 rounded flex justify-between items-center text-sm">
+                 <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
+                 <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-lg text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
+              </div>
+
               {showFilters && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2">
                       <select className="border p-2 rounded text-sm" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}><option value="">All Qualities</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select>
@@ -666,10 +675,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                   </div>
               ))}
           </div>
-          <div className="fixed bottom-20 left-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-xl flex justify-between items-center z-40 max-w-7xl mx-auto print:hidden">
-             <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
-             <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-xl text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
-          </div>
+          {/* REMOVED FIXED BOTTOM FOOTER FROM HERE */}
       </div>
   );
 });
