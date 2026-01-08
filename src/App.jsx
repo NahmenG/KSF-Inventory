@@ -51,7 +51,6 @@ const safeJSONParse = (key, fallback) => {
 const formatCurrency = (val) => new Intl.NumberFormat('en-IN').format(val);
 
 // --- CONSTANTS ---
-// UPDATE 2: Added 'Semi' to this list
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
 const COLORS = [
   'White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 
@@ -426,7 +425,7 @@ const LabelPrint = ({ data, onClose }) => {
                       <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-base leading-none">{data.quality}</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-base leading-none">{data.color}</span></div>
                       
-                      {/* UPDATE 1: Added Length Field */}
+                      {/* Added Length Field */}
                       <div className="mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Size (in)</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
                       <div className="text-right mt-2"><span className="text-[9px] uppercase font-bold text-gray-500 block">Length</span><span className="font-bold text-lg leading-none">{data.length_meters}m</span></div>
                       
@@ -480,13 +479,15 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const qualityData = useMemo(() => {
         const counts = {};
         inStock.forEach(r => { const q = r.quality || 'Unknown'; counts[q] = (counts[q] || 0) + (parseFloat(r.net_weight) || 0); });
-        return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+        // UPDATE: Rounding to 1 decimal place here
+        return Object.keys(counts).map(key => ({ name: key, value: parseFloat(counts[key].toFixed(1)) }));
     }, [inStock]);
 
     const colorData = useMemo(() => {
         const counts = {};
         inStock.forEach(r => { const c = r.color || 'Unknown'; counts[c] = (counts[c] || 0) + (parseFloat(r.net_weight) || 0); });
-        return Object.keys(counts).map(key => ({ name: key, count: counts[key] })).sort((a, b) => b.count - a.count).slice(0, 8);
+        // UPDATE: Rounding to 1 decimal place here
+        return Object.keys(counts).map(key => ({ name: key, count: parseFloat(counts[key].toFixed(1)) })).sort((a, b) => b.count - a.count).slice(0, 8);
     }, [inStock]);
 
     const recentActivity = useMemo(() => {
