@@ -52,14 +52,11 @@ const formatCurrency = (val) => new Intl.NumberFormat('en-IN').format(val);
 
 // --- CONSTANTS ---
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
-
-// UPDATE: Added Parrot Green, Pink, Baby Pink
 const COLORS = [
   'White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 
   'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 
   'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'
 ];
-
 const MAT_CATEGORIES = ['Colour', 'Filler', 'Additives', 'Polymers', 'Others'];
 const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -343,7 +340,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (COMPACTED TO FIT DATE) ---
+// --- UPDATED LABEL PRINT COMPONENT (REFACTORED FOR FIT) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -355,7 +352,7 @@ const LabelPrint = ({ data, onClose }) => {
       if (data && canvasRef.current) {
         try {
           JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128", displayValue: false, height: 45, width: 2, margin: 0 // Decreased Height slightly
+            format: "CODE128", displayValue: false, height: 40, width: 2, margin: 0 // Reduced height further to 40
           });
         } catch (e) { console.error(e); }
       }
@@ -410,24 +407,24 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
   
           <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
-              {/* LABEL CONTAINER - Adjusted padding to fit content better */}
+              {/* LABEL CONTAINER */}
               <div 
                 ref={labelRef} 
                 className="flex flex-col items-center text-center bg-white shadow-xl" 
                 style={{ 
                     width: '2.4in', 
                     height: '3.9in', 
-                    padding: '0.1in', // Reduced padding from 0.15 to 0.1
+                    padding: '0.1in',
                     boxSizing: 'border-box'
                 }}
               >
-                  {/* HEADER - Reduced bottom margin */}
-                  <div className="w-full border-b-2 border-black pb-1 mb-1 h-8 flex items-center justify-center">
+                  {/* HEADER - Tighter margin */}
+                  <div className="w-full border-b-2 border-black pb-1 mb-0.5 h-8 flex items-center justify-center">
                       {showBrand ? (<div className="font-black text-lg tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
                   </div>
   
-                  {/* GRID CONTENT - Tighter spacing */}
-                  <div className="w-full grid grid-cols-2 gap-y-0.5 text-left mb-1 px-1">
+                  {/* GRID CONTENT - Tighter gap */}
+                  <div className="w-full grid grid-cols-2 gap-y-0.5 text-left mb-0.5 px-1">
                       <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-sm leading-none">{data.quality}</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-sm leading-none">{data.color}</span></div>
                       
@@ -437,17 +434,19 @@ const LabelPrint = ({ data, onClose }) => {
                       <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-base leading-none">{data.gsm}</span></div>
                   </div>
   
-                  {/* WEIGHT ROW - Reduced padding */}
-                  <div className="w-full border-y-2 border-black py-1 my-1 flex justify-between items-end px-1">
+                  {/* WEIGHT ROW - INCREASED PADDING TO PREVENT MERGING */}
+                  <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
                       <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-2xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
                   </div>
   
-                  {/* FOOTER - Ensures everything fits */}
+                  {/* FOOTER - MOVED UP SLIGHTLY */}
                   <div className="flex-1 flex flex-col justify-end w-full items-center overflow-hidden">
-                      <canvas ref={canvasRef} className="max-w-full h-10 mb-0.5"></canvas>
+                      {/* Reduced Margin Bottom here */}
+                      <canvas ref={canvasRef} className="max-w-full h-10 mb-0"></canvas> 
                       <div className="font-mono font-bold text-sm tracking-widest">{data.product_id}</div>
-                      {showDate && <div className="text-[8px] text-gray-500 mt-0.5">{new Date().toLocaleString()}</div>}
+                      {/* Reduced Font Size for Date */}
+                      {showDate && <div className="text-[7px] text-gray-500 mt-0.5">{new Date().toLocaleString()}</div>}
                   </div>
               </div>
           </div>
@@ -540,33 +539,56 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     );
 });
 
-// --- SUB-VIEWS ---
-const NewProductView = React.memo(({ formData, setFormData, onSubmit }) => (
-    <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24">
-      <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-bold flex items-center gap-2"><Package className="text-blue-600"/> New Roll Entry</h2>
-          <button 
-            onClick={() => setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' })} 
-            className="text-xs font-bold text-red-500 flex items-center gap-1 border border-red-100 bg-red-50 px-2 py-1 rounded hover:bg-red-100"
-          >
-            <RotateCcw size={12}/> Clear Form
-          </button>
-      </div>
-      <form onSubmit={onSubmit} className="grid grid-cols-2 gap-4">
-        <div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase">Customer</label><input required className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} /></div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><select required className="w-full border p-3 rounded bg-white" value={formData.quality} onChange={e => setFormData({...formData, quality: e.target.value})}><option value="">Select...</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><select required className="w-full border p-3 rounded bg-white" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})}><option value="">Select...</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-        <div className="col-span-2 grid grid-cols-3 gap-3">
-            <div><label className="text-xs font-bold text-gray-500 uppercase">GSM</label><input type="number" className="w-full border p-3 rounded" value={formData.gsm} onChange={e => setFormData({...formData, gsm: e.target.value})} /></div>
-            <div><label className="text-xs font-bold text-gray-500 uppercase">Width (in)</label><input type="number" className="w-full border p-3 rounded" value={formData.width_inches} onChange={e => setFormData({...formData, width_inches: e.target.value})} /></div>
-            <div><label className="text-xs font-bold text-gray-500 uppercase">Length (m)</label><input type="number" className="w-full border p-3 rounded" value={formData.length_meters} onChange={e => setFormData({...formData, length_meters: e.target.value})} /></div>
+// --- SUB-VIEWS (UPDATED: Auto Calculate Net Weight) ---
+const NewProductView = React.memo(({ formData, setFormData, onSubmit }) => {
+    
+    // Auto Calculation Logic
+    const handleValueChange = (field, value) => {
+        const newFormData = { ...formData, [field]: value };
+        
+        // If changing Width or Gross Weight, calculate Net
+        if (field === 'width_inches' || field === 'gross_weight') {
+            const width = parseFloat(field === 'width_inches' ? value : formData.width_inches);
+            const gross = parseFloat(field === 'gross_weight' ? value : formData.gross_weight);
+            
+            if (!isNaN(width) && !isNaN(gross) && width > 0) {
+                // Core Weight = (Width / 63) * 1kg
+                const coreWeight = (width / 63);
+                // Net = Gross - Core
+                const net = gross - coreWeight;
+                newFormData.net_weight = net.toFixed(2); // Auto fill with 2 decimal places
+            }
+        }
+        setFormData(newFormData);
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24">
+          <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Package className="text-blue-600"/> New Roll Entry</h2>
+              <button 
+                onClick={() => setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' })} 
+                className="text-xs font-bold text-red-500 flex items-center gap-1 border border-red-100 bg-red-50 px-2 py-1 rounded hover:bg-red-100"
+              >
+                <RotateCcw size={12}/> Clear Form
+              </button>
+          </div>
+          <form onSubmit={onSubmit} className="grid grid-cols-2 gap-4">
+            <div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase">Customer</label><input required className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} /></div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><select required className="w-full border p-3 rounded bg-white" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}><option value="">Select...</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><select required className="w-full border p-3 rounded bg-white" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}><option value="">Select...</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+            <div className="col-span-2 grid grid-cols-3 gap-3">
+                <div><label className="text-xs font-bold text-gray-500 uppercase">GSM</label><input type="number" className="w-full border p-3 rounded" value={formData.gsm} onChange={e => handleValueChange('gsm', e.target.value)} /></div>
+                <div><label className="text-xs font-bold text-gray-500 uppercase">Width (in)</label><input type="number" className="w-full border p-3 rounded" value={formData.width_inches} onChange={e => handleValueChange('width_inches', e.target.value)} /></div>
+                <div><label className="text-xs font-bold text-gray-500 uppercase">Length (m)</label><input type="number" className="w-full border p-3 rounded" value={formData.length_meters} onChange={e => handleValueChange('length_meters', e.target.value)} /></div>
+            </div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-3 rounded" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} /></div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border-2 border-blue-100 p-3 rounded font-bold text-blue-900" value={formData.net_weight} onChange={e => handleValueChange('net_weight', e.target.value)} /></div>
+            <button type="submit" className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-xl font-bold mt-4 shadow-lg shadow-blue-200 transition-all transform active:scale-95">Save & Print Label</button>
+          </form>
         </div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border-2 border-blue-100 p-3 rounded font-bold text-blue-900" value={formData.net_weight} onChange={e => setFormData({...formData, net_weight: e.target.value})} /></div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-3 rounded" value={formData.gross_weight} onChange={e => setFormData({...formData, gross_weight: e.target.value})} /></div>
-        <button type="submit" className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-xl font-bold mt-4 shadow-lg shadow-blue-200 transition-all transform active:scale-95">Save & Print Label</button>
-      </form>
-    </div>
-));
+    );
+});
 
 const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
@@ -643,7 +665,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                 <button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button>
               </div>
               
-              {/* --- UPDATE: MOVED SUMMARY BAR HERE --- */}
               <div className="bg-gray-900 text-white p-3 rounded flex justify-between items-center text-sm">
                  <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
                  <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-lg text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
@@ -678,7 +699,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                   </div>
               ))}
           </div>
-          {/* REMOVED FIXED BOTTOM FOOTER FROM HERE */}
       </div>
   );
 });
