@@ -340,7 +340,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (REFACTORED FOR FIT) ---
+// --- UPDATED LABEL PRINT COMPONENT (USES ROLL CREATION DATE) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -352,7 +352,7 @@ const LabelPrint = ({ data, onClose }) => {
       if (data && canvasRef.current) {
         try {
           JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128", displayValue: false, height: 40, width: 2, margin: 0 // Reduced height further to 40
+            format: "CODE128", displayValue: false, height: 40, width: 2, margin: 0 
           });
         } catch (e) { console.error(e); }
       }
@@ -407,7 +407,6 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
   
           <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
-              {/* LABEL CONTAINER */}
               <div 
                 ref={labelRef} 
                 className="flex flex-col items-center text-center bg-white shadow-xl" 
@@ -418,12 +417,10 @@ const LabelPrint = ({ data, onClose }) => {
                     boxSizing: 'border-box'
                 }}
               >
-                  {/* HEADER - Tighter margin */}
                   <div className="w-full border-b-2 border-black pb-1 mb-0.5 h-8 flex items-center justify-center">
                       {showBrand ? (<div className="font-black text-lg tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
                   </div>
   
-                  {/* GRID CONTENT - Tighter gap */}
                   <div className="w-full grid grid-cols-2 gap-y-0.5 text-left mb-0.5 px-1">
                       <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-sm leading-none">{data.quality}</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-sm leading-none">{data.color}</span></div>
@@ -434,19 +431,19 @@ const LabelPrint = ({ data, onClose }) => {
                       <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-base leading-none">{data.gsm}</span></div>
                   </div>
   
-                  {/* WEIGHT ROW - INCREASED PADDING TO PREVENT MERGING */}
                   <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
                       <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-2xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
                   </div>
   
-                  {/* FOOTER - MOVED UP SLIGHTLY */}
                   <div className="flex-1 flex flex-col justify-end w-full items-center overflow-hidden">
-                      {/* Reduced Margin Bottom here */}
                       <canvas ref={canvasRef} className="max-w-full h-10 mb-0"></canvas> 
                       <div className="font-mono font-bold text-sm tracking-widest">{data.product_id}</div>
-                      {/* Reduced Font Size for Date */}
-                      {showDate && <div className="text-[7px] text-gray-500 mt-0.5">{new Date().toLocaleString()}</div>}
+                      
+                      {/* UPDATE 1: Uses Roll Creation Date instead of current time */}
+                      {showDate && <div className="text-[7px] text-gray-500 mt-0.5">
+                          {data.created_at ? new Date(data.created_at).toLocaleString() : new Date().toLocaleString()}
+                      </div>}
                   </div>
               </div>
           </div>
@@ -539,7 +536,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     );
 });
 
-// --- SUB-VIEWS (UPDATED: Auto Calculate Net Weight) ---
+// --- SUB-VIEWS ---
 const NewProductView = React.memo(({ formData, setFormData, onSubmit }) => {
     
     // Auto Calculation Logic
@@ -685,6 +682,10 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                   <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl border border-gray-100 mb-2 shadow-sm flex justify-between items-center cursor-pointer active:bg-blue-50">
                       <div>
                           <div className="font-bold text-blue-600 text-lg">{r.product_id}</div> 
+                          {/* UPDATE 2: Added Date to Stock View */}
+                          <div className="text-[10px] text-gray-400 mb-1">
+                              {r.created_at ? new Date(r.created_at).toLocaleString() : 'Date Unknown'}
+                          </div>
                           <div className="font-semibold text-gray-800">{r.customer_name}</div>
                           <div className="text-xs text-gray-500 mt-1 inline-flex gap-2">
                             <span className="bg-gray-100 px-2 py-0.5 rounded">{r.quality}</span>
