@@ -12,7 +12,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Clock, 
   Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff, Loader
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -340,7 +340,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (USES ROLL CREATION DATE) ---
+// --- UPDATED LABEL PRINT COMPONENT (COMPACTED TO FIT DATE) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -407,6 +407,7 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
   
           <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
+              {/* LABEL CONTAINER */}
               <div 
                 ref={labelRef} 
                 className="flex flex-col items-center text-center bg-white shadow-xl" 
@@ -417,10 +418,12 @@ const LabelPrint = ({ data, onClose }) => {
                     boxSizing: 'border-box'
                 }}
               >
+                  {/* HEADER */}
                   <div className="w-full border-b-2 border-black pb-1 mb-0.5 h-8 flex items-center justify-center">
                       {showBrand ? (<div className="font-black text-lg tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
                   </div>
   
+                  {/* GRID CONTENT */}
                   <div className="w-full grid grid-cols-2 gap-y-0.5 text-left mb-0.5 px-1">
                       <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-sm leading-none">{data.quality}</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-sm leading-none">{data.color}</span></div>
@@ -431,16 +434,16 @@ const LabelPrint = ({ data, onClose }) => {
                       <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-base leading-none">{data.gsm}</span></div>
                   </div>
   
+                  {/* WEIGHT ROW */}
                   <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
                       <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-2xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
                   </div>
   
+                  {/* FOOTER */}
                   <div className="flex-1 flex flex-col justify-end w-full items-center overflow-hidden">
                       <canvas ref={canvasRef} className="max-w-full h-10 mb-0"></canvas> 
                       <div className="font-mono font-bold text-sm tracking-widest">{data.product_id}</div>
-                      
-                      {/* UPDATE 1: Uses Roll Creation Date instead of current time */}
                       {showDate && <div className="text-[7px] text-gray-500 mt-0.5">
                           {data.created_at ? new Date(data.created_at).toLocaleString() : new Date().toLocaleString()}
                       </div>}
@@ -536,8 +539,8 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     );
 });
 
-// --- SUB-VIEWS ---
-const NewProductView = React.memo(({ formData, setFormData, onSubmit }) => {
+// --- SUB-VIEWS (UPDATED: Auto Calculate Net Weight + Saving State) ---
+const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }) => {
     
     // Auto Calculation Logic
     const handleValueChange = (field, value) => {
@@ -581,7 +584,16 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit }) => {
             </div>
             <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-3 rounded" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} /></div>
             <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border-2 border-blue-100 p-3 rounded font-bold text-blue-900" value={formData.net_weight} onChange={e => handleValueChange('net_weight', e.target.value)} /></div>
-            <button type="submit" className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-xl font-bold mt-4 shadow-lg shadow-blue-200 transition-all transform active:scale-95">Save & Print Label</button>
+            
+            {/* UPDATE: DISABLE BUTTON WHILE SAVING */}
+            <button 
+                type="submit" 
+                disabled={isSaving}
+                className={`col-span-2 p-4 rounded-xl font-bold mt-4 shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2
+                    ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'}`}
+            >
+                {isSaving ? <><Loader className="animate-spin" size={20}/> Saving...</> : 'Save & Print Label'}
+            </button>
           </form>
         </div>
     );
@@ -1020,8 +1032,11 @@ const MainApp = () => {
   const [editRoll, setEditRoll] = useState(null);
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
-  const [isReportsOpen, setReportsOpen] = useState(false); // NEW: Report Modal State
+  const [isReportsOpen, setReportsOpen] = useState(false); 
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
+  
+  // NEW: State for locking the save button
+  const [isSaving, setIsSaving] = useState(false);
 
   const fetchDataRef = useRef();
   const fetchData = useCallback(async (isBackground = false) => {
@@ -1034,7 +1049,7 @@ const MainApp = () => {
   }, []);
   fetchDataRef.current = fetchData;
 
-  // --- UPDATE 3: AUTO SYNC OFFLINE DATA ---
+  // --- AUTO SYNC OFFLINE DATA ---
   useEffect(() => {
     const syncOffline = async () => {
          const offline = safeJSONParse('ksf_offline_rolls', []);
@@ -1047,7 +1062,6 @@ const MainApp = () => {
              }
          }
     }
-    // Check on load and when network comes back
     window.addEventListener('online', syncOffline);
     syncOffline();
     return () => window.removeEventListener('online', syncOffline);
@@ -1068,21 +1082,26 @@ const MainApp = () => {
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
   
-  // --- UPDATE 3: MODIFIED SAVE LOGIC FOR OFFLINE ---
+  // --- UPDATE 3: MODIFIED SAVE LOGIC (Prevent Duplicates) ---
   const handleSaveRoll = async (e) => { 
-      e.preventDefault(); 
+      e.preventDefault();
+      
+      // STOP if already saving
+      if (isSaving) return;
+      setIsSaving(true); // Lock the button
+
       const id = `R-${Math.floor(Math.random() * 1000000)}`; 
-      // Ensure we have a created_at date immediately for offline use
       const newRoll = { ...formData, product_id: id, status: 'in_stock', created_at: new Date().toISOString() }; 
 
       // 1. OFFLINE CHECK
       if (!navigator.onLine) {
         const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
         localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
-        setRolls(prev => [newRoll, ...prev]); // Show locally immediately
-        setPrintData(newRoll); // Allow printing
+        setRolls(prev => [newRoll, ...prev]); 
+        setPrintData(newRoll); 
         alert("Internet disconnected. Roll saved LOCALLY. It will sync when you restart the app with internet.");
         setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+        setIsSaving(false); // Unlock
         return;
       }
 
@@ -1093,7 +1112,6 @@ const MainApp = () => {
           fetchData(); 
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); 
       } catch (err) { 
-          // If the network call failed unexpectedly, fall back to offline save
           console.error("Save failed, trying offline mode", err);
           const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
           localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
@@ -1101,7 +1119,10 @@ const MainApp = () => {
           setPrintData(newRoll);
           alert("Network Error. Saved locally. Will sync later.");
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
-      } 
+      } finally {
+          // Unlock button no matter what happens
+          setIsSaving(false);
+      }
   };
   
   const handleDispatch = useCallback(async (rollData) => { 
@@ -1114,7 +1135,23 @@ const MainApp = () => {
   }, [deviceName, fetchData]);
 
   const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
-  const handleDeleteRoll = async (id) => { await DataService.deleteRoll(id); fetchData(); };
+  
+  // --- UPDATE 4: OPTIMISTIC DELETE (Fixes Scroll Jump) ---
+  const handleDeleteRoll = async (id) => { 
+      // 1. Optimistically remove from list immediately (keeps scroll position)
+      setRolls(prevRolls => prevRolls.filter(r => r.id !== id));
+
+      // 2. Send request to server in background
+      try {
+        await DataService.deleteRoll(id); 
+        // Do NOT call fetchData() here, as it would reset the list/scroll
+      } catch (error) {
+        console.error("Delete failed", error);
+        alert("Failed to delete from server. It might reappear.");
+        fetchData(); // Only refresh if it failed
+      }
+  };
+
   const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
   const handleAddMaterial = async (name, category, minLevel) => { await DataService.addRawMaterial(name, category, minLevel); fetchData(); };
@@ -1157,7 +1194,7 @@ const MainApp = () => {
         {loading && activeTab !== 'dashboard' ? ( <div className="flex justify-center p-12 text-gray-400">Loading Data...</div> ) : (
             <>
                 {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
-                {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} />}
+                {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} isSaving={isSaving} />}
                 {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
                 {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}
