@@ -628,32 +628,34 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
             
-            {/* NEW ROLL NUMBER INPUT WITH PREFIX */}
+            {/* NEW ROLL NUMBER INPUT WITH PREFIX - UPDATED STYLING FOR MOBILE */}
             <div className="col-span-2">
                 <label className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1 mb-1"><Hash size={12}/> Roll Number (Prefix - Sequence)</label>
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 w-full">
                     <input 
                         type="text" 
-                        className="w-1/3 border-2 border-blue-100 bg-blue-50 p-3 rounded text-xl font-bold text-blue-900 focus:border-blue-500 outline-none text-center uppercase" 
-                        placeholder="Prefix"
+                        className="w-[35%] min-w-0 border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg md:text-xl font-bold text-blue-900 focus:border-blue-500 outline-none text-center uppercase" 
+                        placeholder="PREFIX"
                         value={rollPrefix} 
                         onChange={(e) => {
                             setRollPrefix(e.target.value.toUpperCase());
                             localStorage.setItem('ksf_roll_prefix', e.target.value.toUpperCase());
                         }} 
                     />
-                    <span className="text-2xl font-bold text-gray-400">-</span>
-                    <input 
-                        type="number" 
-                        required 
-                        className="flex-1 border-2 border-blue-100 bg-blue-50 p-3 rounded text-xl font-bold text-blue-900 focus:border-blue-500 outline-none" 
-                        placeholder="1001"
-                        value={rollSeq} 
-                        onChange={(e) => {
-                            setRollSeq(e.target.value);
-                            localStorage.setItem('ksf_roll_sequence', e.target.value);
-                        }} 
-                    />
+                    <div className="flex-1 flex items-center gap-2">
+                        <span className="text-xl font-bold text-gray-400">-</span>
+                        <input 
+                            type="number" 
+                            required 
+                            className="w-full min-w-0 border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg md:text-xl font-bold text-blue-900 focus:border-blue-500 outline-none" 
+                            placeholder="1001"
+                            value={rollSeq} 
+                            onChange={(e) => {
+                                setRollSeq(e.target.value);
+                                localStorage.setItem('ksf_roll_sequence', e.target.value);
+                            }} 
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -682,9 +684,14 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
     );
 });
 
+// --- UPDATED: EDIT MODAL (REMOVES DELETE BUTTON FOR DISPATCHED ITEMS) ---
 const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
+    
+    // Check if the roll is dispatched (in history)
+    const isDispatched = roll.status === 'dispatched';
+
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
             <div className="bg-white p-6 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -705,9 +712,20 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
                 </div>
                 {!isGuest && (
                     <div className="flex flex-col gap-2">
-                        {roll.status === 'dispatched' && <button onClick={() => onSave({ ...editData, status: 'in_stock', dispatched_at: null })} className="bg-orange-100 text-orange-700 p-3 rounded font-bold">Return to Stock</button>}
+                        {isDispatched && (
+                            <button onClick={() => onSave({ ...editData, status: 'in_stock', dispatched_at: null })} className="bg-orange-100 text-orange-700 p-3 rounded font-bold">
+                                Return to Stock
+                            </button>
+                        )}
+                        
                         <button onClick={() => onSave(editData)} className="bg-blue-600 text-white p-3 rounded font-bold">Save Changes</button>
-                        <button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold flex items-center justify-center gap-2"><Trash2 size={18}/> Delete Roll</button>
+                        
+                        {/* UPDATE: Hide delete button if roll is dispatched */}
+                        {!isDispatched && (
+                            <button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold flex items-center justify-center gap-2">
+                                <Trash2 size={18}/> Delete Roll
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -783,7 +801,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                   <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl border border-gray-100 mb-2 shadow-sm flex justify-between items-center cursor-pointer active:bg-blue-50">
                       <div>
                           <div className="font-bold text-blue-600 text-lg">{r.product_id}</div> 
-                          {/* UPDATE 2: Added Date to Stock View */}
                           <div className="text-[10px] text-gray-400 mb-1">
                               {r.created_at ? new Date(r.created_at).toLocaleString() : 'Date Unknown'}
                           </div>
