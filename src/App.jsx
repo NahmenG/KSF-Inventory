@@ -63,7 +63,12 @@ const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8
 // --- DATA SERVICE ---
 const DataService = {
   async getStock() {
-    const { data, error } = await supabase.from('rolls').select('*').order('updated_at', { ascending: false });
+    // UPDATE: Added .range(0, 9999) to fetch ALL records, not just the default 1000
+    const { data, error } = await supabase
+        .from('rolls')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .range(0, 9999); 
     return error ? [] : data;
   },
   async addRoll(roll, deviceName) {
@@ -1032,7 +1037,7 @@ const MainApp = () => {
   const [editRoll, setEditRoll] = useState(null);
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
-  const [isReportsOpen, setReportsOpen] = useState(false); 
+  const [isReportsOpen, setReportsOpen] = useState(false); // NEW: Report Modal State
   const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
   
   // NEW: State for locking the save button
