@@ -363,7 +363,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (COMPACTED TO FIT DATE) ---
+// --- UPDATED LABEL PRINT COMPONENT (COMPACTED FOR FIT) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -375,7 +375,7 @@ const LabelPrint = ({ data, onClose }) => {
       if (data && canvasRef.current) {
         try {
           JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128", displayValue: false, height: 40, width: 2, margin: 0 
+            format: "CODE128", displayValue: false, height: 30, width: 2, margin: 0 // Height reduced to 30
           });
         } catch (e) { console.error(e); }
       }
@@ -457,17 +457,17 @@ const LabelPrint = ({ data, onClose }) => {
                       <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-base leading-none">{data.gsm}</span></div>
                   </div>
   
-                  {/* WEIGHT ROW */}
-                  <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
+                  {/* WEIGHT ROW (COMPACT) */}
+                  <div className="w-full border-y-2 border-black py-1 my-0.5 flex justify-between items-end px-1">
                       <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-2xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
                   </div>
   
-                  {/* FOOTER */}
-                  <div className="flex-1 flex flex-col justify-end w-full items-center overflow-hidden">
-                      <canvas ref={canvasRef} className="max-w-full h-10 mb-0"></canvas> 
-                      <div className="font-mono font-bold text-sm tracking-widest">{data.product_id}</div>
-                      {showDate && <div className="text-[7px] text-gray-500 mt-0.5">
+                  {/* FOOTER (LIFTED) */}
+                  <div className="flex-1 flex flex-col justify-end w-full items-center overflow-hidden pb-1">
+                      <canvas ref={canvasRef} className="max-w-full h-8 mb-0"></canvas> 
+                      <div className="font-mono font-bold text-sm tracking-widest leading-none">{data.product_id}</div>
+                      {showDate && <div className="text-[7px] text-gray-500 mt-0.5 leading-none">
                           {data.created_at ? new Date(data.created_at).toLocaleString() : new Date().toLocaleString()}
                       </div>}
                   </div>
