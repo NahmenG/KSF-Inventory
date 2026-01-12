@@ -62,14 +62,34 @@ const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8
 
 // --- DATA SERVICE ---
 const DataService = {
+  // UPDATE: Recursive Fetching to get ALL data (bypasses 1000 row limit)
   async getStock() {
-    // UPDATE: Added .range(0, 9999) to fetch ALL records, not just the default 1000
-    const { data, error } = await supabase
-        .from('rolls')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .range(0, 9999); 
-    return error ? [] : data;
+    let allData = [];
+    let from = 0;
+    const step = 1000;
+    
+    while (true) {
+        const { data, error } = await supabase
+            .from('rolls')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .range(from, from + step - 1);
+
+        if (error) {
+            console.error("Error fetching rows:", error);
+            break;
+        }
+        
+        if (!data || data.length === 0) break;
+
+        allData = [...allData, ...data];
+
+        // If we received fewer than the requested step, we reached the end
+        if (data.length < step) break;
+
+        from += step;
+    }
+    return allData;
   },
   async addRoll(roll, deviceName) {
     const rollWithDevice = { ...roll, device_name: deviceName, updated_at: new Date(), created_at: new Date() };
