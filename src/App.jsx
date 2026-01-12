@@ -12,7 +12,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Clock, 
   Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff, Loader
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff, Loader, Hash
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -562,7 +562,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     );
 });
 
-// --- SUB-VIEWS ---
+// --- SUB-VIEWS (UPDATED: Auto Calculate Net Weight + Saving State + Sequential ID) ---
 const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }) => {
     
     // Auto Calculation Logic
@@ -585,18 +585,60 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
         setFormData(newFormData);
     };
 
+    // UPDATE: Initialize Sequence Number from LocalStorage
+    const [rollSeq, setRollSeq] = useState(() => localStorage.getItem('ksf_roll_sequence') || '1001');
+
+    // Sync sequence to formData whenever it changes
+    useEffect(() => {
+        setFormData(prev => ({ ...prev, roll_seq: rollSeq }));
+    }, [rollSeq, setFormData]);
+
+    // Handle form submit wrapper to increment sequence
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        
+        // Pass the current sequence as the ID
+        const success = await onSubmit(e, rollSeq); 
+        
+        if (success) {
+            // Auto-increment for next roll
+            const nextSeq = String(Number(rollSeq) + 1);
+            setRollSeq(nextSeq);
+            localStorage.setItem('ksf_roll_sequence', nextSeq);
+        }
+    };
+
     return (
         <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24">
           <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-bold flex items-center gap-2"><Package className="text-blue-600"/> New Roll Entry</h2>
               <button 
-                onClick={() => setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' })} 
+                onClick={() => {
+                    setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
+                    // Don't reset sequence number on clear
+                }} 
                 className="text-xs font-bold text-red-500 flex items-center gap-1 border border-red-100 bg-red-50 px-2 py-1 rounded hover:bg-red-100"
               >
                 <RotateCcw size={12}/> Clear Form
               </button>
           </div>
-          <form onSubmit={onSubmit} className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
+            
+            {/* NEW ROLL NUMBER INPUT */}
+            <div className="col-span-2">
+                <label className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1"><Hash size={12}/> Roll Number (Auto-Sequence)</label>
+                <input 
+                    type="number" 
+                    required 
+                    className="w-full border-2 border-blue-100 bg-blue-50 p-3 rounded text-xl font-bold text-blue-900 focus:border-blue-500 outline-none" 
+                    value={rollSeq} 
+                    onChange={(e) => {
+                        setRollSeq(e.target.value);
+                        localStorage.setItem('ksf_roll_sequence', e.target.value);
+                    }} 
+                />
+            </div>
+
             <div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase">Customer</label><input required className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} /></div>
             <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><select required className="w-full border p-3 rounded bg-white" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}><option value="">Select...</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
             <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><select required className="w-full border p-3 rounded bg-white" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}><option value="">Select...</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
@@ -932,6 +974,9 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
             );
         }
         
+        // UPDATE: Force sort by Dispatched Date (Newest first)
+        list.sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
+        
         return list;
     }, [rolls, startDate, endDate, searchText]);
 
@@ -1130,14 +1175,15 @@ const MainApp = () => {
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
   
   // --- UPDATE 3: MODIFIED SAVE LOGIC (Prevent Duplicates) ---
-  const handleSaveRoll = async (e) => { 
+  const handleSaveRoll = async (e, customRollId) => { 
       e.preventDefault();
       
       // STOP if already saving
-      if (isSaving) return;
+      if (isSaving) return false;
       setIsSaving(true); // Lock the button
 
-      const id = `R-${Math.floor(Math.random() * 1000000)}`; 
+      // Use the sequential customRollId passed from the form
+      const id = customRollId;
       const newRoll = { ...formData, product_id: id, status: 'in_stock', created_at: new Date().toISOString() }; 
 
       // 1. OFFLINE CHECK
@@ -1149,7 +1195,7 @@ const MainApp = () => {
         alert("Internet disconnected. Roll saved LOCALLY. It will sync when you restart the app with internet.");
         setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
         setIsSaving(false); // Unlock
-        return;
+        return true;
       }
 
       // 2. ONLINE SAVE
@@ -1158,6 +1204,7 @@ const MainApp = () => {
           setPrintData(newRoll); 
           fetchData(); 
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); 
+          return true; // Success
       } catch (err) { 
           console.error("Save failed, trying offline mode", err);
           const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
@@ -1166,6 +1213,7 @@ const MainApp = () => {
           setPrintData(newRoll);
           alert("Network Error. Saved locally. Will sync later.");
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+          return true; // Still consider it a success for the user workflow
       } finally {
           // Unlock button no matter what happens
           setIsSaving(false);
