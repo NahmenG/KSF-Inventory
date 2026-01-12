@@ -363,7 +363,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- LABEL PRINT COMPONENT ---
+// --- UPDATED LABEL PRINT COMPONENT (COMPACTED TO FIT DATE) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -622,9 +622,14 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
     );
 });
 
+// --- UPDATED: EDIT MODAL (REMOVES DELETE BUTTON FOR DISPATCHED ITEMS) ---
 const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
+    
+    // Check if the roll is dispatched (in history)
+    const isDispatched = roll.status === 'dispatched';
+
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
             <div className="bg-white p-6 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -645,9 +650,20 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
                 </div>
                 {!isGuest && (
                     <div className="flex flex-col gap-2">
-                        {roll.status === 'dispatched' && <button onClick={() => onSave({ ...editData, status: 'in_stock', dispatched_at: null })} className="bg-orange-100 text-orange-700 p-3 rounded font-bold">Return to Stock</button>}
+                        {isDispatched && (
+                            <button onClick={() => onSave({ ...editData, status: 'in_stock', dispatched_at: null })} className="bg-orange-100 text-orange-700 p-3 rounded font-bold">
+                                Return to Stock
+                            </button>
+                        )}
+                        
                         <button onClick={() => onSave(editData)} className="bg-blue-600 text-white p-3 rounded font-bold">Save Changes</button>
-                        <button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold flex items-center justify-center gap-2"><Trash2 size={18}/> Delete Roll</button>
+                        
+                        {/* UPDATE: Hide delete button if roll is dispatched */}
+                        {!isDispatched && (
+                            <button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold flex items-center justify-center gap-2">
+                                <Trash2 size={18}/> Delete Roll
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -915,10 +931,6 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
                 (r.quality && r.quality.toLowerCase().includes(lower))
             );
         }
-        
-        // UPDATE: Force sort by Dispatched Date (Newest first)
-        // This ensures recent dispatches appear at the top, fixing the "disappearing" issue
-        list.sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
         
         return list;
     }, [rolls, startDate, endDate, searchText]);
