@@ -62,7 +62,7 @@ const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8
 
 // --- DATA SERVICE ---
 const DataService = {
-  // UPDATE: Recursive Fetching to get ALL data (bypasses 1000 row limit)
+  // RECURSIVE FETCH: Guarantees 100% of data is retrieved regardless of limits
   async getStock() {
     let allData = [];
     let from = 0;
@@ -84,9 +84,7 @@ const DataService = {
 
         allData = [...allData, ...data];
 
-        // If we received fewer than the requested step, we reached the end
-        if (data.length < step) break;
-
+        if (data.length < step) break; // We reached the end
         from += step;
     }
     return allData;
@@ -365,7 +363,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (COMPACTED TO FIT DATE) ---
+// --- LABEL PRINT COMPONENT ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -564,7 +562,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     );
 });
 
-// --- SUB-VIEWS (UPDATED: Auto Calculate Net Weight + Saving State) ---
+// --- SUB-VIEWS ---
 const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }) => {
     
     // Auto Calculation Logic
@@ -689,37 +687,42 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
 
   return (
       <div className="space-y-4 h-full flex flex-col relative pb-20">
-          <div className="bg-white p-3 rounded shadow-sm flex flex-col gap-3">
-              <div className="flex gap-2">
-                <div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center">
-                    <Search className="text-gray-400" size={20} />
-                    <input className="w-full outline-none bg-transparent" placeholder="e.g. Reliance Red 40" value={textSearch} onChange={e => setTextSearch(e.target.value)} />
-                </div>
-                <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button>
-                <button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button>
-              </div>
-              
-              <div className="bg-gray-900 text-white p-3 rounded flex justify-between items-center text-sm">
-                 <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
-                 <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-lg text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
-              </div>
-
-              {showFilters && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2">
-                      <select className="border p-2 rounded text-sm" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}><option value="">All Qualities</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select>
-                      <select className="border p-2 rounded text-sm" value={filterColor} onChange={e => setFilterColor(e.target.value)}><option value="">All Colors</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                      <input className="border p-2 rounded text-sm" placeholder="GSM" value={filterGSM} onChange={e => setFilterGSM(e.target.value)} type="number" />
-                      <input className="border p-2 rounded text-sm" placeholder="Width" value={filterWidth} onChange={e => setFilterWidth(e.target.value)} type="number" />
-                      <button onClick={clearFilters} className="col-span-2 md:col-span-4 text-xs text-red-500 font-bold text-center mt-1">Clear All Filters</button>
+          
+          {/* UPDATE: Sticky Container for Search and Summary */}
+          <div className="sticky top-16 z-20 bg-slate-50 pt-3 pb-2 px-1">
+              <div className="bg-white p-3 rounded shadow-sm flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center">
+                        <Search className="text-gray-400" size={20} />
+                        <input className="w-full outline-none bg-transparent" placeholder="e.g. Reliance Red 40" value={textSearch} onChange={e => setTextSearch(e.target.value)} />
+                    </div>
+                    <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button>
+                    <button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button>
                   </div>
-              )}
+                  
+                  {/* Summary Bar inside sticky container */}
+                  <div className="bg-gray-900 text-white p-3 rounded flex justify-between items-center text-sm">
+                     <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
+                     <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-lg text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
+                  </div>
+
+                  {showFilters && (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2">
+                          <select className="border p-2 rounded text-sm" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}><option value="">All Qualities</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select>
+                          <select className="border p-2 rounded text-sm" value={filterColor} onChange={e => setFilterColor(e.target.value)}><option value="">All Colors</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                          <input className="border p-2 rounded text-sm" placeholder="GSM" value={filterGSM} onChange={e => setFilterGSM(e.target.value)} type="number" />
+                          <input className="border p-2 rounded text-sm" placeholder="Width" value={filterWidth} onChange={e => setFilterWidth(e.target.value)} type="number" />
+                          <button onClick={clearFilters} className="col-span-2 md:col-span-4 text-xs text-red-500 font-bold text-center mt-1">Clear All Filters</button>
+                      </div>
+                  )}
+              </div>
           </div>
+
           <div className="flex-1 overflow-y-auto pb-24">
               {filtered.length === 0 ? (<div className="text-center text-gray-400 mt-10">No matching rolls found.</div>) : filtered.map(r => (
                   <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl border border-gray-100 mb-2 shadow-sm flex justify-between items-center cursor-pointer active:bg-blue-50">
                       <div>
                           <div className="font-bold text-blue-600 text-lg">{r.product_id}</div> 
-                          {/* UPDATE 2: Added Date to Stock View */}
                           <div className="text-[10px] text-gray-400 mb-1">
                               {r.created_at ? new Date(r.created_at).toLocaleString() : 'Date Unknown'}
                           </div>
@@ -913,6 +916,10 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
             );
         }
         
+        // UPDATE: Force sort by Dispatched Date (Newest first)
+        // This ensures recent dispatches appear at the top, fixing the "disappearing" issue
+        list.sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
+        
         return list;
     }, [rolls, startDate, endDate, searchText]);
 
@@ -932,33 +939,36 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
                 </div>
             </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3">
-                <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center">
-                    <Search className="text-gray-400" size={20} />
-                    <input 
-                        className="w-full outline-none bg-transparent text-sm" 
-                        placeholder="Search Customer, ID, or Quality..." 
-                        value={searchText} 
-                        onChange={e => setSearchText(e.target.value)} 
-                    />
-                    {searchText && <button onClick={() => setSearchText('')}><X size={16} className="text-gray-400"/></button>}
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2">
-                    <div>
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">Start Date</label>
-                        <input type="date" className="w-full border p-2 rounded text-sm" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            {/* UPDATE: Sticky Container for History */}
+            <div className="sticky top-16 z-20 bg-slate-50 pt-1 pb-2">
+                <div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3">
+                    <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center">
+                        <Search className="text-gray-400" size={20} />
+                        <input 
+                            className="w-full outline-none bg-transparent text-sm" 
+                            placeholder="Search Customer, ID, or Quality..." 
+                            value={searchText} 
+                            onChange={e => setSearchText(e.target.value)} 
+                        />
+                        {searchText && <button onClick={() => setSearchText('')}><X size={16} className="text-gray-400"/></button>}
                     </div>
-                    <div>
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">End Date</label>
-                        <input type="date" className="w-full border p-2 rounded text-sm" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Start Date</label>
+                            <input type="date" className="w-full border p-2 rounded text-sm" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">End Date</label>
+                            <input type="date" className="w-full border p-2 rounded text-sm" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center mb-3 text-sm border border-gray-200">
-                <span className="font-bold text-gray-600">{history.length} Rolls</span>
-                <span className="font-bold text-blue-700">{formatCurrency(totalHistoryWeight)} kg</span>
+                <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center mb-3 text-sm border border-gray-200">
+                    <span className="font-bold text-gray-600">{history.length} Rolls</span>
+                    <span className="font-bold text-blue-700">{formatCurrency(totalHistoryWeight)} kg</span>
+                </div>
             </div>
 
             {history.length === 0 ? <div className="text-center text-gray-400 mt-10">No records found.</div> : 
