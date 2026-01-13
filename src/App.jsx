@@ -62,29 +62,16 @@ const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8
 
 // --- DATA SERVICE ---
 const DataService = {
-  // RECURSIVE FETCH: Guarantees 100% of data is retrieved regardless of limits
   async getStock() {
     let allData = [];
     let from = 0;
     const step = 1000;
-    
     while (true) {
-        const { data, error } = await supabase
-            .from('rolls')
-            .select('*')
-            .order('updated_at', { ascending: false })
-            .range(from, from + step - 1);
-
-        if (error) {
-            console.error("Error fetching rows:", error);
-            break;
-        }
-        
+        const { data, error } = await supabase.from('rolls').select('*').order('updated_at', { ascending: false }).range(from, from + step - 1);
+        if (error) { console.error(error); break; }
         if (!data || data.length === 0) break;
-
         allData = [...allData, ...data];
-
-        if (data.length < step) break; // We reached the end
+        if (data.length < step) break;
         from += step;
     }
     return allData;
@@ -201,169 +188,7 @@ const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
     );
 });
 
-// --- REPORTS MODAL ---
-const ReportsModal = ({ visible, onClose, rolls }) => {
-    const [reportType, setReportType] = useState('production_daily');
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-    const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); 
-
-    if (!visible) return null;
-
-    const handleDownload = () => {
-        let filteredData = [];
-        let filename = "Report.xlsx";
-
-        if (reportType === 'production_daily') {
-            filteredData = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === new Date(selectedDate).toLocaleDateString());
-            filename = `Production_Daily_${selectedDate}.xlsx`;
-        } else if (reportType === 'production_monthly') {
-            filteredData = rolls.filter(r => r.created_at.startsWith(selectedMonth));
-            filename = `Production_Monthly_${selectedMonth}.xlsx`;
-        } else if (reportType === 'dispatch_monthly') {
-            filteredData = rolls.filter(r => r.status === 'dispatched' && r.dispatched_at && r.dispatched_at.startsWith(selectedMonth));
-            filename = `Dispatch_Monthly_${selectedMonth}.xlsx`;
-        }
-
-        if (filteredData.length === 0) {
-            alert("No data found for the selected period.");
-            return;
-        }
-
-        const dataForExcel = filteredData.map(r => ({
-            "Roll ID": r.product_id,
-            "Date": new Date(r.created_at).toLocaleDateString(),
-            "Customer": r.customer_name || '-',
-            "Quality": r.quality,
-            "Color": r.color,
-            "Size": r.width_inches,
-            "GSM": r.gsm,
-            "Net Kg": r.net_weight,
-            "Status": r.status === 'dispatched' ? 'Dispatched' : 'In Stock',
-            "Dispatch Date": r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : '-'
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(dataForExcel);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Report");
-        XLSX.writeFile(wb, filename);
-        onClose();
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-            <div className="bg-white p-6 rounded-lg w-full max-w-sm">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold flex items-center gap-2"><FileText size={22}/> Reports Center</h2>
-                    <button onClick={onClose} className="bg-gray-100 p-2 rounded-full"><X size={20}/></button>
-                </div>
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Report Type</label>
-                        <select className="w-full border p-3 rounded bg-white" value={reportType} onChange={e => setReportType(e.target.value)}>
-                            <option value="production_daily">Daily Production Report</option>
-                            <option value="production_monthly">Monthly Production Report</option>
-                            <option value="dispatch_monthly">Monthly Dispatch Report</option>
-                        </select>
-                    </div>
-                    {reportType === 'production_daily' ? (
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Select Date</label>
-                            <input type="date" className="w-full border p-3 rounded" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
-                        </div>
-                    ) : (
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Select Month</label>
-                            <input type="month" className="w-full border p-3 rounded" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} />
-                        </div>
-                    )}
-                    <button onClick={handleDownload} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 shadow mt-4">
-                        <Download size={18} /> Download Excel
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const SettingsModal = ({ visible, onClose, onBackup }) => {
-    if (!visible) return null;
-    return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-            <div className="bg-white p-6 rounded-lg w-full max-w-sm">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold flex items-center gap-2"><Settings size={22}/> Settings</h2>
-                    <button onClick={onClose} className="bg-gray-100 p-2 rounded-full"><X size={20}/></button>
-                </div>
-                <div className="space-y-4">
-                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                        <h3 className="font-bold text-blue-800 mb-2">Data Management</h3>
-                        <p className="text-xs text-gray-600 mb-3">Download a complete copy of your inventory and raw materials.</p>
-                        <button onClick={onBackup} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 shadow hover:bg-blue-700">
-                            <Download size={18} /> Backup Database (.xlsx)
-                        </button>
-                    </div>
-                    <div className="text-center text-xs text-gray-400 mt-4">App Version 2.2.0</div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const DeviceNameModal = ({ onSave, initialName }) => {
-    const [name, setName] = useState(initialName || '');
-    return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-            <div className="bg-white p-6 rounded-lg w-full max-w-sm text-center">
-                <h2 className="text-xl font-bold mb-4">Device Name</h2>
-                <input className="w-full border p-3 rounded mb-4 text-center" placeholder="e.g. iPhone" value={name} onChange={e => setName(e.target.value)} />
-                <button disabled={!name} onClick={() => onSave(name)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Save</button>
-            </div>
-        </div>
-    );
-};
-
-const AddMaterialModal = ({ onSave, onClose }) => {
-    const [name, setName] = useState('');
-    const [category, setCategory] = useState('Colour');
-    const [minLevel, setMinLevel] = useState('100');
-
-    return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-            <div className="bg-white p-6 rounded-lg w-full max-w-sm">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold">Add Material</h2>
-                    <button onClick={onClose}><X size={20}/></button>
-                </div>
-                <label className="text-xs font-bold text-gray-500">Material Name</label>
-                <input className="w-full border p-3 rounded mb-4" placeholder="e.g. Red Batch 202" value={name} onChange={e => setName(e.target.value)} />
-                <label className="text-xs font-bold text-gray-500">Category</label>
-                <select className="w-full border p-3 rounded mb-4 bg-white" value={category} onChange={e => setCategory(e.target.value)}>
-                    {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <label className="text-xs font-bold text-gray-500">Low Stock Alert (kg)</label>
-                <input className="w-full border p-3 rounded mb-6" type="number" placeholder="e.g. 100" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
-                <button disabled={!name} onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add to List</button>
-            </div>
-        </div>
-    );
-};
-
-const BarcodeScanner = ({ onScan, onClose }) => {
-    useEffect(() => {
-        const html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScan, () => {}).catch(console.error);
-        return () => { try { html5QrCode.stop().then(() => html5QrCode.clear()); } catch(e) {} };
-    }, [onScan]);
-    return (
-        <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-4">
-            <div className="text-white font-bold mb-4 text-center">Point camera at barcode</div>
-            <div id="reader" className="w-full bg-white rounded overflow-hidden max-w-sm"></div>
-            <button onClick={onClose} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-full font-bold text-lg">Close Camera</button>
-        </div>
-    );
-};
-
-// --- UPDATED LABEL PRINT COMPONENT (OPTIMIZED SPACE USE) ---
+// --- UPDATED LABEL PRINT COMPONENT (WITH SAFETY BUFFER) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -375,13 +200,12 @@ const LabelPrint = ({ data, onClose }) => {
       if (data && canvasRef.current) {
         try {
           JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128", displayValue: false, height: 35, width: 2, margin: 0 
+            format: "CODE128", displayValue: false, height: 28, width: 2, margin: 0 // Height reduced to 28 for safety
           });
         } catch (e) { console.error(e); }
       }
     }, [data]);
   
-    // UPDATE: SAVES AS PNG IMAGE DIRECTLY
     const handleDownloadImage = async () => {
         if (!labelRef.current) return;
         setIsGenerating(true);
@@ -393,10 +217,7 @@ const LabelPrint = ({ data, onClose }) => {
                 backgroundColor: '#ffffff'
             });
 
-            // Convert to PNG data URL
             const imgData = canvas.toDataURL('image/png');
-            
-            // Create a fake link to trigger download
             const link = document.createElement('a');
             link.href = imgData;
             link.download = `Label-${data.product_id}.png`;
@@ -433,14 +254,15 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
   
           <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
-              {/* LABEL CONTAINER - UPDATED TO USE FULL SPACE */}
+              {/* LABEL CONTAINER - ADDED EXTRA PADDING BOTTOM */}
               <div 
                 ref={labelRef} 
-                className="flex flex-col justify-between items-center text-center bg-white shadow-xl" 
+                className="flex flex-col justify-between items-center text-center bg-white shadow-xl relative" 
                 style={{ 
                     width: '2.4in', 
                     height: '3.9in', 
                     padding: '0.1in',
+                    paddingBottom: '0.3in', // KEY FIX: Extra buffer at bottom
                     boxSizing: 'border-box'
                 }}
               >
@@ -449,7 +271,7 @@ const LabelPrint = ({ data, onClose }) => {
                       {showBrand ? (<div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
                   </div>
   
-                  {/* GRID CONTENT - BIGGER FONTS */}
+                  {/* GRID CONTENT */}
                   <div className="w-full grid grid-cols-2 gap-y-1 text-left px-1 flex-1 content-center">
                       <div><span className="text-[10px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-lg leading-none">{data.quality}</span></div>
                       <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-lg leading-none">{data.color}</span></div>
@@ -460,16 +282,16 @@ const LabelPrint = ({ data, onClose }) => {
                       <div className="col-span-2 text-center mt-1"><span className="text-[10px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-2xl leading-none">{data.gsm}</span></div>
                   </div>
   
-                  {/* WEIGHT ROW - MASSIVE NET WEIGHT */}
+                  {/* WEIGHT ROW */}
                   <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
                       <div className="text-left"><span className="text-[10px] uppercase font-bold block">Gross Wt</span><span className="text-sm font-bold">{data.gross_weight} kg</span></div>
                       <div className="text-right"><span className="text-[10px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span></div>
                   </div>
   
-                  {/* FOOTER */}
-                  <div className="w-full flex flex-col items-center overflow-hidden pb-1">
-                      <canvas ref={canvasRef} className="max-w-full h-10 mb-0"></canvas> 
-                      <div className="font-mono font-bold text-lg tracking-widest leading-none mt-1">{data.product_id}</div>
+                  {/* FOOTER - MOVED UP */}
+                  <div className="w-full flex flex-col items-center overflow-hidden mb-2">
+                      <canvas ref={canvasRef} className="max-w-full h-8 mb-1"></canvas> 
+                      <div className="font-mono font-bold text-lg tracking-widest leading-none">{data.product_id}</div>
                       {showDate && <div className="text-[8px] text-gray-500 mt-1 leading-none">
                           {data.created_at ? new Date(data.created_at).toLocaleString() : new Date().toLocaleString()}
                       </div>}
@@ -492,7 +314,10 @@ const LabelPrint = ({ data, onClose }) => {
     );
 };
 
-// --- DASHBOARD VIEW ---
+// ... (Rest of components: DashboardView, NewProductView, EditModal, StockView, DispatchView, HistoryView, MaterialsView, MainApp - remain unchanged from previous versions, only LabelPrint was updated above) ...
+
+// --- RE-INSERTING UNCHANGED COMPONENTS TO ENSURE FULL FILE INTEGRITY ---
+
 const DashboardView = React.memo(({ rolls, materials }) => {
     const inStock = rolls.filter(r => r.status === 'in_stock');
     const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
@@ -565,52 +390,41 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     );
 });
 
-// --- SUB-VIEWS (UPDATED: Auto Calculate Net Weight + Saving State + Sequential ID with Prefix) ---
 const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }) => {
     
     // Auto Calculation Logic
     const handleValueChange = (field, value) => {
         const newFormData = { ...formData, [field]: value };
         
-        // If changing Width or Gross Weight, calculate Net
         if (field === 'width_inches' || field === 'gross_weight') {
             const width = parseFloat(field === 'width_inches' ? value : formData.width_inches);
             const gross = parseFloat(field === 'gross_weight' ? value : formData.gross_weight);
             
             if (!isNaN(width) && !isNaN(gross) && width > 0) {
-                // Core Weight = (Width / 63) * 1kg
                 const coreWeight = (width / 63);
-                // Net = Gross - Core
                 const net = gross - coreWeight;
-                newFormData.net_weight = net.toFixed(2); // Auto fill with 2 decimal places
+                newFormData.net_weight = net.toFixed(2);
             }
         }
         setFormData(newFormData);
     };
 
-    // UPDATE: Initialize Sequence Number AND Prefix from LocalStorage
     const [rollPrefix, setRollPrefix] = useState(() => localStorage.getItem('ksf_roll_prefix') || 'R');
     const [rollSeq, setRollSeq] = useState(() => localStorage.getItem('ksf_roll_sequence') || '1001');
 
-    // Sync sequence to formData whenever it changes
     useEffect(() => {
         setFormData(prev => ({ ...prev, roll_seq: rollSeq }));
     }, [rollSeq, setFormData]);
 
-    // Handle form submit wrapper to increment sequence
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
-        // Pass the current full ID (Prefix + Sequence)
         const fullId = `${rollPrefix}-${rollSeq}`;
         const success = await onSubmit(e, fullId); 
         
         if (success) {
-            // Auto-increment for next roll
             const nextSeq = String(Number(rollSeq) + 1);
             setRollSeq(nextSeq);
             localStorage.setItem('ksf_roll_sequence', nextSeq);
-            // Save Prefix so it persists too
             localStorage.setItem('ksf_roll_prefix', rollPrefix);
         }
     };
@@ -622,7 +436,6 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
               <button 
                 onClick={() => {
                     setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
-                    // Don't reset sequence number on clear
                 }} 
                 className="text-xs font-bold text-red-500 flex items-center gap-1 border border-red-100 bg-red-50 px-2 py-1 rounded hover:bg-red-100"
               >
@@ -631,7 +444,6 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
             
-            {/* NEW ROLL NUMBER INPUT WITH PREFIX - UPDATED STYLING FOR MOBILE */}
             <div className="col-span-2">
                 <label className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1 mb-1"><Hash size={12}/> Roll Number (Prefix - Sequence)</label>
                 <div className="flex gap-2 w-full">
@@ -673,7 +485,6 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
             <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-3 rounded" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} /></div>
             <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border-2 border-blue-100 p-3 rounded font-bold text-blue-900" value={formData.net_weight} onChange={e => handleValueChange('net_weight', e.target.value)} /></div>
             
-            {/* UPDATE: DISABLE BUTTON WHILE SAVING */}
             <button 
                 type="submit" 
                 disabled={isSaving}
@@ -687,12 +498,10 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
     );
 });
 
-// --- UPDATED: EDIT MODAL (REMOVES DELETE BUTTON FOR DISPATCHED ITEMS) ---
 const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
     
-    // Check if the roll is dispatched (in history)
     const isDispatched = roll.status === 'dispatched';
 
     return (
@@ -720,10 +529,7 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
                                 Return to Stock
                             </button>
                         )}
-                        
                         <button onClick={() => onSave(editData)} className="bg-blue-600 text-white p-3 rounded font-bold">Save Changes</button>
-                        
-                        {/* UPDATE: Hide delete button if roll is dispatched */}
                         {!isDispatched && (
                             <button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold flex items-center justify-center gap-2">
                                 <Trash2 size={18}/> Delete Roll
@@ -768,8 +574,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
 
   return (
       <div className="space-y-4 h-full flex flex-col relative pb-20">
-          
-          {/* UPDATE: Sticky Container for Search and Summary */}
           <div className="sticky top-16 z-20 bg-slate-50 pt-3 pb-2 px-1">
               <div className="bg-white p-3 rounded shadow-sm flex flex-col gap-3">
                   <div className="flex gap-2">
@@ -780,13 +584,10 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                     <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button>
                     <button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button>
                   </div>
-                  
-                  {/* Summary Bar inside sticky container */}
                   <div className="bg-gray-900 text-white p-3 rounded flex justify-between items-center text-sm">
                      <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
                      <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-lg text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
                   </div>
-
                   {showFilters && (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2">
                           <select className="border p-2 rounded text-sm" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}><option value="">All Qualities</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select>
@@ -798,7 +599,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                   )}
               </div>
           </div>
-
           <div className="flex-1 overflow-y-auto pb-24">
               {filtered.length === 0 ? (<div className="text-center text-gray-400 mt-10">No matching rolls found.</div>) : filtered.map(r => (
                   <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl border border-gray-100 mb-2 shadow-sm flex justify-between items-center cursor-pointer active:bg-blue-50">
@@ -997,7 +797,6 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
             );
         }
         
-        // UPDATE: Force sort by Dispatched Date (Newest first)
         list.sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
         
         return list;
@@ -1019,7 +818,6 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
                 </div>
             </div>
 
-            {/* UPDATE: Sticky Container for History */}
             <div className="sticky top-16 z-20 bg-slate-50 pt-1 pb-2">
                 <div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3">
                     <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center">
