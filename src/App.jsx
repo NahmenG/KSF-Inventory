@@ -363,7 +363,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (SAVES PNG INSTEAD OF PDF) ---
+// --- UPDATED LABEL PRINT COMPONENT (OPTIMIZED SPACE USE) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -375,7 +375,7 @@ const LabelPrint = ({ data, onClose }) => {
       if (data && canvasRef.current) {
         try {
           JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128", displayValue: false, height: 30, width: 2, margin: 0 
+            format: "CODE128", displayValue: false, height: 35, width: 2, margin: 0 
           });
         } catch (e) { console.error(e); }
       }
@@ -433,10 +433,10 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
   
           <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
-              {/* LABEL CONTAINER */}
+              {/* LABEL CONTAINER - UPDATED TO USE FULL SPACE */}
               <div 
                 ref={labelRef} 
-                className="flex flex-col items-center text-center bg-white shadow-xl" 
+                className="flex flex-col justify-between items-center text-center bg-white shadow-xl" 
                 style={{ 
                     width: '2.4in', 
                     height: '3.9in', 
@@ -445,32 +445,32 @@ const LabelPrint = ({ data, onClose }) => {
                 }}
               >
                   {/* HEADER */}
-                  <div className="w-full border-b-2 border-black pb-1 mb-0.5 h-8 flex items-center justify-center">
-                      {showBrand ? (<div className="font-black text-lg tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
+                  <div className="w-full border-b-2 border-black pb-1 h-10 flex items-center justify-center">
+                      {showBrand ? (<div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>) : (<div className="w-full h-full"></div>)}
                   </div>
   
-                  {/* GRID CONTENT */}
-                  <div className="w-full grid grid-cols-2 gap-y-0.5 text-left mb-0.5 px-1">
-                      <div><span className="text-[9px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-sm leading-none">{data.quality}</span></div>
-                      <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-sm leading-none">{data.color}</span></div>
+                  {/* GRID CONTENT - BIGGER FONTS */}
+                  <div className="w-full grid grid-cols-2 gap-y-1 text-left px-1 flex-1 content-center">
+                      <div><span className="text-[10px] uppercase font-bold text-gray-500 block">Quality</span><span className="font-bold text-lg leading-none">{data.quality}</span></div>
+                      <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-500 block">Color</span><span className="font-bold text-lg leading-none">{data.color}</span></div>
                       
-                      <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">Size (in)</span><span className="font-bold text-base leading-none">{data.width_inches}"</span></div>
-                      <div className="text-right mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">Length</span><span className="font-bold text-base leading-none">{data.length_meters}m</span></div>
+                      <div><span className="text-[10px] uppercase font-bold text-gray-500 block">Size (in)</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
+                      <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-500 block">Length</span><span className="font-bold text-lg leading-none">{data.length_meters}m</span></div>
                       
-                      <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-base leading-none">{data.gsm}</span></div>
+                      <div className="col-span-2 text-center mt-1"><span className="text-[10px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-2xl leading-none">{data.gsm}</span></div>
                   </div>
   
-                  {/* WEIGHT ROW */}
-                  <div className="w-full border-y-2 border-black py-1 my-0.5 flex justify-between items-end px-1">
-                      <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
-                      <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-2xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
+                  {/* WEIGHT ROW - MASSIVE NET WEIGHT */}
+                  <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
+                      <div className="text-left"><span className="text-[10px] uppercase font-bold block">Gross Wt</span><span className="text-sm font-bold">{data.gross_weight} kg</span></div>
+                      <div className="text-right"><span className="text-[10px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span></div>
                   </div>
   
                   {/* FOOTER */}
-                  <div className="flex-1 flex flex-col justify-end w-full items-center overflow-hidden pb-1">
-                      <canvas ref={canvasRef} className="max-w-full h-8 mb-0"></canvas> 
-                      <div className="font-mono font-bold text-sm tracking-widest leading-none">{data.product_id}</div>
-                      {showDate && <div className="text-[7px] text-gray-500 mt-0.5 leading-none">
+                  <div className="w-full flex flex-col items-center overflow-hidden pb-1">
+                      <canvas ref={canvasRef} className="max-w-full h-10 mb-0"></canvas> 
+                      <div className="font-mono font-bold text-lg tracking-widest leading-none mt-1">{data.product_id}</div>
+                      {showDate && <div className="text-[8px] text-gray-500 mt-1 leading-none">
                           {data.created_at ? new Date(data.created_at).toLocaleString() : new Date().toLocaleString()}
                       </div>}
                   </div>
