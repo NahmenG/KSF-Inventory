@@ -12,7 +12,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Clock, 
   Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff, Loader, Hash
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff, Loader, Hash, Image as ImageIcon
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -363,7 +363,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (COMPACTED FOR FIT) ---
+// --- UPDATED LABEL PRINT COMPONENT (SAVES PNG INSTEAD OF PDF) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -375,13 +375,14 @@ const LabelPrint = ({ data, onClose }) => {
       if (data && canvasRef.current) {
         try {
           JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128", displayValue: false, height: 30, width: 2, margin: 0 // Height reduced to 30
+            format: "CODE128", displayValue: false, height: 30, width: 2, margin: 0 
           });
         } catch (e) { console.error(e); }
       }
     }, [data]);
   
-    const handleDownloadPDF = async () => {
+    // UPDATE: SAVES AS PNG IMAGE DIRECTLY
+    const handleDownloadImage = async () => {
         if (!labelRef.current) return;
         setIsGenerating(true);
 
@@ -392,18 +393,20 @@ const LabelPrint = ({ data, onClose }) => {
                 backgroundColor: '#ffffff'
             });
 
+            // Convert to PNG data URL
             const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'in',
-                format: [2.4, 3.9] 
-            });
+            
+            // Create a fake link to trigger download
+            const link = document.createElement('a');
+            link.href = imgData;
+            link.download = `Label-${data.product_id}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
 
-            pdf.addImage(imgData, 'PNG', 0, 0, 2.4, 3.9);
-            pdf.save(`Label-${data.product_id}.pdf`);
         } catch (error) {
-            console.error("Error generating PDF:", error);
-            alert("Failed to generate PDF. Please try again.");
+            console.error("Error generating Image:", error);
+            alert("Failed to generate Image. Please try again.");
         } finally {
             setIsGenerating(false);
         }
@@ -457,13 +460,13 @@ const LabelPrint = ({ data, onClose }) => {
                       <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-500 block">GSM</span><span className="font-bold text-base leading-none">{data.gsm}</span></div>
                   </div>
   
-                  {/* WEIGHT ROW (COMPACT) */}
+                  {/* WEIGHT ROW */}
                   <div className="w-full border-y-2 border-black py-1 my-0.5 flex justify-between items-end px-1">
                       <div className="text-left"><span className="text-[9px] uppercase font-bold block">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
                       <div className="text-right"><span className="text-[9px] uppercase font-bold block text-gray-500">Net Weight</span><span className="text-2xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
                   </div>
   
-                  {/* FOOTER (LIFTED) */}
+                  {/* FOOTER */}
                   <div className="flex-1 flex flex-col justify-end w-full items-center overflow-hidden pb-1">
                       <canvas ref={canvasRef} className="max-w-full h-8 mb-0"></canvas> 
                       <div className="font-mono font-bold text-sm tracking-widest leading-none">{data.product_id}</div>
@@ -476,11 +479,11 @@ const LabelPrint = ({ data, onClose }) => {
   
           <div className="p-4 bg-gray-50 flex gap-2">
               <button 
-                onClick={handleDownloadPDF} 
+                onClick={handleDownloadImage} 
                 disabled={isGenerating}
                 className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center"
               >
-                  {isGenerating ? 'Generating...' : <><Printer size={18}/> Save PDF for Print</>}
+                  {isGenerating ? 'Generating...' : <><ImageIcon size={18}/> Save Label (Image)</>}
               </button>
               <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50">Close</button>
           </div>
