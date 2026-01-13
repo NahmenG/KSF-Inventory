@@ -12,7 +12,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Clock, 
   Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff, Loader, Hash, Image as ImageIcon
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff, Loader, Hash, Image as ImageIcon, Share2
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -363,7 +363,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (WITH INTERNAL BUFFER, NO CONTAINER PADDING) ---
+// --- UPDATED LABEL PRINT COMPONENT (SHARES IMAGE ON MOBILE, DOWNLOADS ON DESKTOP) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -375,12 +375,13 @@ const LabelPrint = ({ data, onClose }) => {
       if (data && canvasRef.current) {
         try {
           JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128", displayValue: false, height: 25, width: 2, margin: 0 // Height reduced to 25
+            format: "CODE128", displayValue: false, height: 25, width: 2, margin: 0 
           });
         } catch (e) { console.error(e); }
       }
     }, [data]);
   
+    // UPDATE: USES NAVIGATOR.SHARE FOR MOBILE, DOWNLOAD FOR DESKTOP
     const handleDownloadImage = async () => {
         if (!labelRef.current) return;
         setIsGenerating(true);
@@ -392,18 +393,43 @@ const LabelPrint = ({ data, onClose }) => {
                 backgroundColor: '#ffffff'
             });
 
-            const imgData = canvas.toDataURL('image/png');
-            const link = document.createElement('a');
-            link.href = imgData;
-            link.download = `Label-${data.product_id}.png`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Convert canvas to Blob (file object)
+            canvas.toBlob(async (blob) => {
+                if (!blob) {
+                    alert("Image generation failed");
+                    setIsGenerating(false);
+                    return;
+                }
+
+                const file = new File([blob], `Label-${data.product_id}.png`, { type: 'image/png' });
+
+                // CHECK: If "Share" API is available (iOS/Android)
+                if (navigator.share && navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: 'Print Label',
+                            text: `Label for ${data.product_id}`
+                        });
+                        // Success!
+                    } catch (shareError) {
+                        console.error("Share failed", shareError);
+                    }
+                } else {
+                    // FALLBACK: Download for Desktop
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `Label-${data.product_id}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+                setIsGenerating(false);
+            }, 'image/png');
 
         } catch (error) {
             console.error("Error generating Image:", error);
             alert("Failed to generate Image. Please try again.");
-        } finally {
             setIsGenerating(false);
         }
     };
@@ -429,7 +455,7 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
   
           <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
-              {/* LABEL CONTAINER - REVERTED PADDING, ADDED INTERNAL SPACING */}
+              {/* LABEL CONTAINER */}
               <div 
                 ref={labelRef} 
                 className="flex flex-col justify-between items-center text-center bg-white shadow-xl relative" 
@@ -437,7 +463,6 @@ const LabelPrint = ({ data, onClose }) => {
                     width: '2.4in', 
                     height: '3.9in', 
                     padding: '0.1in',
-                    // paddingBottom removed to keep aspect ratio
                     boxSizing: 'border-box'
                 }}
               >
@@ -480,7 +505,7 @@ const LabelPrint = ({ data, onClose }) => {
                 disabled={isGenerating}
                 className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center"
               >
-                  {isGenerating ? 'Generating...' : <><ImageIcon size={18}/> Save Label (Image)</>}
+                  {isGenerating ? 'Generating...' : <><Share2 size={18}/> Print / Share Label</>}
               </button>
               <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50">Close</button>
           </div>
@@ -684,6 +709,7 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
     );
 });
 
+// --- UPDATED: EDIT MODAL (REMOVES DELETE BUTTON FOR DISPATCHED ITEMS) ---
 const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
