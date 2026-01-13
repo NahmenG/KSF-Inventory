@@ -363,7 +363,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (SHARES IMAGE ON MOBILE, DOWNLOADS ON DESKTOP) ---
+// --- UPDATED LABEL PRINT COMPONENT (BACK TO PDF, WITH CUSHION) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -381,8 +381,7 @@ const LabelPrint = ({ data, onClose }) => {
       }
     }, [data]);
   
-    // UPDATE: USES NAVIGATOR.SHARE FOR MOBILE, DOWNLOAD FOR DESKTOP
-    const handleDownloadImage = async () => {
+    const handleDownloadPDF = async () => {
         if (!labelRef.current) return;
         setIsGenerating(true);
 
@@ -393,43 +392,19 @@ const LabelPrint = ({ data, onClose }) => {
                 backgroundColor: '#ffffff'
             });
 
-            // Convert canvas to Blob (file object)
-            canvas.toBlob(async (blob) => {
-                if (!blob) {
-                    alert("Image generation failed");
-                    setIsGenerating(false);
-                    return;
-                }
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'in',
+                format: [2.4, 3.9] 
+            });
 
-                const file = new File([blob], `Label-${data.product_id}.png`, { type: 'image/png' });
-
-                // CHECK: If "Share" API is available (iOS/Android)
-                if (navigator.share && navigator.canShare({ files: [file] })) {
-                    try {
-                        await navigator.share({
-                            files: [file],
-                            title: 'Print Label',
-                            text: `Label for ${data.product_id}`
-                        });
-                        // Success!
-                    } catch (shareError) {
-                        console.error("Share failed", shareError);
-                    }
-                } else {
-                    // FALLBACK: Download for Desktop
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `Label-${data.product_id}.png`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
-                setIsGenerating(false);
-            }, 'image/png');
-
+            pdf.addImage(imgData, 'PNG', 0, 0, 2.4, 3.9);
+            pdf.save(`Label-${data.product_id}.pdf`);
         } catch (error) {
-            console.error("Error generating Image:", error);
-            alert("Failed to generate Image. Please try again.");
+            console.error("Error generating PDF:", error);
+            alert("Failed to generate PDF. Please try again.");
+        } finally {
             setIsGenerating(false);
         }
     };
@@ -501,11 +476,11 @@ const LabelPrint = ({ data, onClose }) => {
   
           <div className="p-4 bg-gray-50 flex gap-2">
               <button 
-                onClick={handleDownloadImage} 
+                onClick={handleDownloadPDF} 
                 disabled={isGenerating}
                 className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center"
               >
-                  {isGenerating ? 'Generating...' : <><Share2 size={18}/> Print / Share Label</>}
+                  {isGenerating ? 'Generating...' : <><Printer size={18}/> Save PDF for Print</>}
               </button>
               <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50">Close</button>
           </div>
@@ -709,7 +684,6 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
     );
 });
 
-// --- UPDATED: EDIT MODAL (REMOVES DELETE BUTTON FOR DISPATCHED ITEMS) ---
 const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
@@ -826,7 +800,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                   <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl border border-gray-100 mb-2 shadow-sm flex justify-between items-center cursor-pointer active:bg-blue-50">
                       <div>
                           <div className="font-bold text-blue-600 text-lg">{r.product_id}</div> 
-                          {/* UPDATE 2: Added Date to Stock View */}
                           <div className="text-[10px] text-gray-400 mb-1">
                               {r.created_at ? new Date(r.created_at).toLocaleString() : 'Date Unknown'}
                           </div>
