@@ -62,39 +62,44 @@ const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8
 
 // --- DATA SERVICE ---
 const DataService = {
-  // RECURSIVE FETCH: Guarantees 100% of data is retrieved regardless of limits
   async getStock() {
     let allData = [];
     let from = 0;
     const step = 1000;
-    
     while (true) {
-        const { data, error } = await supabase
-            .from('rolls')
-            .select('*')
-            .order('updated_at', { ascending: false })
-            .range(from, from + step - 1);
-
-        if (error) {
-            console.error("Error fetching rows:", error);
-            break;
-        }
-        
+        const { data, error } = await supabase.from('rolls').select('*').order('updated_at', { ascending: false }).range(from, from + step - 1);
+        if (error) { console.error(error); break; }
         if (!data || data.length === 0) break;
-
         allData = [...allData, ...data];
-
-        if (data.length < step) break; // We reached the end
+        if (data.length < step) break;
         from += step;
     }
     return allData;
   },
+  
+  // FIX: CLEANED UP ADD ROLL FUNCTION
   async addRoll(roll, deviceName) {
-    const rollWithDevice = { ...roll, device_name: deviceName, updated_at: new Date(), created_at: new Date() };
+    // 1. Create a Clean Copy: Remove fields that don't exist in Supabase
+    // We strip 'roll_seq' because that is only for the App's memory, not the Database
+    const { roll_seq, ...cleanRollData } = roll; 
+
+    const rollWithDevice = { 
+        ...cleanRollData, // This contains product_id, customer_name, etc.
+        device_name: deviceName, 
+        updated_at: new Date(), 
+        created_at: new Date() 
+    };
+
     const { data, error } = await supabase.from('rolls').insert([rollWithDevice]).select();
-    if (error) throw error;
+    
+    if (error) {
+        // Log the exact error to help debug if it persists
+        console.error("Supabase Insert Error:", error.message, error.details);
+        throw error;
+    }
     return data[0];
   },
+
   async updateRoll(id, updates, deviceName) {
     const updatesWithDevice = { ...updates, device_name: deviceName, updated_at: new Date() };
     const { error } = await supabase.from('rolls').update(updatesWithDevice).eq('id', id);
@@ -363,7 +368,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     );
 };
 
-// --- UPDATED LABEL PRINT COMPONENT (BACK TO PDF, WITH CUSHION) ---
+// --- UPDATED LABEL PRINT COMPONENT (PDF with Safe Zone) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -488,6 +493,8 @@ const LabelPrint = ({ data, onClose }) => {
       </div>
     );
 };
+
+// ... (Rest of the app components remain unchanged) ...
 
 // --- DASHBOARD VIEW ---
 const DashboardView = React.memo(({ rolls, materials }) => {
@@ -800,6 +807,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                   <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-xl border border-gray-100 mb-2 shadow-sm flex justify-between items-center cursor-pointer active:bg-blue-50">
                       <div>
                           <div className="font-bold text-blue-600 text-lg">{r.product_id}</div> 
+                          {/* UPDATE 2: Added Date to Stock View */}
                           <div className="text-[10px] text-gray-400 mb-1">
                               {r.created_at ? new Date(r.created_at).toLocaleString() : 'Date Unknown'}
                           </div>
