@@ -62,37 +62,24 @@ const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8
 
 // --- DATA SERVICE ---
 const DataService = {
-  // RECURSIVE FETCH
   async getStock() {
     let allData = [];
     let from = 0;
     const step = 1000;
     while (true) {
-        const { data, error } = await supabase
-            .from('rolls')
-            .select('*')
-            .order('created_at', { ascending: false }) 
-            .range(from, from + step - 1);
-
-        if (error) { console.error("Error fetching rows:", error); break; }
+        const { data, error } = await supabase.from('rolls').select('*').order('created_at', { ascending: false }).range(from, from + step - 1);
+        if (error) { console.error(error); break; }
         if (!data || data.length === 0) break;
         allData = [...allData, ...data];
-        if (data.length < step) break; 
+        if (data.length < step) break;
         from += step;
     }
     return allData;
   },
   
   async addRoll(roll, deviceName) {
-    const { roll_seq, isOffline, ...cleanRollData } = roll; // Strip local-only fields
-
-    const rollWithDevice = { 
-        ...cleanRollData, 
-        device_name: deviceName, 
-        updated_at: new Date(), 
-        created_at: new Date() 
-    };
-
+    const { roll_seq, isOffline, ...cleanRollData } = roll; 
+    const rollWithDevice = { ...cleanRollData, device_name: deviceName, updated_at: new Date(), created_at: new Date() };
     const { data, error } = await supabase.from('rolls').insert([rollWithDevice]).select();
     if (error) throw error;
     return data[0];
@@ -128,14 +115,7 @@ const DataService = {
 // --- HELPER: GENERATE EXCEL GATE PASS ---
 const generateChallanExcel = (rolls, details) => {
     try {
-        const header = [
-            ["KSF NON WOVEN"], 
-            [], 
-            ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()], 
-            ["Buyer:", details.buyer, "Vehicle:", details.vehicle], 
-            [], 
-            ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "GSM", "Net Kg"]
-        ];
+        const header = [["KSF NON WOVEN"], [], ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()], ["Buyer:", details.buyer, "Vehicle:", details.vehicle], [], ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "GSM", "Net Kg"]];
         const body = rolls.map((r, i) => [i + 1, r.product_id, r.quality, r.color, r.width_inches, r.gsm, parseFloat(r.net_weight) || 0]);
         const totalWt = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
         const footer = [[], ["", "", "", "", "", "Total Weight:", totalWt]];
@@ -148,74 +128,26 @@ const generateChallanExcel = (rolls, details) => {
         const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
         XLSX.writeFile(wb, fileName);
         return true;
-    } catch (err) {
-        console.error(err);
-        alert("Excel Error: " + err.message);
-        return false;
-    }
+    } catch (err) { console.error(err); alert("Excel Error: " + err.message); return false; }
 };
 
 // --- COMPONENTS ---
 
-// UPDATE: Added Manual Sync Button
 const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings, onManualSync, isSyncing, offlineCount }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center print:hidden">
-      <div className="flex items-center pl-1">
-         <img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" />
-      </div>
+      <div className="flex items-center pl-1"><img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" /></div>
       <div className="flex items-center gap-2 text-sm">
-        {!isGuest && (
-            <>
-                <button 
-                    onClick={onManualSync} 
-                    disabled={isSyncing} 
-                    className={`p-2 rounded-full relative ${isSyncing ? 'text-blue-500 bg-blue-50' : (offlineCount > 0 ? 'text-red-500 bg-red-50 animate-pulse' : 'text-gray-500 hover:bg-gray-100')}`}
-                >
-                    <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
-                    {offlineCount > 0 && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{offlineCount}</span>}
-                </button>
-                <div onClick={onEditDeviceName} className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm hidden md:block">{deviceName || 'Device'} ✎</div>
-                <button onClick={onOpenSettings} className="text-gray-600 hover:bg-gray-100 p-2 rounded-full">
-                    <Settings size={20} />
-                </button>
-            </>
-        )}
-
-        <button onClick={onLogout} className="text-red-600 font-bold hover:bg-red-50 px-2 py-1 rounded">
-            <LogOut size={20} />
-        </button>
+        {!isGuest && (<><button onClick={onManualSync} disabled={isSyncing} className={`p-2 rounded-full relative ${isSyncing ? 'text-blue-500 bg-blue-50' : (offlineCount > 0 ? 'text-red-500 bg-red-50 animate-pulse' : 'text-gray-500 hover:bg-gray-100')}`}><RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />{offlineCount > 0 && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{offlineCount}</span>}</button><div onClick={onEditDeviceName} className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm hidden md:block">{deviceName || 'Device'} ✎</div><button onClick={onOpenSettings} className="text-gray-600 hover:bg-gray-100 p-2 rounded-full"><Settings size={20} /></button></>)}
+        <button onClick={onLogout} className="text-red-600 font-bold hover:bg-red-50 px-2 py-1 rounded"><LogOut size={20} /></button>
       </div>
   </header>
 ));
 
 const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
-    const tabs = [
-        { id: 'dashboard', label: 'Home', icon: Activity },
-        !isGuest && { id: 'entry', label: 'Add', icon: Plus }, 
-        { id: 'stock', label: 'Stock', icon: Database },
-        { id: 'dispatch', label: 'Disp', icon: Truck },
-        { id: 'history', label: 'Hist', icon: Clock },
-        { id: 'materials', label: 'Mat', icon: Layers }
-    ].filter(Boolean);
-
-    return (
-        <nav className="bg-white border-t border-gray-200 fixed bottom-0 w-full z-50 h-16 flex justify-around items-center pb-1 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] print:hidden">
-            {tabs.map(tab => (
-                <button 
-                    key={tab.id} 
-                    onClick={() => setTab(tab.id)} 
-                    className={`flex flex-col items-center justify-center w-full h-full gap-1 ${activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}`}
-                >
-                    <tab.icon size={22} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
-                    <span className="text-[10px] font-bold">{tab.label}</span>
-                </button>
-            ))}
-        </nav>
-    );
+    const tabs = [{ id: 'dashboard', label: 'Home', icon: Activity }, !isGuest && { id: 'entry', label: 'Add', icon: Plus }, { id: 'stock', label: 'Stock', icon: Database }, { id: 'dispatch', label: 'Disp', icon: Truck }, { id: 'history', label: 'Hist', icon: Clock }, { id: 'materials', label: 'Mat', icon: Layers }].filter(Boolean);
+    return (<nav className="bg-white border-t border-gray-200 fixed bottom-0 w-full z-50 h-16 flex justify-around items-center pb-1 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] print:hidden">{tabs.map(tab => (<button key={tab.id} onClick={() => setTab(tab.id)} className={`flex flex-col items-center justify-center w-full h-full gap-1 ${activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}`}><tab.icon size={22} strokeWidth={activeTab === tab.id ? 2.5 : 2} /><span className="text-[10px] font-bold">{tab.label}</span></button>))}</nav>);
 });
 
-// ... ReportsModal, SettingsModal, DeviceNameModal, AddMaterialModal, BarcodeScanner remain unchanged ...
-// RE-INSERTING FOR COMPLETENESS
 const ReportsModal = ({ visible, onClose, rolls }) => {
     const [reportType, setReportType] = useState('production_daily');
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -224,39 +156,21 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
     const handleDownload = () => {
         let filteredData = [];
         let filename = "Report.xlsx";
-        if (reportType === 'production_daily') {
-            filteredData = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === new Date(selectedDate).toLocaleDateString());
-            filename = `Production_Daily_${selectedDate}.xlsx`;
-        } else if (reportType === 'production_monthly') {
-            filteredData = rolls.filter(r => r.created_at.startsWith(selectedMonth));
-            filename = `Production_Monthly_${selectedMonth}.xlsx`;
-        } else if (reportType === 'dispatch_monthly') {
-            filteredData = rolls.filter(r => r.status === 'dispatched' && r.dispatched_at && r.dispatched_at.startsWith(selectedMonth));
-            filename = `Dispatch_Monthly_${selectedMonth}.xlsx`;
-        }
+        if (reportType === 'production_daily') { filteredData = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === new Date(selectedDate).toLocaleDateString()); filename = `Production_Daily_${selectedDate}.xlsx`; } 
+        else if (reportType === 'production_monthly') { filteredData = rolls.filter(r => r.created_at.startsWith(selectedMonth)); filename = `Production_Monthly_${selectedMonth}.xlsx`; } 
+        else if (reportType === 'dispatch_monthly') { filteredData = rolls.filter(r => r.status === 'dispatched' && r.dispatched_at && r.dispatched_at.startsWith(selectedMonth)); filename = `Dispatch_Monthly_${selectedMonth}.xlsx`; }
         if (filteredData.length === 0) { alert("No data found."); return; }
         const dataForExcel = filteredData.map(r => ({ "Roll ID": r.product_id, "Date": new Date(r.created_at).toLocaleDateString(), "Customer": r.customer_name || '-', "Quality": r.quality, "Color": r.color, "Size": r.width_inches, "GSM": r.gsm, "Net Kg": r.net_weight, "Status": r.status }));
         const ws = XLSX.utils.json_to_sheet(dataForExcel); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Report"); XLSX.writeFile(wb, filename); onClose();
     };
-    return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-            <div className="bg-white p-6 rounded-lg w-full max-w-sm">
-                <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold flex items-center gap-2"><FileText size={22}/> Reports</h2><button onClick={onClose}><X size={20}/></button></div>
-                <div className="space-y-4">
-                    <select className="w-full border p-3 rounded" value={reportType} onChange={e => setReportType(e.target.value)}><option value="production_daily">Daily Production</option><option value="production_monthly">Monthly Production</option><option value="dispatch_monthly">Monthly Dispatch</option></select>
-                    {reportType === 'production_daily' ? <input type="date" className="w-full border p-3 rounded" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /> : <input type="month" className="w-full border p-3 rounded" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} />}
-                    <button onClick={handleDownload} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"><Download size={18}/> Download</button>
-                </div>
-            </div>
-        </div>
-    );
+    return (<div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-lg w-full max-w-sm"><div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold flex items-center gap-2"><FileText size={22}/> Reports</h2><button onClick={onClose}><X size={20}/></button></div><div className="space-y-4"><select className="w-full border p-3 rounded" value={reportType} onChange={e => setReportType(e.target.value)}><option value="production_daily">Daily Production</option><option value="production_monthly">Monthly Production</option><option value="dispatch_monthly">Monthly Dispatch</option></select>{reportType === 'production_daily' ? <input type="date" className="w-full border p-3 rounded" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /> : <input type="month" className="w-full border p-3 rounded" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} />}<button onClick={handleDownload} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"><Download size={18}/> Download</button></div></div></div>);
 };
+
 const SettingsModal = ({ visible, onClose, onBackup }) => (!visible ? null : <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-lg w-full max-w-sm"><div className="flex justify-between mb-6"><h2 className="text-xl font-bold flex items-center gap-2"><Settings/> Settings</h2><button onClick={onClose}><X/></button></div><button onClick={onBackup} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"><Download/> Backup Database</button></div></div>);
-const DeviceNameModal = ({ onSave, initialName, onClose }) => { const [name, setName] = useState(initialName || ''); return (<div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-lg w-full max-w-sm text-center"><h2 className="text-xl font-bold mb-4">Device Name</h2><input className="w-full border p-3 rounded mb-4 text-center" value={name} onChange={e => setName(e.target.value)} /><button onClick={() => onSave(name)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Save</button></div></div>); };
+const DeviceNameModal = ({ onSave, initialName }) => { const [name, setName] = useState(initialName || ''); return (<div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-lg w-full max-w-sm text-center"><h2 className="text-xl font-bold mb-4">Device Name</h2><input className="w-full border p-3 rounded mb-4 text-center" value={name} onChange={e => setName(e.target.value)} /><button onClick={() => onSave(name)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Save</button></div></div>); };
 const AddMaterialModal = ({ onSave, onClose }) => { const [name, setName] = useState(''); const [category, setCategory] = useState('Colour'); const [minLevel, setMinLevel] = useState('100'); return (<div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-lg w-full max-w-sm"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Add Material</h2><button onClick={onClose}><X/></button></div><input className="w-full border p-3 rounded mb-4" placeholder="Name" value={name} onChange={e => setName(e.target.value)} /><select className="w-full border p-3 rounded mb-4" value={category} onChange={e => setCategory(e.target.value)}>{MAT_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select><input className="w-full border p-3 rounded mb-6" type="number" placeholder="Alert Level" value={minLevel} onChange={e => setMinLevel(e.target.value)} /><button onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add</button></div></div>); };
 const BarcodeScanner = ({ onScan, onClose }) => { useEffect(() => { const html5QrCode = new Html5Qrcode("reader"); html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScan, () => {}).catch(console.error); return () => { try { html5QrCode.stop().then(() => html5QrCode.clear()); } catch(e) {} }; }, [onScan]); return (<div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-4"><div className="text-white font-bold mb-4">Scan Barcode</div><div id="reader" className="w-full bg-white rounded overflow-hidden max-w-sm"></div><button onClick={onClose} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-full font-bold">Close</button></div>); };
 
-// --- UPDATED LABEL PRINT COMPONENT (PDF with Safe Zone) ---
 const LabelPrint = ({ data, onClose }) => {
     const canvasRef = useRef(null);
     const labelRef = useRef(null); 
@@ -266,40 +180,20 @@ const LabelPrint = ({ data, onClose }) => {
   
     useEffect(() => {
       if (data && canvasRef.current) {
-        try {
-          JsBarcode(canvasRef.current, data.product_id, {
-            format: "CODE128", displayValue: false, height: 25, width: 2, margin: 0 
-          });
-        } catch (e) { console.error(e); }
+        try { JsBarcode(canvasRef.current, data.product_id, { format: "CODE128", displayValue: false, height: 25, width: 2, margin: 0 }); } catch (e) { console.error(e); }
       }
     }, [data]);
   
     const handleDownloadPDF = async () => {
         if (!labelRef.current) return;
         setIsGenerating(true);
-
         try {
-            const canvas = await html2canvas(labelRef.current, {
-                scale: 4, 
-                useCORS: true,
-                backgroundColor: '#ffffff'
-            });
-
+            const canvas = await html2canvas(labelRef.current, { scale: 4, useCORS: true, backgroundColor: '#ffffff' });
             const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'in',
-                format: [2.4, 3.9] 
-            });
-
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'in', format: [2.4, 3.9] });
             pdf.addImage(imgData, 'PNG', 0, 0, 2.4, 3.9);
             pdf.save(`Label-${data.product_id}.pdf`);
-        } catch (error) {
-            console.error("Error generating PDF:", error);
-            alert("Failed to generate PDF. Please try again.");
-        } finally {
-            setIsGenerating(false);
-        }
+        } catch (error) { alert("Failed to generate PDF."); } finally { setIsGenerating(false); }
     };
   
     return (
@@ -342,7 +236,110 @@ const LabelPrint = ({ data, onClose }) => {
     );
 };
 
-// ... (DashboardView, NewProductView, EditModal, DispatchView, HistoryView, MaterialsView, MainApp unchanged except StockView) ...
+const DashboardView = React.memo(({ rolls, materials }) => {
+    const inStock = rolls.filter(r => r.status === 'in_stock');
+    const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
+    const today = new Date().toLocaleDateString();
+    const producedToday = rolls.filter(r => new Date(r.updated_at).toLocaleDateString() === today).length;
+    const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
+    const activeDevices = useMemo(() => { const d = new Date(); d.setDate(d.getDate()-7); return [...new Set(rolls.filter(r => new Date(r.updated_at) > d).map(r => r.device_name))].filter(Boolean); }, [rolls]);
+    const qualityData = useMemo(() => { const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality]||0) + (parseFloat(r.net_weight)||0)); return Object.keys(c).map(k => ({ name: k, value: parseFloat(c[k].toFixed(1)) })); }, [inStock]);
+    const colorData = useMemo(() => { const c = {}; inStock.forEach(r => c[r.color] = (c[r.color]||0) + (parseFloat(r.net_weight)||0)); return Object.keys(c).map(k => ({ name: k, count: parseFloat(c[k].toFixed(1)) })).sort((a,b)=>b.count-a.count).slice(0,8); }, [inStock]);
+    const recentActivity = rolls.slice(0, 5).map(r => ({ ...r, action: r.status === 'dispatched' ? 'Dispatched' : (Math.abs(new Date(r.created_at)-new Date(r.updated_at)) < 60000 ? 'Produced' : 'Edited'), time: new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }));
+
+    return (
+        <div className="space-y-6 pb-20">
+            <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-600">
+                <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18}/> Factory Velocity (Today)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-green-50 p-3 rounded-lg"><div className="text-xs text-green-700 font-bold uppercase flex items-center gap-1"><ArrowDownRight size={14}/> Produced</div><div className="text-2xl font-bold text-green-800">{producedToday} <span className="text-xs font-normal">Rolls</span></div></div>
+                    <div className="bg-orange-50 p-3 rounded-lg"><div className="text-xs text-orange-700 font-bold uppercase flex items-center gap-1"><ArrowUpRight size={14}/> Dispatched</div><div className="text-2xl font-bold text-orange-800">{dispatchedToday} <span className="text-xs font-normal">Rolls</span></div></div>
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4"><div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Count</div><div className="text-3xl font-bold text-blue-600">{inStock.length}</div></div><div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div><div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400">kg</span></div></div></div>
+            {activeDevices.length > 0 && (<div className="bg-white p-4 rounded-xl shadow border border-gray-100"><h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wifi size={18}/> Active Devices</h3><div className="flex flex-wrap gap-2">{activeDevices.map(d => (<span key={d} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">{d}</span>))}</div></div>)}
+            <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18}/> Recent Activity</h3>{recentActivity.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (<div className="space-y-3">{recentActivity.map(r => (<div key={r.id} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0"><div><div className="font-bold text-sm text-gray-800">{r.product_id} <span className={`text-[10px] uppercase px-1 rounded ${r.action === 'Produced' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.action}</span></div><div className="text-xs text-gray-500">by {r.device_name || 'Unknown'}</div></div><div className="text-right"><div className="font-bold text-sm">{r.net_weight} kg</div><div className="text-[10px] text-gray-400">{r.time}</div></div></div>))}</div>)}</div>
+            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>{qualityData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Pie><RechartsTooltip /><Legend /></PieChart></ResponsiveContainer></div></div>
+            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Top Colors in Stock (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={colorData} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} /><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} /><RechartsTooltip /><Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />{colorData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Bar></BarChart></ResponsiveContainer></div></div>
+        </div>
+    );
+});
+
+const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }) => {
+    const handleValueChange = (field, value) => {
+        const newFormData = { ...formData, [field]: value };
+        if (field === 'width_inches' || field === 'gross_weight') {
+            const width = parseFloat(field === 'width_inches' ? value : formData.width_inches);
+            const gross = parseFloat(field === 'gross_weight' ? value : formData.gross_weight);
+            if (!isNaN(width) && !isNaN(gross) && width > 0) {
+                const coreWeight = (width / 63);
+                const net = gross - coreWeight;
+                newFormData.net_weight = net.toFixed(2);
+            }
+        }
+        setFormData(newFormData);
+    };
+    const [rollPrefix, setRollPrefix] = useState(() => localStorage.getItem('ksf_roll_prefix') || 'R');
+    const [rollSeq, setRollSeq] = useState(() => localStorage.getItem('ksf_roll_sequence') || '1001');
+    useEffect(() => { setFormData(prev => ({ ...prev, roll_seq: rollSeq })); }, [rollSeq, setFormData]);
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const fullId = `${rollPrefix}-${rollSeq}`;
+        try {
+            const success = await onSubmit(e, fullId); 
+            if (success) {
+                const nextSeq = String(Number(rollSeq) + 1);
+                setRollSeq(nextSeq);
+                localStorage.setItem('ksf_roll_sequence', nextSeq);
+                localStorage.setItem('ksf_roll_prefix', rollPrefix);
+            }
+        } catch (err) { console.error("Save interrupted:", err); }
+    };
+    return (
+        <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24">
+          <div className="flex justify-between items-center mb-6"><h2 className="text-lg font-bold flex items-center gap-2"><Package className="text-blue-600"/> New Roll Entry</h2><button onClick={() => { setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); }} className="text-xs font-bold text-red-500 flex items-center gap-1 border border-red-100 bg-red-50 px-2 py-1 rounded hover:bg-red-100"><RotateCcw size={12}/> Clear Form</button></div>
+          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
+            <div className="col-span-2"><label className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1 mb-1"><Hash size={12}/> Roll Number (Prefix - Sequence)</label><div className="flex gap-2 w-full"><input type="text" className="w-[35%] min-w-0 border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg md:text-xl font-bold text-blue-900 focus:border-blue-500 outline-none text-center uppercase" placeholder="PREFIX" value={rollPrefix} onChange={(e) => { setRollPrefix(e.target.value.toUpperCase()); localStorage.setItem('ksf_roll_prefix', e.target.value.toUpperCase()); }} /><div className="flex-1 flex items-center gap-2"><span className="text-xl font-bold text-gray-400">-</span><input type="number" required className="w-full min-w-0 border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg md:text-xl font-bold text-blue-900 focus:border-blue-500 outline-none" placeholder="1001" value={rollSeq} onChange={(e) => { setRollSeq(e.target.value); localStorage.setItem('ksf_roll_sequence', e.target.value); }} /></div></div></div>
+            <div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase">Customer</label><input required className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} /></div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><select required className="w-full border p-3 rounded bg-white" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}><option value="">Select...</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><select required className="w-full border p-3 rounded bg-white" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}><option value="">Select...</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+            <div className="col-span-2 grid grid-cols-3 gap-3">
+                <div><label className="text-xs font-bold text-gray-500 uppercase">GSM</label><input type="number" className="w-full border p-3 rounded" value={formData.gsm} onChange={e => handleValueChange('gsm', e.target.value)} /></div>
+                <div><label className="text-xs font-bold text-gray-500 uppercase">Width (in)</label><input type="number" className="w-full border p-3 rounded" value={formData.width_inches} onChange={e => handleValueChange('width_inches', e.target.value)} /></div>
+                <div><label className="text-xs font-bold text-gray-500 uppercase">Length (m)</label><input type="number" className="w-full border p-3 rounded" value={formData.length_meters} onChange={e => handleValueChange('length_meters', e.target.value)} /></div>
+            </div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-3 rounded" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} /></div>
+            <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border-2 border-blue-100 p-3 rounded font-bold text-blue-900" value={formData.net_weight} onChange={e => handleValueChange('net_weight', e.target.value)} /></div>
+            <button type="submit" disabled={isSaving} className={`col-span-2 p-4 rounded-xl font-bold mt-4 shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'}`}>{isSaving ? <><Loader className="animate-spin" size={20}/> Saving...</> : 'Save & Print Label'}</button>
+          </form>
+        </div>
+    );
+});
+
+const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
+    const [editData, setEditData] = useState({ ...roll });
+    const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
+    const isDispatched = roll.status === 'dispatched';
+    return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white p-6 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between mb-4 items-center border-b pb-2"><h2 className="font-bold text-lg">Edit Roll {roll.product_id}</h2><button onClick={onClose} className="bg-gray-100 p-2 rounded-full"><X size={20}/></button></div>
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="col-span-2"><label className="text-xs font-bold text-gray-500">Customer</label><input disabled={isGuest} className="w-full border p-2 rounded" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500">Quality</label><select disabled={isGuest} className="w-full border p-2 rounded bg-white" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})}>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
+                    <div><label className="text-xs font-bold text-gray-500">Color</label><select disabled={isGuest} className="w-full border p-2 rounded bg-white" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})}>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                    <div><label className="text-xs font-bold text-gray-500">GSM</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.gsm} onChange={e => setEditData({...editData, gsm: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500">Width (in)</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.width_inches} onChange={e => setEditData({...editData, width_inches: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500">Length (m)</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.length_meters} onChange={e => setEditData({...editData, length_meters: e.target.value})} /></div>
+                    <div className="border-t col-span-2 my-2"></div>
+                    <div><label className="text-xs font-bold text-gray-500">Net Kg</label><input disabled={isGuest} type="number" className="w-full border-2 border-blue-100 p-2 rounded font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} /></div>
+                    <div><label className="text-xs font-bold text-gray-500">Gross Kg</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} /></div>
+                </div>
+                {!isGuest && (<div className="flex flex-col gap-2">{isDispatched && (<button onClick={() => onSave({ ...editData, status: 'in_stock', dispatched_at: null })} className="bg-orange-100 text-orange-700 p-3 rounded font-bold">Return to Stock</button>)}<button onClick={() => onSave(editData)} className="bg-blue-600 text-white p-3 rounded font-bold">Save Changes</button>{!isDispatched && (<button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold flex items-center justify-center gap-2"><Trash2 size={18}/> Delete Roll</button>)}</div>)}
+            </div>
+        </div>
+    );
+});
 
 // --- UPDATED STOCK VIEW (WITH ID SORTING) ---
 const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) => {
@@ -410,357 +407,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
                       <div>
                           <div className="font-bold text-blue-600 text-lg flex items-center gap-2">
                               {r.product_id} 
-                              {/* VISUAL INDICATOR FOR OFFLINE ITEMS */}
-                              {r.isOffline && <span className="bg-yellow-100 text-yellow-800 text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1"><CloudOff size={10}/> PENDING</span>}
-                          </div> 
-                          <div className="text-[10px] text-gray-400 mb-1">{r.created_at ? new Date(r.created_at).toLocaleString() : 'Date Unknown'}</div>
-                          <div className="font-semibold text-gray-800">{r.customer_name}</div>
-                          <div className="text-xs text-gray-500 mt-1 inline-flex gap-2"><span className="bg-gray-100 px-2 py-0.5 rounded">{r.quality}</span><span className="bg-gray-100 px-2 py-0.5 rounded">{r.color}</span><span className="bg-gray-100 px-2 py-0.5 rounded">{r.gsm} GSM</span></div>
-                      </div>
-                      <div className="text-right"><div className="font-bold text-xl">{r.net_weight} <span className="text-xs font-normal">kg</span></div><button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="mt-2 bg-blue-50 text-blue-600 p-2 rounded-full hover:bg-blue-100"><Printer size={16}/></button></div>
-                  </div>
-              ))}
-          </div>
-      </div>
-  );
-});
-
-// ... (DashboardView, NewProductView, EditModal, DispatchView, HistoryView, MaterialsView, MainApp unchanged except StockView) ...
-
-// --- RE-INSERTING UNCHANGED COMPONENTS TO ENSURE FULL FILE INTEGRITY ---
-
-const DashboardView = React.memo(({ rolls, materials }) => {
-    const inStock = rolls.filter(r => r.status === 'in_stock');
-    const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
-    const today = new Date().toLocaleDateString();
-    const producedToday = rolls.filter(r => new Date(r.updated_at).toLocaleDateString() === today).length;
-    const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
-    
-    const activeDevices = useMemo(() => {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const recentRolls = rolls.filter(r => new Date(r.updated_at) > sevenDaysAgo);
-        const devices = [...new Set(recentRolls.map(r => r.device_name))].filter(Boolean);
-        return devices;
-    }, [rolls]);
-
-    const qualityData = useMemo(() => {
-        const counts = {};
-        inStock.forEach(r => { const q = r.quality || 'Unknown'; counts[q] = (counts[q] || 0) + (parseFloat(r.net_weight) || 0); });
-        return Object.keys(counts).map(key => ({ name: key, value: parseFloat(counts[key].toFixed(1)) }));
-    }, [inStock]);
-
-    const colorData = useMemo(() => {
-        const counts = {};
-        inStock.forEach(r => { const c = r.color || 'Unknown'; counts[c] = (counts[c] || 0) + (parseFloat(r.net_weight) || 0); });
-        return Object.keys(counts).map(key => ({ name: key, count: parseFloat(counts[key].toFixed(1)) })).sort((a, b) => b.count - a.count).slice(0, 8);
-    }, [inStock]);
-
-    const recentActivity = useMemo(() => {
-        return rolls.slice(0, 5).map(r => {
-            let action = "Edited";
-            if (r.status === 'dispatched') action = "Dispatched";
-            else if (Math.abs(new Date(r.created_at) - new Date(r.updated_at)) < 60000) action = "Produced"; 
-            return { ...r, action, time: new Date(r.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) };
-        });
-    }, [rolls]);
-
-    return (
-        <div className="space-y-6 pb-20">
-            <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-600">
-                <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18}/> Factory Velocity (Today)</h3>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-green-50 p-3 rounded-lg"><div className="text-xs text-green-700 font-bold uppercase flex items-center gap-1"><ArrowDownRight size={14}/> Produced</div><div className="text-2xl font-bold text-green-800">{producedToday} <span className="text-xs font-normal">Rolls</span></div></div>
-                    <div className="bg-orange-50 p-3 rounded-lg"><div className="text-xs text-orange-700 font-bold uppercase flex items-center gap-1"><ArrowUpRight size={14}/> Dispatched</div><div className="text-2xl font-bold text-orange-800">{dispatchedToday} <span className="text-xs font-normal">Rolls</span></div></div>
-                </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Count</div><div className="text-3xl font-bold text-blue-600">{inStock.length}</div></div>
-                <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div><div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400">kg</span></div></div>
-            </div>
-            {activeDevices.length > 0 && (
-                <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
-                    <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wifi size={18}/> Active Devices</h3>
-                    <div className="flex flex-wrap gap-2">{activeDevices.map(d => (<span key={d} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">{d}</span>))}</div>
-                </div>
-            )}
-            <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
-                <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18}/> Recent Activity</h3>
-                {recentActivity.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (
-                    <div className="space-y-3">{recentActivity.map(r => (
-                        <div key={r.id} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0">
-                            <div><div className="font-bold text-sm text-gray-800">{r.product_id} <span className={`text-[10px] uppercase px-1 rounded ${r.action === 'Produced' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.action}</span></div><div className="text-xs text-gray-500">by {r.device_name || 'Unknown'}</div></div>
-                            <div className="text-right"><div className="font-bold text-sm">{r.net_weight} kg</div><div className="text-[10px] text-gray-400">{r.time}</div></div>
-                        </div>
-                    ))}</div>
-                )}
-            </div>
-            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>{qualityData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Pie><RechartsTooltip /><Legend /></PieChart></ResponsiveContainer></div></div>
-            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Top Colors in Stock (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={colorData} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} /><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} /><RechartsTooltip /><Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />{colorData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Bar></BarChart></ResponsiveContainer></div></div>
-        </div>
-    );
-});
-
-// --- SUB-VIEWS (UPDATED: Auto Calculate Net Weight + Saving State + Sequential ID with Prefix) ---
-const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }) => {
-    
-    // Auto Calculation Logic
-    const handleValueChange = (field, value) => {
-        const newFormData = { ...formData, [field]: value };
-        
-        // If changing Width or Gross Weight, calculate Net
-        if (field === 'width_inches' || field === 'gross_weight') {
-            const width = parseFloat(field === 'width_inches' ? value : formData.width_inches);
-            const gross = parseFloat(field === 'gross_weight' ? value : formData.gross_weight);
-            
-            if (!isNaN(width) && !isNaN(gross) && width > 0) {
-                // Core Weight = (Width / 63) * 1kg
-                const coreWeight = (width / 63);
-                // Net = Gross - Core
-                const net = gross - coreWeight;
-                newFormData.net_weight = net.toFixed(2); // Auto fill with 2 decimal places
-            }
-        }
-        setFormData(newFormData);
-    };
-
-    // UPDATE: Initialize Sequence Number AND Prefix from LocalStorage
-    const [rollPrefix, setRollPrefix] = useState(() => localStorage.getItem('ksf_roll_prefix') || 'R');
-    const [rollSeq, setRollSeq] = useState(() => localStorage.getItem('ksf_roll_sequence') || '1001');
-
-    // Sync sequence to formData whenever it changes
-    useEffect(() => {
-        setFormData(prev => ({ ...prev, roll_seq: rollSeq }));
-    }, [rollSeq, setFormData]);
-
-    // Handle form submit wrapper to increment sequence
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        
-        // Pass the current full ID (Prefix + Sequence)
-        const fullId = `${rollPrefix}-${rollSeq}`;
-        const success = await onSubmit(e, fullId); 
-        
-        if (success) {
-            // Auto-increment for next roll
-            const nextSeq = String(Number(rollSeq) + 1);
-            setRollSeq(nextSeq);
-            localStorage.setItem('ksf_roll_sequence', nextSeq);
-            // Save Prefix so it persists too
-            localStorage.setItem('ksf_roll_prefix', rollPrefix);
-        }
-    };
-
-    return (
-        <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24">
-          <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold flex items-center gap-2"><Package className="text-blue-600"/> New Roll Entry</h2>
-              <button 
-                onClick={() => {
-                    setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
-                    // Don't reset sequence number on clear
-                }} 
-                className="text-xs font-bold text-red-500 flex items-center gap-1 border border-red-100 bg-red-50 px-2 py-1 rounded hover:bg-red-100"
-              >
-                <RotateCcw size={12}/> Clear Form
-              </button>
-          </div>
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-            
-            {/* NEW ROLL NUMBER INPUT WITH PREFIX - UPDATED STYLING FOR MOBILE */}
-            <div className="col-span-2">
-                <label className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1 mb-1"><Hash size={12}/> Roll Number (Prefix - Sequence)</label>
-                <div className="flex gap-2 w-full">
-                    <input 
-                        type="text" 
-                        className="w-[35%] min-w-0 border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg md:text-xl font-bold text-blue-900 focus:border-blue-500 outline-none text-center uppercase" 
-                        placeholder="PREFIX"
-                        value={rollPrefix} 
-                        onChange={(e) => {
-                            setRollPrefix(e.target.value.toUpperCase());
-                            localStorage.setItem('ksf_roll_prefix', e.target.value.toUpperCase());
-                        }} 
-                    />
-                    <div className="flex-1 flex items-center gap-2">
-                        <span className="text-xl font-bold text-gray-400">-</span>
-                        <input 
-                            type="number" 
-                            required 
-                            className="w-full min-w-0 border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg md:text-xl font-bold text-blue-900 focus:border-blue-500 outline-none" 
-                            placeholder="1001"
-                            value={rollSeq} 
-                            onChange={(e) => {
-                                setRollSeq(e.target.value);
-                                localStorage.setItem('ksf_roll_sequence', e.target.value);
-                            }} 
-                        />
-                    </div>
-                </div>
-            </div>
-
-            <div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase">Customer</label><input required className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} /></div>
-            <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><select required className="w-full border p-3 rounded bg-white" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}><option value="">Select...</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
-            <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><select required className="w-full border p-3 rounded bg-white" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}><option value="">Select...</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div className="col-span-2 grid grid-cols-3 gap-3">
-                <div><label className="text-xs font-bold text-gray-500 uppercase">GSM</label><input type="number" className="w-full border p-3 rounded" value={formData.gsm} onChange={e => handleValueChange('gsm', e.target.value)} /></div>
-                <div><label className="text-xs font-bold text-gray-500 uppercase">Width (in)</label><input type="number" className="w-full border p-3 rounded" value={formData.width_inches} onChange={e => handleValueChange('width_inches', e.target.value)} /></div>
-                <div><label className="text-xs font-bold text-gray-500 uppercase">Length (m)</label><input type="number" className="w-full border p-3 rounded" value={formData.length_meters} onChange={e => handleValueChange('length_meters', e.target.value)} /></div>
-            </div>
-            <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-3 rounded" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} /></div>
-            <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border-2 border-blue-100 p-3 rounded font-bold text-blue-900" value={formData.net_weight} onChange={e => handleValueChange('net_weight', e.target.value)} /></div>
-            
-            {/* UPDATE: DISABLE BUTTON WHILE SAVING */}
-            <button 
-                type="submit" 
-                disabled={isSaving}
-                className={`col-span-2 p-4 rounded-xl font-bold mt-4 shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2
-                    ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'}`}
-            >
-                {isSaving ? <><Loader className="animate-spin" size={20}/> Saving...</> : 'Save & Print Label'}
-            </button>
-          </form>
-        </div>
-    );
-});
-
-const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
-    const [editData, setEditData] = useState({ ...roll });
-    const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
-    
-    // Check if the roll is dispatched (in history)
-    const isDispatched = roll.status === 'dispatched';
-
-    return (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-            <div className="bg-white p-6 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between mb-4 items-center border-b pb-2">
-                    <h2 className="font-bold text-lg">Edit Roll {roll.product_id}</h2>
-                    <button onClick={onClose} className="bg-gray-100 p-2 rounded-full"><X size={20}/></button>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-6">
-                    <div className="col-span-2"><label className="text-xs font-bold text-gray-500">Customer</label><input disabled={isGuest} className="w-full border p-2 rounded" value={editData.customer_name || ''} onChange={e => setEditData({...editData, customer_name: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold text-gray-500">Quality</label><select disabled={isGuest} className="w-full border p-2 rounded bg-white" value={editData.quality} onChange={e => setEditData({...editData, quality: e.target.value})}>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
-                    <div><label className="text-xs font-bold text-gray-500">Color</label><select disabled={isGuest} className="w-full border p-2 rounded bg-white" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})}>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                    <div><label className="text-xs font-bold text-gray-500">GSM</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.gsm} onChange={e => setEditData({...editData, gsm: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold text-gray-500">Width (in)</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.width_inches} onChange={e => setEditData({...editData, width_inches: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold text-gray-500">Length (m)</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.length_meters} onChange={e => setEditData({...editData, length_meters: e.target.value})} /></div>
-                    <div className="border-t col-span-2 my-2"></div>
-                    <div><label className="text-xs font-bold text-gray-500">Net Kg</label><input disabled={isGuest} type="number" className="w-full border-2 border-blue-100 p-2 rounded font-bold" value={editData.net_weight} onChange={e => setEditData({...editData, net_weight: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold text-gray-500">Gross Kg</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.gross_weight} onChange={e => setEditData({...editData, gross_weight: e.target.value})} /></div>
-                </div>
-                {!isGuest && (
-                    <div className="flex flex-col gap-2">
-                        {isDispatched && (
-                            <button onClick={() => onSave({ ...editData, status: 'in_stock', dispatched_at: null })} className="bg-orange-100 text-orange-700 p-3 rounded font-bold">
-                                Return to Stock
-                            </button>
-                        )}
-                        
-                        <button onClick={() => onSave(editData)} className="bg-blue-600 text-white p-3 rounded font-bold">Save Changes</button>
-                        
-                        {/* UPDATE: Hide delete button if roll is dispatched */}
-                        {!isDispatched && (
-                            <button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold flex items-center justify-center gap-2">
-                                <Trash2 size={18}/> Delete Roll
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-});
-
-const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) => {
-  const [showFilters, setShowFilters] = useState(false);
-  const [textSearch, setTextSearch] = useState('');
-  const [filterQuality, setFilterQuality] = useState('');
-  const [filterColor, setFilterColor] = useState('');
-  const [filterGSM, setFilterGSM] = useState('');
-  const [filterWidth, setFilterWidth] = useState('');
-
-  const safeRolls = Array.isArray(rolls) ? rolls : [];
-  
-  const filtered = useMemo(() => {
-      // 1. FILTERING
-      const list = safeRolls.filter(r => {
-          if (r.status !== 'in_stock') return false;
-          if (textSearch) {
-              const searchTerms = textSearch.toLowerCase().split(' ').filter(t => t.trim() !== '');
-              const searchableText = `${r.product_id} ${r.customer_name || ''} ${r.quality || ''} ${r.color || ''} ${r.gsm || ''} ${r.width_inches || ''}`.toLowerCase();
-              if (!searchTerms.every(term => searchableText.includes(term))) return false;
-          }
-          if (filterQuality && r.quality !== filterQuality) return false;
-          if (filterColor && r.color !== filterColor) return false;
-          if (filterGSM && String(r.gsm) !== String(filterGSM)) return false;
-          if (filterWidth && String(r.width_inches) !== String(filterWidth)) return false;
-          return true;
-      });
-
-      // 2. SORTING (BY NUMERIC ID)
-      return list.sort((a, b) => {
-          // Extract numbers (assuming ID format like "A-1001" or "1001")
-          const extractNum = (str) => {
-              if (!str) return 0;
-              const matches = str.match(/\d+$/); // Match numbers at the end
-              return matches ? parseInt(matches[0], 10) : 0;
-          };
-
-          const numA = extractNum(a.product_id);
-          const numB = extractNum(b.product_id);
-
-          // If numbers are different, sort by number (Descending: Highest ID first)
-          if (numA !== numB) return numB - numA;
-
-          // If numbers are same (or no numbers), fallback to date
-          return new Date(b.created_at) - new Date(a.created_at);
-      });
-  }, [safeRolls, textSearch, filterQuality, filterColor, filterGSM, filterWidth]);
-
-  const totalFilteredWeight = filtered.reduce((s, r) => s + (Number(r.net_weight)||0), 0);
-  
-  const clearFilters = () => { setTextSearch(''); setFilterQuality(''); setFilterColor(''); setFilterGSM(''); setFilterWidth(''); };
-
-  return (
-      <div className="space-y-4 h-full flex flex-col relative pb-20">
-          
-          {/* UPDATE: Sticky Container for Search and Summary */}
-          <div className="sticky top-16 z-20 bg-slate-50 pt-3 pb-2 px-1">
-              <div className="bg-white p-3 rounded shadow-sm flex flex-col gap-3">
-                  <div className="flex gap-2">
-                    <div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center">
-                        <Search className="text-gray-400" size={20} />
-                        <input className="w-full outline-none bg-transparent" placeholder="e.g. Reliance Red 40" value={textSearch} onChange={e => setTextSearch(e.target.value)} />
-                    </div>
-                    <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button>
-                    <button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button>
-                  </div>
-                  
-                  {/* Summary Bar inside sticky container */}
-                  <div className="bg-gray-900 text-white p-3 rounded flex justify-between items-center text-sm">
-                     <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
-                     <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-lg text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
-                  </div>
-
-                  {showFilters && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2">
-                          <select className="border p-2 rounded text-sm" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}><option value="">All Qualities</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select>
-                          <select className="border p-2 rounded text-sm" value={filterColor} onChange={e => setFilterColor(e.target.value)}><option value="">All Colors</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                          <input className="border p-2 rounded text-sm" placeholder="GSM" value={filterGSM} onChange={e => setFilterGSM(e.target.value)} type="number" />
-                          <input className="border p-2 rounded text-sm" placeholder="Width" value={filterWidth} onChange={e => setFilterWidth(e.target.value)} type="number" />
-                          <button onClick={clearFilters} className="col-span-2 md:col-span-4 text-xs text-red-500 font-bold text-center mt-1">Clear All Filters</button>
-                      </div>
-                  )}
-              </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto pb-24">
-              {filtered.length === 0 ? (<div className="text-center text-gray-400 mt-10">No matching rolls found.</div>) : filtered.map(r => (
-                  <div key={r.id || r.product_id} onClick={() => onSelectRoll(r)} className={`bg-white p-4 rounded-xl border mb-2 shadow-sm flex justify-between items-center cursor-pointer active:bg-blue-50 ${r.isOffline ? 'border-l-4 border-l-yellow-400' : 'border-gray-100'}`}>
-                      <div>
-                          <div className="font-bold text-blue-600 text-lg flex items-center gap-2">
-                              {r.product_id} 
-                              {/* VISUAL INDICATOR FOR OFFLINE ITEMS */}
                               {r.isOffline && <span className="bg-yellow-100 text-yellow-800 text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1"><CloudOff size={10}/> PENDING</span>}
                           </div> 
                           <div className="text-[10px] text-gray-400 mb-1">{r.created_at ? new Date(r.created_at).toLocaleString() : 'Date Unknown'}</div>
