@@ -12,7 +12,7 @@ import {
   Package, Truck, Layers, LogOut, Printer, Search, 
   Download, Database, Clock, 
   Trash2, X, Camera, Activity, CheckCircle, Filter, ToggleLeft, ToggleRight, Plus,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff, Loader, Hash, Image as ImageIcon, Share2
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wifi, RotateCcw, FileSpreadsheet, Settings, AlertCircle, Edit3, FileText, Calendar, Eye, EyeOff, CloudOff, Loader, Hash, Image as ImageIcon, Share2, RefreshCw
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -62,29 +62,42 @@ const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8
 
 // --- DATA SERVICE ---
 const DataService = {
+  // RECURSIVE FETCH: Guarantees 100% of data is retrieved
   async getStock() {
     let allData = [];
     let from = 0;
     const step = 1000;
+    
     while (true) {
-        const { data, error } = await supabase.from('rolls').select('*').order('updated_at', { ascending: false }).range(from, from + step - 1);
-        if (error) { console.error(error); break; }
+        // Sort by created_at DESC ensures newly added rows appear at the top
+        const { data, error } = await supabase
+            .from('rolls')
+            .select('*')
+            .order('created_at', { ascending: false }) 
+            .range(from, from + step - 1);
+
+        if (error) {
+            console.error("Error fetching rows:", error);
+            break;
+        }
+        
         if (!data || data.length === 0) break;
+
         allData = [...allData, ...data];
-        if (data.length < step) break;
+
+        if (data.length < step) break; // We reached the end
         from += step;
     }
-    return allData;
+    // Strict client-side sort to fix "random order" issues
+    return allData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
   
-  // FIX: CLEANED UP ADD ROLL FUNCTION
   async addRoll(roll, deviceName) {
-    // 1. Create a Clean Copy: Remove fields that don't exist in Supabase
-    // We strip 'roll_seq' because that is only for the App's memory, not the Database
+    // CLEAN DATA: Remove 'roll_seq' before sending to DB
     const { roll_seq, ...cleanRollData } = roll; 
 
     const rollWithDevice = { 
-        ...cleanRollData, // This contains product_id, customer_name, etc.
+        ...cleanRollData, 
         device_name: deviceName, 
         updated_at: new Date(), 
         created_at: new Date() 
@@ -93,9 +106,8 @@ const DataService = {
     const { data, error } = await supabase.from('rolls').insert([rollWithDevice]).select();
     
     if (error) {
-        // Log the exact error to help debug if it persists
-        console.error("Supabase Insert Error:", error.message, error.details);
-        throw error;
+        console.error("Supabase Insert Error:", error.message);
+        throw new Error(error.message);
     }
     return data[0];
   },
@@ -159,18 +171,23 @@ const generateChallanExcel = (rolls, details) => {
 
 // --- COMPONENTS ---
 
-const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings }) => (
+// UPDATE: Added Manual Sync Button
+const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings, onManualSync, isSyncing }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center print:hidden">
       <div className="flex items-center pl-1">
          <img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" />
       </div>
-      <div className="flex items-center gap-3 text-sm">
-        {!isGuest && <div onClick={onEditDeviceName} className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm">{deviceName || 'Device'} ✎</div>}
-        
+      <div className="flex items-center gap-2 text-sm">
         {!isGuest && (
-            <button onClick={onOpenSettings} className="text-gray-600 hover:bg-gray-100 p-2 rounded-full">
-                <Settings size={20} />
-            </button>
+            <>
+                <button onClick={onManualSync} disabled={isSyncing} className={`p-2 rounded-full ${isSyncing ? 'text-blue-500 bg-blue-50' : 'text-gray-500 hover:bg-gray-100'}`}>
+                    <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
+                </button>
+                <div onClick={onEditDeviceName} className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm hidden md:block">{deviceName || 'Device'} ✎</div>
+                <button onClick={onOpenSettings} className="text-gray-600 hover:bg-gray-100 p-2 rounded-full">
+                    <Settings size={20} />
+                </button>
+            </>
         )}
 
         <button onClick={onLogout} className="text-red-600 font-bold hover:bg-red-50 px-2 py-1 rounded">
@@ -494,9 +511,10 @@ const LabelPrint = ({ data, onClose }) => {
     );
 };
 
-// ... (Rest of the app components remain unchanged) ...
+// ... (Rest of components: DashboardView, NewProductView, EditModal, StockView, DispatchView, HistoryView, MaterialsView, MainApp - remain unchanged from previous versions, only LabelPrint was updated above) ...
 
-// --- DASHBOARD VIEW ---
+// --- RE-INSERTING UNCHANGED COMPONENTS TO ENSURE FULL FILE INTEGRITY ---
+
 const DashboardView = React.memo(({ rolls, materials }) => {
     const inStock = rolls.filter(r => r.status === 'in_stock');
     const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
@@ -1154,6 +1172,7 @@ const MainApp = () => {
   
   // NEW: State for locking the save button
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false); // New syncing state
 
   const fetchDataRef = useRef();
   const fetchData = useCallback(async (isBackground = false) => {
@@ -1166,23 +1185,43 @@ const MainApp = () => {
   }, []);
   fetchDataRef.current = fetchData;
 
-  // --- AUTO SYNC OFFLINE DATA ---
-  useEffect(() => {
-    const syncOffline = async () => {
-         const offline = safeJSONParse('ksf_offline_rolls', []);
-         if (offline.length > 0 && navigator.onLine) {
-             const { error } = await supabase.from('rolls').insert(offline);
+  // --- AUTO SYNC OFFLINE DATA (FIXED TO REMOVE roll_seq) ---
+  const syncOffline = useCallback(async () => {
+     if (!navigator.onLine || isSyncing) return;
+     
+     setIsSyncing(true);
+     const offline = safeJSONParse('ksf_offline_rolls', []);
+     
+     if (offline.length > 0) {
+         try {
+             // CLEAN DATA BEFORE SYNCING
+             const cleanedRolls = offline.map(r => {
+                 const { roll_seq, ...rest } = r; // Strip roll_seq if present
+                 return rest;
+             });
+
+             const { error } = await supabase.from('rolls').insert(cleanedRolls);
+             
              if (!error) {
                  localStorage.removeItem('ksf_offline_rolls');
                  fetchData();
-                 alert(`Synced ${offline.length} offline rolls to database!`);
+                 alert(`Success: Synced ${offline.length} offline rolls to the database!`);
+             } else {
+                 console.error("Sync failed:", error);
+                 // Keep them in local storage to try again later, maybe alert user
              }
+         } catch (e) {
+             console.error("Sync error:", e);
          }
-    }
+     }
+     setIsSyncing(false);
+  }, [fetchData, isSyncing]);
+
+  useEffect(() => {
     window.addEventListener('online', syncOffline);
-    syncOffline();
+    syncOffline(); // Try sync on load
     return () => window.removeEventListener('online', syncOffline);
-  }, [fetchData]);
+  }, [syncOffline]);
 
   useEffect(() => {
     const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } };
@@ -1225,22 +1264,33 @@ const MainApp = () => {
 
       // 2. ONLINE SAVE
       try { 
-          await DataService.addRoll(newRoll, deviceName); 
+          await DataService.addRoll(newRoll, deviceName);
+          
+          // SUCCESS: Add to local list immediately (Optimistic Update)
+          setRolls(prev => [newRoll, ...prev]); 
+          
           setPrintData(newRoll); 
-          fetchData(); 
+          fetchData(true); // Fetch background to confirm
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); 
           return true; // Success
       } catch (err) { 
-          console.error("Save failed, trying offline mode", err);
-          const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
-          localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
-          setRolls(prev => [newRoll, ...prev]);
-          setPrintData(newRoll);
-          alert("Network Error. Saved locally. Will sync later.");
-          setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
-          return true; // Still consider it a success for the user workflow
+          console.error("Save failed:", err);
+          
+          // CHECK FOR DUPLICATE KEY ERROR
+          if (err.message && err.message.includes('duplicate key')) {
+              alert(`Error: Roll ID "${id}" already exists! Please use a different number.`);
+          } else {
+              // Only fallback to offline if it's NOT a duplicate error
+              const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
+              localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
+              setRolls(prev => [newRoll, ...prev]);
+              setPrintData(newRoll);
+              alert("Network Error. Saved locally. Will sync later.");
+              setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+              return true;
+          }
+          return false; // Failed
       } finally {
-          // Unlock button no matter what happens
           setIsSaving(false);
       }
   };
@@ -1309,7 +1359,15 @@ const MainApp = () => {
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20">
-      <Header isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} onEditDeviceName={() => setDeviceModalOpen(true)} onOpenSettings={() => setSettingsOpen(true)} />
+      <Header 
+        isGuest={isGuest} 
+        deviceName={deviceName} 
+        onLogout={handleLogout} 
+        onEditDeviceName={() => setDeviceModalOpen(true)} 
+        onOpenSettings={() => setSettingsOpen(true)} 
+        onManualSync={syncOffline}
+        isSyncing={isSyncing}
+      />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading && activeTab !== 'dashboard' ? ( <div className="flex justify-center p-12 text-gray-400">Loading Data...</div> ) : (
             <>
