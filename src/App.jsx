@@ -81,8 +81,7 @@ const DataService = {
   async addRoll(roll, deviceName) {
     const { roll_seq, isOffline, ...cleanRollData } = roll; 
 
-    // FIX: Check if cleanRollData ALREADY has a created_at date (from offline storage).
-    // If it does, use that. If not (new online entry), use new Date().
+    // Check if cleanRollData ALREADY has a created_at date (from offline storage).
     const creationTime = cleanRollData.created_at ? cleanRollData.created_at : new Date();
 
     const rollWithDevice = { 
@@ -727,7 +726,6 @@ const MainApp = () => {
   const [user, setUser] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || '');
-  const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [rolls, setRolls] = useState([]);
   const [materials, setMaterials] = useState([]);
@@ -735,13 +733,22 @@ const MainApp = () => {
   const [editRoll, setEditRoll] = useState(null);
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
-  const [isReportsOpen, setReportsOpen] = useState(false); // NEW: Report Modal State
-  const [formData, setFormData] = useState({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' });
+  const [isReportsOpen, setReportsOpen] = useState(false); 
   
-  // NEW: State for locking the save button
+  // STATE PERSISTENCE: Initialize from LocalStorage or Default
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ksf_active_tab') || 'dashboard');
+  
+  const [formData, setFormData] = useState(() => safeJSONParse('ksf_form_data', { 
+      customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' 
+  }));
+  
   const [isSaving, setIsSaving] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false); // New syncing state
-  const [offlineCount, setOfflineCount] = useState(0); // Track pending uploads
+  const [isSyncing, setIsSyncing] = useState(false); 
+  const [offlineCount, setOfflineCount] = useState(0); 
+
+  // PERSISTENCE EFFECTS
+  useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
+  useEffect(() => { localStorage.setItem('ksf_form_data', JSON.stringify(formData)); }, [formData]);
 
   const fetchDataRef = useRef();
   
@@ -853,7 +860,10 @@ const MainApp = () => {
         setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); // Show immediately
         setPrintData(newRoll); 
         alert("Saved LOCALLY. Will sync when online.");
+        
+        // PARTIAL CLEAR ONLY
         setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+        
         setIsSaving(false); 
         return true;
       }
@@ -864,7 +874,10 @@ const MainApp = () => {
           setRolls(prev => [newRoll, ...prev]); 
           setPrintData(newRoll); 
           fetchData(true); 
+          
+          // PARTIAL CLEAR ONLY (Keep Customer, Quality, etc.)
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); 
+          
           return true; 
       } catch (err) { 
           console.error("Save failed:", err);
@@ -876,7 +889,10 @@ const MainApp = () => {
               setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); // Show immediately
               setPrintData(newRoll);
               alert("Network Error. Saved locally.");
+              
+              // PARTIAL CLEAR ONLY
               setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+              
               return true;
           }
           return false; 
