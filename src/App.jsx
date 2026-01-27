@@ -123,23 +123,59 @@ const DataService = {
   }
 };
 
-// --- HELPER: GENERATE EXCEL GATE PASS ---
+// --- HELPER: GENERATE EXCEL GATE PASS (UPDATED WITH GROSS WEIGHT) ---
 const generateChallanExcel = (rolls, details) => {
     try {
-        const header = [["KSF NON WOVEN"], [], ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()], ["Buyer:", details.buyer, "Vehicle:", details.vehicle], [], ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "GSM", "Net Kg"]];
-        const body = rolls.map((r, i) => [i + 1, r.product_id, r.quality, r.color, r.width_inches, r.gsm, parseFloat(r.net_weight) || 0]);
-        const totalWt = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
-        const footer = [[], ["", "", "", "", "", "Total Weight:", totalWt]];
+        const header = [
+            ["KSF NON WOVEN"], 
+            [], 
+            ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()], 
+            ["Buyer:", details.buyer, "Vehicle:", details.vehicle], 
+            [], 
+            // Added Gross Kg Column
+            ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "GSM", "Gross Kg", "Net Kg"]
+        ];
+        
+        // Map body to include Gross Weight
+        const body = rolls.map((r, i) => [
+            i + 1, 
+            r.product_id, 
+            r.quality, 
+            r.color, 
+            r.width_inches, 
+            r.gsm, 
+            parseFloat(r.gross_weight) || 0, // NEW: Gross Weight
+            parseFloat(r.net_weight) || 0    // Net Weight
+        ]);
+
+        // Calculate Totals for both columns
+        const totalNet = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
+        const totalGross = rolls.reduce((sum, r) => sum + (parseFloat(r.gross_weight) || 0), 0);
+
+        const footer = [
+            [], 
+            ["", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]
+        ];
+        
         const finalData = [...header, ...body, ...footer];
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(finalData);
-        ws['!cols'] = [{ wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 }];
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
+        
+        // Update Column Widths (Added one more for Gross)
+        ws['!cols'] = [{ wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
+        
+        // Update Merge Range to span new width
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
+        
         XLSX.utils.book_append_sheet(wb, ws, "GatePass");
         const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
         XLSX.writeFile(wb, fileName);
         return true;
-    } catch (err) { console.error(err); alert("Excel Error: " + err.message); return false; }
+    } catch (err) {
+        console.error(err);
+        alert("Excel Error: " + err.message);
+        return false;
+    }
 };
 
 // --- COMPONENTS ---
