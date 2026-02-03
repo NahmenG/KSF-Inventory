@@ -67,6 +67,7 @@ const DataService = {
     let from = 0;
     const step = 1000;
     while (true) {
+        // Sort by created_at DESC (Newest Time First) - The reliable method
         const { data, error } = await supabase.from('rolls').select('*').order('created_at', { ascending: false }).range(from, from + step - 1);
         if (error) { console.error(error); break; }
         if (!data || data.length === 0) break;
@@ -79,13 +80,17 @@ const DataService = {
   
   async addRoll(roll, deviceName) {
     const { roll_seq, isOffline, ...cleanRollData } = roll; 
+
+    // Check if cleanRollData ALREADY has a created_at date (from offline storage).
     const creationTime = cleanRollData.created_at ? cleanRollData.created_at : new Date();
+
     const rollWithDevice = { 
         ...cleanRollData, 
         device_name: deviceName, 
         updated_at: new Date(), 
-        created_at: creationTime 
+        created_at: creationTime // Preserve original time!
     };
+
     const { data, error } = await supabase.from('rolls').insert([rollWithDevice]).select();
     if (error) throw error;
     return data[0];
@@ -321,6 +326,20 @@ const DashboardView = React.memo(({ rolls, materials }) => {
 
     return (
         <div className="space-y-6 pb-20">
+            <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-600">
+                <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18}/> Factory Velocity (Today)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-green-50 p-3 rounded-lg"><div className="text-xs text-green-700 font-bold uppercase flex items-center gap-1"><ArrowDownRight size={14}/> Produced</div><div className="text-2xl font-bold text-green-800">{producedToday} <span className="text-xs font-normal">Rolls</span></div></div>
+                    <div className="bg-orange-50 p-3 rounded-lg"><div className="text-xs text-orange-700 font-bold uppercase flex items-center gap-1"><ArrowUpRight size={14}/> Dispatched</div><div className="text-2xl font-bold text-orange-800">{dispatchedToday} <span className="text-xs font-normal">Rolls</span></div></div>
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4"><div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Count</div><div className="text-3xl font-bold text-blue-600">{inStock.length}</div></div><div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div><div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400">kg</span></div></div></div>
+            {activeDevices.length > 0 && (<div className="bg-white p-4 rounded-xl shadow border border-gray-100"><h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wifi size={18}/> Active Devices</h3><div className="flex flex-wrap gap-2">{activeDevices.map(d => (<span key={d} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">{d}</span>))}</div></div>)}
+            <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18}/> Recent Activity</h3>{recentActivity.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (<div className="space-y-3">{recentActivity.map(r => (<div key={r.id} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0"><div><div className="font-bold text-sm text-gray-800">{r.product_id} <span className={`text-[10px] uppercase px-1 rounded ${r.action === 'Produced' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.action}</span></div><div className="text-xs text-gray-500">by {r.device_name || 'Unknown'}</div></div><div className="text-right"><div className="font-bold text-sm">{r.net_weight} kg</div><div className="text-[10px] text-gray-400">{r.time}</div></div></div>))}</div>)}</div>
+            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>{qualityData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Pie><RechartsTooltip /><Legend /></PieChart></ResponsiveContainer></div></div>
+            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Top Colors in Stock (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={colorData} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} /><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} /><RechartsTooltip /><Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />{colorData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Bar></BarChart></ResponsiveContainer></div></div>
+            
+            {/* MOVED: Low Stock Alert Section to bottom */}
             {lowStockMaterials.length > 0 && (
                 <div className="bg-red-50 p-4 rounded-xl border-l-4 border-red-500 shadow-sm animate-in slide-in-from-top-4 fade-in">
                     <h3 className="font-bold text-red-800 flex items-center gap-2 mb-2">
@@ -336,24 +355,11 @@ const DashboardView = React.memo(({ rolls, materials }) => {
                     </div>
                 </div>
             )}
-
-            <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-600">
-                <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18}/> Factory Velocity (Today)</h3>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-green-50 p-3 rounded-lg"><div className="text-xs text-green-700 font-bold uppercase flex items-center gap-1"><ArrowDownRight size={14}/> Produced</div><div className="text-2xl font-bold text-green-800">{producedToday} <span className="text-xs font-normal">Rolls</span></div></div>
-                    <div className="bg-orange-50 p-3 rounded-lg"><div className="text-xs text-orange-700 font-bold uppercase flex items-center gap-1"><ArrowUpRight size={14}/> Dispatched</div><div className="text-2xl font-bold text-orange-800">{dispatchedToday} <span className="text-xs font-normal">Rolls</span></div></div>
-                </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4"><div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Count</div><div className="text-3xl font-bold text-blue-600">{inStock.length}</div></div><div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div><div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400">kg</span></div></div></div>
-            {activeDevices.length > 0 && (<div className="bg-white p-4 rounded-xl shadow border border-gray-100"><h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wifi size={18}/> Active Devices</h3><div className="flex flex-wrap gap-2">{activeDevices.map(d => (<span key={d} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">{d}</span>))}</div></div>)}
-            <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18}/> Recent Activity</h3>{recentActivity.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (<div className="space-y-3">{recentActivity.map(r => (<div key={r.id} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0"><div><div className="font-bold text-sm text-gray-800">{r.product_id} <span className={`text-[10px] uppercase px-1 rounded ${r.action === 'Produced' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.action}</span></div><div className="text-xs text-gray-500">by {r.device_name || 'Unknown'}</div></div><div className="text-right"><div className="font-bold text-sm">{r.net_weight} kg</div><div className="text-[10px] text-gray-400">{r.time}</div></div></div>))}</div>)}</div>
-            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>{qualityData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Pie><RechartsTooltip /><Legend /></PieChart></ResponsiveContainer></div></div>
-            <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Top Colors in Stock (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={colorData} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} /><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} /><RechartsTooltip /><Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />{colorData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Bar></BarChart></ResponsiveContainer></div></div>
         </div>
     );
 });
 
-// ... (NewProductView, EditModal, StockView, DispatchView, HistoryView unchanged) ...
+// ... (NewProductView, EditModal, StockView, DispatchView, HistoryView, MaterialsView, MainApp unchanged) ...
 
 const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }) => {
     const handleValueChange = (field, value) => {
