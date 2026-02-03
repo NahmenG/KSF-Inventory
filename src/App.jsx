@@ -286,7 +286,10 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const inStock = rolls.filter(r => r.status === 'in_stock');
     const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
     const today = new Date().toLocaleDateString();
-    const producedToday = rolls.filter(r => new Date(r.updated_at).toLocaleDateString() === today).length;
+    
+    // FIX: PRODUCED TODAY LOGIC - use 'created_at' instead of 'updated_at'
+    const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === today).length;
+    
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
     const activeDevices = useMemo(() => { const d = new Date(); d.setDate(d.getDate()-7); return [...new Set(rolls.filter(r => new Date(r.updated_at) > d).map(r => r.device_name))].filter(Boolean); }, [rolls]);
     const qualityData = useMemo(() => { const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality]||0) + (parseFloat(r.net_weight)||0)); return Object.keys(c).map(k => ({ name: k, value: parseFloat(c[k].toFixed(1)) })); }, [inStock]);
@@ -362,6 +365,8 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
     );
 });
 
+// ... (EditModal, StockView, DispatchView, HistoryView, MaterialsView, MainApp unchanged) ...
+
 const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
@@ -387,7 +392,6 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     );
 });
 
-// --- REVERTED STOCK VIEW (SORT BY TIME ONLY) ---
 const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [textSearch, setTextSearch] = useState('');
