@@ -310,13 +310,28 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === today).length;
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
     
-    // UPDATED: Calculate Low Stock Materials based on INDIVIDUAL min_level
+    // UPDATED: Priority Sorting for Low Stock Materials
     const lowStockMaterials = useMemo(() => {
-        return (materials || []).filter(m => {
-            const limit = parseFloat(m.min_level);
-            // Only alert if limit is defined (>0) AND stock is below it
-            return limit > 0 && m.stock_quantity < limit;
-        });
+        // Define Priority Order: Lower number = Higher priority
+        const priority = {
+            'Polymers': 1,
+            'Filler': 2,
+            'Additives': 3,
+            'Colour': 4,
+            'Others': 5
+        };
+
+        return (materials || [])
+            .filter(m => {
+                const limit = parseFloat(m.min_level);
+                return limit > 0 && m.stock_quantity < limit;
+            })
+            .sort((a, b) => {
+                // Get priority for category, default to 99 (lowest) if category not found
+                const pA = priority[a.category] || 99;
+                const pB = priority[b.category] || 99;
+                return pA - pB;
+            });
     }, [materials]);
 
     const activeDevices = useMemo(() => { const d = new Date(); d.setDate(d.getDate()-7); return [...new Set(rolls.filter(r => new Date(r.updated_at) > d).map(r => r.device_name))].filter(Boolean); }, [rolls]);
@@ -339,7 +354,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
             <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>{qualityData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Pie><RechartsTooltip /><Legend /></PieChart></ResponsiveContainer></div></div>
             <div className="bg-white p-4 rounded-xl shadow border"><h3 className="font-bold mb-4 text-gray-700">Top Colors in Stock (kg)</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={colorData} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} /><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} /><RechartsTooltip /><Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />{colorData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Bar></BarChart></ResponsiveContainer></div></div>
             
-            {/* MOVED: Low Stock Alert Section to bottom */}
+            {/* Low Stock Alert Section (Sorted by Priority) */}
             {lowStockMaterials.length > 0 && (
                 <div className="bg-red-50 p-4 rounded-xl border-l-4 border-red-500 shadow-sm animate-in slide-in-from-top-4 fade-in">
                     <h3 className="font-bold text-red-800 flex items-center gap-2 mb-2">
@@ -348,7 +363,10 @@ const DashboardView = React.memo(({ rolls, materials }) => {
                     <div className="space-y-2">
                         {lowStockMaterials.map(m => (
                             <div key={m.id} className="flex justify-between items-center bg-white p-2 rounded border border-red-100 text-sm shadow-sm">
-                                <span className="font-bold text-gray-700">{m.name}</span>
+                                <div>
+                                    <span className="font-bold text-gray-700 block">{m.name}</span>
+                                    <span className="text-[10px] uppercase text-gray-400 font-bold">{m.category}</span>
+                                </div>
                                 <span className="font-bold text-red-600">{m.stock_quantity} kg <span className="text-gray-400 font-normal text-xs">/ {m.min_level} kg</span></span>
                             </div>
                         ))}
@@ -758,7 +776,6 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
     );
 });
 
-// UPDATE: Materials View now has Edit button and no fallback default
 const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit, onDelete }) => { 
     const [activeCat, setActiveCat] = useState('Colour');
     const [isAddModalOpen, setAddModalOpen] = useState(false);
