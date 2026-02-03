@@ -67,7 +67,6 @@ const DataService = {
     let from = 0;
     const step = 1000;
     while (true) {
-        // Sort by created_at DESC (Newest Time First) - The reliable method
         const { data, error } = await supabase.from('rolls').select('*').order('created_at', { ascending: false }).range(from, from + step - 1);
         if (error) { console.error(error); break; }
         if (!data || data.length === 0) break;
@@ -80,17 +79,13 @@ const DataService = {
   
   async addRoll(roll, deviceName) {
     const { roll_seq, isOffline, ...cleanRollData } = roll; 
-
-    // Check if cleanRollData ALREADY has a created_at date (from offline storage).
     const creationTime = cleanRollData.created_at ? cleanRollData.created_at : new Date();
-
     const rollWithDevice = { 
         ...cleanRollData, 
         device_name: deviceName, 
         updated_at: new Date(), 
-        created_at: creationTime // Preserve original time!
+        created_at: creationTime 
     };
-
     const { data, error } = await supabase.from('rolls').insert([rollWithDevice]).select();
     if (error) throw error;
     return data[0];
@@ -123,7 +118,7 @@ const DataService = {
   }
 };
 
-// --- HELPER: GENERATE EXCEL GATE PASS (UPDATED WITH GROSS WEIGHT) ---
+// --- HELPER: GENERATE EXCEL GATE PASS (Updated with Length) ---
 const generateChallanExcel = (rolls, details) => {
     try {
         const header = [
@@ -132,40 +127,38 @@ const generateChallanExcel = (rolls, details) => {
             ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()], 
             ["Buyer:", details.buyer, "Vehicle:", details.vehicle], 
             [], 
-            // Added Gross Kg Column
-            ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "GSM", "Gross Kg", "Net Kg"]
+            // ADDED: Length (m) Column
+            ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "Length (m)", "GSM", "Gross Kg", "Net Kg"]
         ];
         
-        // Map body to include Gross Weight
         const body = rolls.map((r, i) => [
             i + 1, 
             r.product_id, 
             r.quality, 
             r.color, 
             r.width_inches, 
+            r.length_meters, // Length Value
             r.gsm, 
-            parseFloat(r.gross_weight) || 0, // NEW: Gross Weight
-            parseFloat(r.net_weight) || 0    // Net Weight
+            parseFloat(r.gross_weight) || 0,
+            parseFloat(r.net_weight) || 0
         ]);
 
-        // Calculate Totals for both columns
         const totalNet = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
         const totalGross = rolls.reduce((sum, r) => sum + (parseFloat(r.gross_weight) || 0), 0);
 
         const footer = [
             [], 
-            ["", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]
+            // Adjusted empty cells to align totals under Gross/Net (8th and 9th cols)
+            ["", "", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]
         ];
         
         const finalData = [...header, ...body, ...footer];
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(finalData);
         
-        // Update Column Widths (Added one more for Gross)
-        ws['!cols'] = [{ wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
-        
-        // Update Merge Range to span new width
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
+        // Update Column Widths (9 Columns now)
+        ws['!cols'] = [{ wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }]; // Span all 9 cols
         
         XLSX.utils.book_append_sheet(wb, ws, "GatePass");
         const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
@@ -286,10 +279,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const inStock = rolls.filter(r => r.status === 'in_stock');
     const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
     const today = new Date().toLocaleDateString();
-    
-    // FIX: PRODUCED TODAY LOGIC - use 'created_at' instead of 'updated_at'
     const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === today).length;
-    
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
     const activeDevices = useMemo(() => { const d = new Date(); d.setDate(d.getDate()-7); return [...new Set(rolls.filter(r => new Date(r.updated_at) > d).map(r => r.device_name))].filter(Boolean); }, [rolls]);
     const qualityData = useMemo(() => { const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality]||0) + (parseFloat(r.net_weight)||0)); return Object.keys(c).map(k => ({ name: k, value: parseFloat(c[k].toFixed(1)) })); }, [inStock]);
@@ -365,8 +355,6 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
     );
 });
 
-// ... (EditModal, StockView, DispatchView, HistoryView, MaterialsView, MainApp unchanged) ...
-
 const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     const [editData, setEditData] = useState({ ...roll });
     const handleDelete = () => { if(window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
@@ -392,6 +380,7 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     );
 });
 
+// --- UPDATED STOCK VIEW (With Smart Search) ---
 const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [textSearch, setTextSearch] = useState('');
@@ -405,11 +394,30 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
   const filtered = useMemo(() => {
       const list = safeRolls.filter(r => {
           if (r.status !== 'in_stock') return false;
+          
+          // SMART SEARCH LOGIC
           if (textSearch) {
               const searchTerms = textSearch.toLowerCase().split(' ').filter(t => t.trim() !== '');
-              const searchableText = `${r.product_id} ${r.customer_name || ''} ${r.quality || ''} ${r.color || ''} ${r.gsm || ''} ${r.width_inches || ''}`.toLowerCase();
-              if (!searchTerms.every(term => searchableText.includes(term))) return false;
+              
+              const isMatch = searchTerms.every(term => {
+                  // 1. GSM Check (e.g. "60gsm")
+                  if (/^\d+gsm$/.test(term)) {
+                      const val = parseFloat(term.replace('gsm', ''));
+                      return !isNaN(val) && r.gsm == val;
+                  }
+                  // 2. Width Check (e.g. "42in")
+                  if (/^\d+in$/.test(term)) {
+                      const val = parseFloat(term.replace('in', ''));
+                      return !isNaN(val) && r.width_inches == val;
+                  }
+                  // 3. General Text Fallback
+                  const searchableText = `${r.product_id} ${r.customer_name || ''} ${r.quality || ''} ${r.color || ''} ${r.gsm} ${r.width_inches}`.toLowerCase();
+                  return searchableText.includes(term);
+              });
+              
+              if (!isMatch) return false;
           }
+
           if (filterQuality && r.quality !== filterQuality) return false;
           if (filterColor && r.color !== filterColor) return false;
           if (filterGSM && String(r.gsm) !== String(filterGSM)) return false;
@@ -417,7 +425,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
           return true;
       });
 
-      // PURE DATE SORTING (Newest First) - Reverted as requested
       return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [safeRolls, textSearch, filterQuality, filterColor, filterGSM, filterWidth]);
 
@@ -429,7 +436,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
       <div className="space-y-4 h-full flex flex-col relative pb-20">
           <div className="sticky top-16 z-20 bg-slate-50 pt-3 pb-2 px-1">
               <div className="bg-white p-3 rounded shadow-sm flex flex-col gap-3">
-                  <div className="flex gap-2"><div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center"><Search className="text-gray-400" size={20} /><input className="w-full outline-none bg-transparent" placeholder="e.g. Reliance Red 40" value={textSearch} onChange={e => setTextSearch(e.target.value)} /></div><button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button><button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button></div>
+                  <div className="flex gap-2"><div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center"><Search className="text-gray-400" size={20} /><input className="w-full outline-none bg-transparent" placeholder="e.g. 60gsm 42in White" value={textSearch} onChange={e => setTextSearch(e.target.value)} /></div><button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button><button onClick={onExport} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14}/> XLS</button></div>
                   <div className="bg-gray-900 text-white p-3 rounded flex justify-between items-center text-sm"><div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div><div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-lg text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div></div>
                   {showFilters && (<div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2"><select className="border p-2 rounded text-sm" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}><option value="">All Qualities</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select><select className="border p-2 rounded text-sm" value={filterColor} onChange={e => setFilterColor(e.target.value)}><option value="">All Colors</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select><input className="border p-2 rounded text-sm" placeholder="GSM" value={filterGSM} onChange={e => setFilterGSM(e.target.value)} type="number" /><input className="border p-2 rounded text-sm" placeholder="Width" value={filterWidth} onChange={e => setFilterWidth(e.target.value)} type="number" /><button onClick={clearFilters} className="col-span-2 md:col-span-4 text-xs text-red-500 font-bold text-center mt-1">Clear All Filters</button></div>)}
               </div>
@@ -453,6 +460,8 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
       </div>
   );
 });
+
+// ... (DispatchView, HistoryView, MaterialsView, MainApp unchanged) ...
 
 const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
     const [scanId, setScanId] = useState('');
@@ -766,6 +775,7 @@ const MainApp = () => {
   const [user, setUser] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || '');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ksf_active_tab') || 'dashboard');
   const [loading, setLoading] = useState(false);
   const [rolls, setRolls] = useState([]);
   const [materials, setMaterials] = useState([]);
@@ -774,107 +784,61 @@ const MainApp = () => {
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isReportsOpen, setReportsOpen] = useState(false); 
-  
-  // STATE PERSISTENCE: Initialize from LocalStorage or Default
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ksf_active_tab') || 'dashboard');
-  
-  const [formData, setFormData] = useState(() => safeJSONParse('ksf_form_data', { 
-      customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' 
-  }));
-  
+  const [formData, setFormData] = useState(() => safeJSONParse('ksf_form_data', { customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }));
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false); 
   const [offlineCount, setOfflineCount] = useState(0); 
 
-  // PERSISTENCE EFFECTS
   useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
   useEffect(() => { localStorage.setItem('ksf_form_data', JSON.stringify(formData)); }, [formData]);
 
   const fetchDataRef = useRef();
-  
-  // UPDATE: FETCH MERGES SERVER + LOCAL DATA FOR VISIBILITY
   const fetchData = useCallback(async (isBackground = false) => {
       if (!isBackground) setLoading(true);
       const serverData = await DataService.getStock();
       const offlineData = safeJSONParse('ksf_offline_rolls', []);
-      
       setOfflineCount(offlineData.length);
-
-      // Merge: Show offline data at the top. 
       const serverIds = new Set(serverData.map(r => r.product_id));
       const uniqueOffline = offlineData.filter(r => !serverIds.has(r.product_id));
       const taggedOffline = uniqueOffline.map(r => ({ ...r, isOffline: true }));
-      
       setRolls([...taggedOffline, ...serverData]); 
       setMaterials(await DataService.getRawMaterials());
       if (!isBackground) setLoading(false);
   }, []);
   fetchDataRef.current = fetchData;
 
-  // --- AUTO SYNC OFFLINE DATA (ONE-BY-ONE PROCESSING) ---
   const syncOffline = useCallback(async () => {
      if (!navigator.onLine || isSyncing) return;
-     
      setIsSyncing(true);
      const offline = safeJSONParse('ksf_offline_rolls', []);
-     
      if (offline.length === 0) { setIsSyncing(false); return; }
-
      const remaining = [];
      let successCount = 0;
-
-     // Process ONE BY ONE to isolate errors
      for (const roll of offline) {
          try {
-             // 1. CLEAN
              const { roll_seq, isOffline, ...cleanRoll } = roll; 
-             
-             // 2. CHECK IF EXISTS
              const { data: existing } = await supabase.from('rolls').select('id').eq('product_id', cleanRoll.product_id).maybeSingle();
-             
              if (!existing) {
-                 // 3. INSERT (TIMESTAMP FIX IS IN addRoll LOGIC, but we manually do it here for batch)
-                 // Ensure we keep the original creation time if it exists!
-                 const finalPayload = {
-                     ...cleanRoll,
-                     // If offline data has created_at, keep it. Otherwise new Date()
-                     created_at: cleanRoll.created_at || new Date()
-                 };
-
+                 const finalPayload = { ...cleanRoll, created_at: cleanRoll.created_at || new Date() };
                  const { error } = await supabase.from('rolls').insert([finalPayload]);
                  if (error) throw error;
              }
              successCount++;
          } catch (e) {
              console.error("Sync item failed:", roll.product_id, e);
-             remaining.push(roll); // Keep failed item
+             remaining.push(roll); 
          }
      }
-
-     // Update Local Storage with only the remaining failed items
      if (remaining.length < offline.length) {
          localStorage.setItem('ksf_offline_rolls', JSON.stringify(remaining));
          alert(`Synced ${successCount} rolls! ${remaining.length} remaining.`);
-         fetchData(); // Refresh UI
+         fetchData(); 
      }
-     
      setIsSyncing(false);
   }, [isSyncing, fetchData]);
 
-  useEffect(() => {
-    window.addEventListener('online', syncOffline);
-    syncOffline(); // Try sync on load
-    return () => window.removeEventListener('online', syncOffline);
-  }, [syncOffline]);
-
-  useEffect(() => {
-    const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } };
-    checkSession();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session && !user) { setIsGuest(false); fetchData(); } });
-    const interval = setInterval(() => { if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000);
-    return () => { subscription.unsubscribe(); clearInterval(interval); };
-  }, [fetchData]);
-
+  useEffect(() => { window.addEventListener('online', syncOffline); syncOffline(); return () => window.removeEventListener('online', syncOffline); }, [syncOffline]);
+  useEffect(() => { const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } }; checkSession(); const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session && !user) { setIsGuest(false); fetchData(); } }); const interval = setInterval(() => { if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000); return () => { subscription.unsubscribe(); clearInterval(interval); }; }, [fetchData]);
   useEffect(() => { if(user && !isGuest && !deviceName) setDeviceModalOpen(true); }, [user, isGuest, deviceName]);
 
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
@@ -882,78 +846,48 @@ const MainApp = () => {
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
   
-  // --- UPDATE 3: MODIFIED SAVE LOGIC (Prevent Duplicates) ---
   const handleSaveRoll = async (e, customRollId) => { 
       e.preventDefault();
-      
       if (isSaving) return false;
       setIsSaving(true); 
-
       const id = customRollId;
-      // CREATE TIMESTAMP HERE (Client Side Authority)
       const newRoll = { ...formData, product_id: id, status: 'in_stock', created_at: new Date().toISOString() }; 
-
-      // 1. OFFLINE CHECK
       if (!navigator.onLine) {
         const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
         localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
-        setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); // Show immediately
+        setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); 
         setPrintData(newRoll); 
         alert("Saved LOCALLY. Will sync when online.");
-        
-        // PARTIAL CLEAR ONLY
         setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
-        
         setIsSaving(false); 
         return true;
       }
-
-      // 2. ONLINE SAVE
       try { 
           await DataService.addRoll(newRoll, deviceName);
           setRolls(prev => [newRoll, ...prev]); 
           setPrintData(newRoll); 
           fetchData(true); 
-          
-          // PARTIAL CLEAR ONLY (Keep Customer, Quality, etc.)
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); 
-          
           return true; 
       } catch (err) { 
           console.error("Save failed:", err);
-          if (err.message && err.message.includes('duplicate key')) {
-              alert(`Error: Roll ID "${id}" already exists!`);
-          } else {
+          if (err.message && err.message.includes('duplicate key')) { alert(`Error: Roll ID "${id}" already exists!`); } 
+          else {
               const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
               localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
-              setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); // Show immediately
+              setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); 
               setPrintData(newRoll);
               alert("Network Error. Saved locally.");
-              
-              // PARTIAL CLEAR ONLY
               setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
-              
               return true;
           }
           return false; 
-      } finally {
-          setIsSaving(false);
-      }
+      } finally { setIsSaving(false); }
   };
   
-  const handleDispatch = useCallback(async (rollData) => { 
-      await DataService.updateRoll(rollData.id, { ...rollData, status: 'dispatched', dispatched_at: new Date() }, deviceName); 
-      fetchData(true); 
-  }, [deviceName, fetchData]);
-
+  const handleDispatch = useCallback(async (rollData) => { await DataService.updateRoll(rollData.id, { ...rollData, status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
   const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
-  
-  const handleDeleteRoll = async (id) => { 
-      setRolls(prevRolls => prevRolls.filter(r => r.id !== id));
-      try { await DataService.deleteRoll(id); } 
-      catch (error) { console.error("Delete failed", error); alert("Failed to delete."); fetchData(); }
-  };
-
+  const handleDeleteRoll = async (id) => { setRolls(prevRolls => prevRolls.filter(r => r.id !== id)); try { await DataService.deleteRoll(id); } catch (error) { console.error("Delete failed", error); alert("Failed to delete."); fetchData(); } };
   const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
   const handleAddMaterial = async (name, category, minLevel) => { await DataService.addRawMaterial(name, category, minLevel); fetchData(); };
@@ -964,16 +898,7 @@ const MainApp = () => {
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20">
-      <Header 
-        isGuest={isGuest} 
-        deviceName={deviceName} 
-        onLogout={handleLogout} 
-        onEditDeviceName={() => setDeviceModalOpen(true)} 
-        onOpenSettings={() => setSettingsOpen(true)} 
-        onManualSync={syncOffline}
-        isSyncing={isSyncing}
-        offlineCount={offlineCount}
-      />
+      <Header isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} onEditDeviceName={() => setDeviceModalOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManualSync={syncOffline} isSyncing={isSyncing} offlineCount={offlineCount} />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading && activeTab !== 'dashboard' ? ( <div className="flex justify-center p-12 text-gray-400">Loading Data...</div> ) : (
             <>
@@ -987,11 +912,9 @@ const MainApp = () => {
         )}
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
-      
       {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
       {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}
       {isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(false)} rolls={rolls} />}
-      
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
       {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
