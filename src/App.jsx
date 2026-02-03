@@ -107,6 +107,11 @@ const DataService = {
       const newMat = { name, category, min_level: minLevel, stock_quantity: 0, unit: 'kg' };
       await supabase.from('raw_materials').insert([newMat]);
   },
+  // NEW: Update Material Details (Name, Category, Limit)
+  async editRawMaterial(id, updates) {
+      const { error } = await supabase.from('raw_materials').update(updates).eq('id', id);
+      if (error) throw error;
+  },
   async updateRawMaterial(id, qty, isAddition, deviceName) {
     const { data } = await supabase.from('raw_materials').select('stock_quantity').eq('id', id).single();
     const currentQty = data ? parseFloat(data.stock_quantity) : 0;
@@ -118,7 +123,7 @@ const DataService = {
   }
 };
 
-// --- HELPER: GENERATE EXCEL GATE PASS (Updated with Length) ---
+// --- HELPER: GENERATE EXCEL GATE PASS ---
 const generateChallanExcel = (rolls, details) => {
     try {
         const header = [
@@ -127,48 +132,32 @@ const generateChallanExcel = (rolls, details) => {
             ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()], 
             ["Buyer:", details.buyer, "Vehicle:", details.vehicle], 
             [], 
-            // ADDED: Length (m) Column
             ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "Length (m)", "GSM", "Gross Kg", "Net Kg"]
         ];
-        
         const body = rolls.map((r, i) => [
             i + 1, 
             r.product_id, 
             r.quality, 
             r.color, 
             r.width_inches, 
-            r.length_meters, // Length Value
+            r.length_meters,
             r.gsm, 
             parseFloat(r.gross_weight) || 0,
             parseFloat(r.net_weight) || 0
         ]);
-
         const totalNet = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
         const totalGross = rolls.reduce((sum, r) => sum + (parseFloat(r.gross_weight) || 0), 0);
-
-        const footer = [
-            [], 
-            // Adjusted empty cells to align totals under Gross/Net (8th and 9th cols)
-            ["", "", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]
-        ];
-        
+        const footer = [[], ["", "", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]];
         const finalData = [...header, ...body, ...footer];
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(finalData);
-        
-        // Update Column Widths (9 Columns now)
         ws['!cols'] = [{ wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }]; // Span all 9 cols
-        
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
         XLSX.utils.book_append_sheet(wb, ws, "GatePass");
         const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
         XLSX.writeFile(wb, fileName);
         return true;
-    } catch (err) {
-        console.error(err);
-        alert("Excel Error: " + err.message);
-        return false;
-    }
+    } catch (err) { console.error(err); alert("Excel Error: " + err.message); return false; }
 };
 
 // --- COMPONENTS ---
@@ -207,7 +196,41 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
 };
 const SettingsModal = ({ visible, onClose, onBackup }) => (!visible ? null : <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-lg w-full max-w-sm"><div className="flex justify-between mb-6"><h2 className="text-xl font-bold flex items-center gap-2"><Settings/> Settings</h2><button onClick={onClose}><X/></button></div><button onClick={onBackup} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"><Download/> Backup Database</button></div></div>);
 const DeviceNameModal = ({ onSave, initialName, onClose }) => { const [name, setName] = useState(initialName || ''); return (<div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-lg w-full max-w-sm text-center"><h2 className="text-xl font-bold mb-4">Device Name</h2><input className="w-full border p-3 rounded mb-4 text-center" value={name} onChange={e => setName(e.target.value)} /><button onClick={() => onSave(name)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Save</button></div></div>); };
-const AddMaterialModal = ({ onSave, onClose }) => { const [name, setName] = useState(''); const [category, setCategory] = useState('Colour'); const [minLevel, setMinLevel] = useState('100'); return (<div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-lg w-full max-w-sm"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Add Material</h2><button onClick={onClose}><X/></button></div><input className="w-full border p-3 rounded mb-4" placeholder="Name" value={name} onChange={e => setName(e.target.value)} /><select className="w-full border p-3 rounded mb-4" value={category} onChange={e => setCategory(e.target.value)}>{MAT_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select><input className="w-full border p-3 rounded mb-6" type="number" placeholder="Alert Level" value={minLevel} onChange={e => setMinLevel(e.target.value)} /><button onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add</button></div></div>); };
+
+// UPDATE: Add Material Modal now starts empty to force user input
+const AddMaterialModal = ({ onSave, onClose }) => { 
+    const [name, setName] = useState(''); 
+    const [category, setCategory] = useState('Colour'); 
+    const [minLevel, setMinLevel] = useState(''); // Empty default
+    return (<div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-lg w-full max-w-sm"><div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Add Material</h2><button onClick={onClose}><X/></button></div><input className="w-full border p-3 rounded mb-4" placeholder="Name" value={name} onChange={e => setName(e.target.value)} /><select className="w-full border p-3 rounded mb-4" value={category} onChange={e => setCategory(e.target.value)}>{MAT_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select><input className="w-full border p-3 rounded mb-6" type="number" placeholder="Alert Level (kg)" value={minLevel} onChange={e => setMinLevel(e.target.value)} /><button onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add</button></div></div>); 
+};
+
+// NEW: Edit Material Details Modal
+const EditMaterialDetailsModal = ({ material, onSave, onClose }) => {
+    const [name, setName] = useState(material.name);
+    const [category, setCategory] = useState(material.category);
+    const [minLevel, setMinLevel] = useState(material.min_level || '');
+
+    const handleSave = () => {
+        onSave({ ...material, name, category, min_level: minLevel });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-lg w-full max-w-sm">
+                <div className="flex justify-between mb-4"><h2 className="text-xl font-bold">Edit Material</h2><button onClick={onClose}><X/></button></div>
+                <label className="text-xs font-bold text-gray-500">Name</label>
+                <input className="w-full border p-3 rounded mb-4" value={name} onChange={e => setName(e.target.value)} />
+                <label className="text-xs font-bold text-gray-500">Category</label>
+                <select className="w-full border p-3 rounded mb-4" value={category} onChange={e => setCategory(e.target.value)}>{MAT_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
+                <label className="text-xs font-bold text-gray-500">Low Stock Alert (kg)</label>
+                <input className="w-full border p-3 rounded mb-6" type="number" placeholder="Set alert limit" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
+                <button onClick={handleSave} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Save Changes</button>
+            </div>
+        </div>
+    );
+};
+
 const BarcodeScanner = ({ onScan, onClose }) => { useEffect(() => { const html5QrCode = new Html5Qrcode("reader"); html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScan, () => {}).catch(console.error); return () => { try { html5QrCode.stop().then(() => html5QrCode.clear()); } catch(e) {} }; }, [onScan]); return (<div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-4"><div className="text-white font-bold mb-4">Scan Barcode</div><div id="reader" className="w-full bg-white rounded overflow-hidden max-w-sm"></div><button onClick={onClose} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-full font-bold">Close</button></div>); };
 
 const LabelPrint = ({ data, onClose }) => {
@@ -281,6 +304,16 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const today = new Date().toLocaleDateString();
     const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === today).length;
     const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
+    
+    // UPDATED: Calculate Low Stock Materials based on INDIVIDUAL min_level
+    const lowStockMaterials = useMemo(() => {
+        return (materials || []).filter(m => {
+            const limit = parseFloat(m.min_level);
+            // Only alert if limit is defined (>0) AND stock is below it
+            return limit > 0 && m.stock_quantity < limit;
+        });
+    }, [materials]);
+
     const activeDevices = useMemo(() => { const d = new Date(); d.setDate(d.getDate()-7); return [...new Set(rolls.filter(r => new Date(r.updated_at) > d).map(r => r.device_name))].filter(Boolean); }, [rolls]);
     const qualityData = useMemo(() => { const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality]||0) + (parseFloat(r.net_weight)||0)); return Object.keys(c).map(k => ({ name: k, value: parseFloat(c[k].toFixed(1)) })); }, [inStock]);
     const colorData = useMemo(() => { const c = {}; inStock.forEach(r => c[r.color] = (c[r.color]||0) + (parseFloat(r.net_weight)||0)); return Object.keys(c).map(k => ({ name: k, count: parseFloat(c[k].toFixed(1)) })).sort((a,b)=>b.count-a.count).slice(0,8); }, [inStock]);
@@ -288,6 +321,22 @@ const DashboardView = React.memo(({ rolls, materials }) => {
 
     return (
         <div className="space-y-6 pb-20">
+            {lowStockMaterials.length > 0 && (
+                <div className="bg-red-50 p-4 rounded-xl border-l-4 border-red-500 shadow-sm animate-in slide-in-from-top-4 fade-in">
+                    <h3 className="font-bold text-red-800 flex items-center gap-2 mb-2">
+                        <AlertCircle size={20}/> Low Material Alert
+                    </h3>
+                    <div className="space-y-2">
+                        {lowStockMaterials.map(m => (
+                            <div key={m.id} className="flex justify-between items-center bg-white p-2 rounded border border-red-100 text-sm shadow-sm">
+                                <span className="font-bold text-gray-700">{m.name}</span>
+                                <span className="font-bold text-red-600">{m.stock_quantity} kg <span className="text-gray-400 font-normal text-xs">/ {m.min_level} kg</span></span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-600">
                 <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18}/> Factory Velocity (Today)</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -303,6 +352,8 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
     );
 });
+
+// ... (NewProductView, EditModal, StockView, DispatchView, HistoryView unchanged) ...
 
 const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }) => {
     const handleValueChange = (field, value) => {
@@ -380,7 +431,6 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     );
 });
 
-// --- UPDATED STOCK VIEW (With Smart Search) ---
 const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [textSearch, setTextSearch] = useState('');
@@ -460,8 +510,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onExport, onSelectRoll }) =
       </div>
   );
 });
-
-// ... (DispatchView, HistoryView, MaterialsView, MainApp unchanged) ...
 
 const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
     const [scanId, setScanId] = useState('');
@@ -704,9 +752,11 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
     );
 });
 
-const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onDelete }) => { 
+// UPDATE: Materials View now has Edit button and no fallback default
+const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit, onDelete }) => { 
     const [activeCat, setActiveCat] = useState('Colour');
     const [isAddModalOpen, setAddModalOpen] = useState(false);
+    const [editingMaterial, setEditingMaterial] = useState(null); // New state for editing
     const [textSearch, setTextSearch] = useState('');
 
     const filteredMaterials = useMemo(() => {
@@ -719,6 +769,7 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onDelet
 
     const handleUpdate = (id, type) => { const qty = prompt(`Enter Kg to ${type === 'add' ? 'add' : 'remove'}:`); if (qty) onUpdate(id, qty, type === 'add'); };
     const handleSaveNewMaterial = (name, category, minLevel) => { onAdd(name, category, minLevel); setAddModalOpen(false); };
+    const handleSaveEditMaterial = (updates) => { onEdit(updates.id, updates); setEditingMaterial(null); }; // Save edit
     const handleDelete = (id) => { if(confirm("Delete this material permanently?")) onDelete(id); };
 
     return (
@@ -733,32 +784,41 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onDelet
                 ))}
             </div>
             <div className="flex-1 overflow-y-auto">
-                {filteredMaterials.length === 0 ? (<div className="text-center text-gray-400 mt-10">No materials found.</div>) : filteredMaterials.map(m => (
-                    <div key={m.id} className={`bg-white p-4 rounded-xl shadow-sm border mb-3 flex justify-between items-center ${m.stock_quantity < (m.min_level || 100) ? 'border-l-4 border-l-red-500' : ''}`}>
-                        <div>
-                            <div className="font-bold text-lg text-gray-800 flex items-center gap-2">
-                                {m.name}
-                                {m.stock_quantity < (m.min_level || 100) && <AlertCircle size={16} className="text-red-500" />}
-                            </div>
-                            <div className="text-xs text-gray-400 flex gap-2">
-                                <span>{m.category || 'Others'}</span>
-                                <span>• Alert: &lt; {m.min_level || 100} kg</span>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <span className={`text-2xl font-bold ${m.stock_quantity < (m.min_level || 100) ? 'text-red-600' : 'text-blue-600'}`}>{m.stock_quantity < 0 ? 0 : m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>
-                            {!isGuest && (
-                                <div className="flex flex-col gap-1 items-end">
-                                    <div className="flex gap-1">
-                                        <button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded flex items-center justify-center font-bold">+</button>
-                                        <button onClick={() => handleUpdate(m.id, 'sub')} className="bg-red-100 text-red-700 w-8 h-8 rounded flex items-center justify-center font-bold">-</button>
-                                    </div>
-                                    <button onClick={() => handleDelete(m.id)} className="text-gray-300 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                {filteredMaterials.length === 0 ? (<div className="text-center text-gray-400 mt-10">No materials found.</div>) : filteredMaterials.map(m => {
+                    const limit = parseFloat(m.min_level);
+                    const isLow = limit > 0 && m.stock_quantity < limit;
+                    return (
+                        <div key={m.id} className={`bg-white p-4 rounded-xl shadow-sm border mb-3 flex justify-between items-center ${isLow ? 'border-l-4 border-l-red-500' : ''}`}>
+                            <div>
+                                <div className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                                    {m.name}
+                                    {isLow && <AlertCircle size={16} className="text-red-500" />}
                                 </div>
-                            )}
+                                <div className="text-xs text-gray-400 flex gap-2">
+                                    <span>{m.category || 'Others'}</span>
+                                    {/* Show Alert Level if set */}
+                                    {limit > 0 && <span>• Alert: &lt; {limit} kg</span>}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className={`text-2xl font-bold ${isLow ? 'text-red-600' : 'text-blue-600'}`}>{m.stock_quantity < 0 ? 0 : m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>
+                                {!isGuest && (
+                                    <div className="flex flex-col gap-1 items-end">
+                                        <div className="flex gap-1">
+                                            <button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded flex items-center justify-center font-bold">+</button>
+                                            <button onClick={() => handleUpdate(m.id, 'sub')} className="bg-red-100 text-red-700 w-8 h-8 rounded flex items-center justify-center font-bold">-</button>
+                                        </div>
+                                        <div className="flex gap-2 mt-1">
+                                            {/* Edit Button */}
+                                            <button onClick={() => setEditingMaterial(m)} className="text-gray-300 hover:text-blue-500"><Edit3 size={14}/></button>
+                                            <button onClick={() => handleDelete(m.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14}/></button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
             {!isGuest && (
                 <div className="fixed bottom-24 right-6">
@@ -766,6 +826,8 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onDelet
                 </div>
             )}
             {isAddModalOpen && <AddMaterialModal onSave={handleSaveNewMaterial} onClose={() => setAddModalOpen(false)} />}
+            {/* NEW: Edit Material Modal */}
+            {editingMaterial && <EditMaterialDetailsModal material={editingMaterial} onSave={handleSaveEditMaterial} onClose={() => setEditingMaterial(null)} />}
         </div>
     ); 
 });
@@ -775,7 +837,6 @@ const MainApp = () => {
   const [user, setUser] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || '');
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ksf_active_tab') || 'dashboard');
   const [loading, setLoading] = useState(false);
   const [rolls, setRolls] = useState([]);
   const [materials, setMaterials] = useState([]);
@@ -784,61 +845,107 @@ const MainApp = () => {
   const [isDeviceModalOpen, setDeviceModalOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isReportsOpen, setReportsOpen] = useState(false); 
-  const [formData, setFormData] = useState(() => safeJSONParse('ksf_form_data', { customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }));
+  
+  // STATE PERSISTENCE: Initialize from LocalStorage or Default
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ksf_active_tab') || 'dashboard');
+  
+  const [formData, setFormData] = useState(() => safeJSONParse('ksf_form_data', { 
+      customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' 
+  }));
+  
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false); 
   const [offlineCount, setOfflineCount] = useState(0); 
 
+  // PERSISTENCE EFFECTS
   useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
   useEffect(() => { localStorage.setItem('ksf_form_data', JSON.stringify(formData)); }, [formData]);
 
   const fetchDataRef = useRef();
+  
+  // UPDATE: FETCH MERGES SERVER + LOCAL DATA FOR VISIBILITY
   const fetchData = useCallback(async (isBackground = false) => {
       if (!isBackground) setLoading(true);
       const serverData = await DataService.getStock();
       const offlineData = safeJSONParse('ksf_offline_rolls', []);
+      
       setOfflineCount(offlineData.length);
+
+      // Merge: Show offline data at the top. 
       const serverIds = new Set(serverData.map(r => r.product_id));
       const uniqueOffline = offlineData.filter(r => !serverIds.has(r.product_id));
       const taggedOffline = uniqueOffline.map(r => ({ ...r, isOffline: true }));
+      
       setRolls([...taggedOffline, ...serverData]); 
       setMaterials(await DataService.getRawMaterials());
       if (!isBackground) setLoading(false);
   }, []);
   fetchDataRef.current = fetchData;
 
+  // --- AUTO SYNC OFFLINE DATA (ONE-BY-ONE PROCESSING) ---
   const syncOffline = useCallback(async () => {
      if (!navigator.onLine || isSyncing) return;
+     
      setIsSyncing(true);
      const offline = safeJSONParse('ksf_offline_rolls', []);
+     
      if (offline.length === 0) { setIsSyncing(false); return; }
+
      const remaining = [];
      let successCount = 0;
+
+     // Process ONE BY ONE to isolate errors
      for (const roll of offline) {
          try {
+             // 1. CLEAN
              const { roll_seq, isOffline, ...cleanRoll } = roll; 
+             
+             // 2. CHECK IF EXISTS
              const { data: existing } = await supabase.from('rolls').select('id').eq('product_id', cleanRoll.product_id).maybeSingle();
+             
              if (!existing) {
-                 const finalPayload = { ...cleanRoll, created_at: cleanRoll.created_at || new Date() };
+                 // 3. INSERT (TIMESTAMP FIX IS IN addRoll LOGIC, but we manually do it here for batch)
+                 // Ensure we keep the original creation time if it exists!
+                 const finalPayload = {
+                     ...cleanRoll,
+                     // If offline data has created_at, keep it. Otherwise new Date()
+                     created_at: cleanRoll.created_at || new Date()
+                 };
+
                  const { error } = await supabase.from('rolls').insert([finalPayload]);
                  if (error) throw error;
              }
              successCount++;
          } catch (e) {
              console.error("Sync item failed:", roll.product_id, e);
-             remaining.push(roll); 
+             remaining.push(roll); // Keep failed item
          }
      }
+
+     // Update Local Storage with only the remaining failed items
      if (remaining.length < offline.length) {
          localStorage.setItem('ksf_offline_rolls', JSON.stringify(remaining));
          alert(`Synced ${successCount} rolls! ${remaining.length} remaining.`);
-         fetchData(); 
+         fetchData(); // Refresh UI
      }
+     
      setIsSyncing(false);
   }, [isSyncing, fetchData]);
 
-  useEffect(() => { window.addEventListener('online', syncOffline); syncOffline(); return () => window.removeEventListener('online', syncOffline); }, [syncOffline]);
-  useEffect(() => { const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } }; checkSession(); const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session && !user) { setIsGuest(false); fetchData(); } }); const interval = setInterval(() => { if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000); return () => { subscription.unsubscribe(); clearInterval(interval); }; }, [fetchData]);
+  useEffect(() => {
+    window.addEventListener('online', syncOffline);
+    syncOffline(); // Try sync on load
+    return () => window.removeEventListener('online', syncOffline);
+  }, [syncOffline]);
+
+  useEffect(() => {
+    const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } };
+    checkSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session && !user) { setIsGuest(false); fetchData(); } });
+    const interval = setInterval(() => { if((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000);
+    return () => { subscription.unsubscribe(); clearInterval(interval); };
+  }, [fetchData]);
+
   useEffect(() => { if(user && !isGuest && !deviceName) setDeviceModalOpen(true); }, [user, isGuest, deviceName]);
 
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
@@ -846,51 +953,86 @@ const MainApp = () => {
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
   const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
   
+  // --- UPDATE 3: MODIFIED SAVE LOGIC (Prevent Duplicates) ---
   const handleSaveRoll = async (e, customRollId) => { 
       e.preventDefault();
+      
       if (isSaving) return false;
       setIsSaving(true); 
+
       const id = customRollId;
+      // CREATE TIMESTAMP HERE (Client Side Authority)
       const newRoll = { ...formData, product_id: id, status: 'in_stock', created_at: new Date().toISOString() }; 
+
+      // 1. OFFLINE CHECK
       if (!navigator.onLine) {
         const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
         localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
-        setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); 
+        setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); // Show immediately
         setPrintData(newRoll); 
         alert("Saved LOCALLY. Will sync when online.");
+        
+        // PARTIAL CLEAR ONLY
         setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+        
         setIsSaving(false); 
         return true;
       }
+
+      // 2. ONLINE SAVE
       try { 
           await DataService.addRoll(newRoll, deviceName);
           setRolls(prev => [newRoll, ...prev]); 
           setPrintData(newRoll); 
           fetchData(true); 
+          
+          // PARTIAL CLEAR ONLY (Keep Customer, Quality, etc.)
           setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); 
+          
           return true; 
       } catch (err) { 
           console.error("Save failed:", err);
-          if (err.message && err.message.includes('duplicate key')) { alert(`Error: Roll ID "${id}" already exists!`); } 
-          else {
+          if (err.message && err.message.includes('duplicate key')) {
+              alert(`Error: Roll ID "${id}" already exists!`);
+          } else {
               const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
               localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
-              setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); 
+              setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]); // Show immediately
               setPrintData(newRoll);
               alert("Network Error. Saved locally.");
+              
+              // PARTIAL CLEAR ONLY
               setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+              
               return true;
           }
           return false; 
-      } finally { setIsSaving(false); }
+      } finally {
+          setIsSaving(false);
+      }
   };
   
-  const handleDispatch = useCallback(async (rollData) => { await DataService.updateRoll(rollData.id, { ...rollData, status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
+  const handleDispatch = useCallback(async (rollData) => { 
+      await DataService.updateRoll(rollData.id, { ...rollData, status: 'dispatched', dispatched_at: new Date() }, deviceName); 
+      fetchData(true); 
+  }, [deviceName, fetchData]);
+
   const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
-  const handleDeleteRoll = async (id) => { setRolls(prevRolls => prevRolls.filter(r => r.id !== id)); try { await DataService.deleteRoll(id); } catch (error) { console.error("Delete failed", error); alert("Failed to delete."); fetchData(); } };
+  
+  const handleDeleteRoll = async (id) => { 
+      setRolls(prevRolls => prevRolls.filter(r => r.id !== id));
+      try { await DataService.deleteRoll(id); } 
+      catch (error) { console.error("Delete failed", error); alert("Failed to delete."); fetchData(); }
+  };
+
   const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
+  
   const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
   const handleAddMaterial = async (name, category, minLevel) => { await DataService.addRawMaterial(name, category, minLevel); fetchData(); };
+  
+  // NEW: Handle Editing Material
+  const handleEditMaterial = async (id, updates) => { await DataService.editRawMaterial(id, updates); fetchData(); };
+  
   const handleDeleteMaterial = async (id) => { await DataService.deleteRawMaterial(id); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
   const handleFullBackup = async () => { setLoading(true); try { const allRolls = await DataService.getStock(); const allMats = await DataService.getRawMaterials(); const wb = XLSX.utils.book_new(); const rollsData = allRolls.map(r => ({ ID: r.product_id, Customer: r.customer_name, Quality: r.quality, Color: r.color, GSM: r.gsm, Width: r.width_inches, Length: r.length_meters, Net: r.net_weight, Gross: r.gross_weight, Status: r.status, Date_Added: new Date(r.created_at).toLocaleDateString(), Date_Dispatched: r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : '-' })); const wsRolls = XLSX.utils.json_to_sheet(rollsData); XLSX.utils.book_append_sheet(wb, wsRolls, "Rolls Database"); const matData = allMats.map(m => ({ ID: m.id, Name: m.name, Category: m.category, Stock: m.stock_quantity })); const wsMat = XLSX.utils.json_to_sheet(matData); XLSX.utils.book_append_sheet(wb, wsMat, "Raw Materials"); XLSX.writeFile(wb, `KSF_Full_Backup_${new Date().toISOString().split('T')[0]}.xlsx`); alert("Backup downloaded successfully!"); } catch (e) { alert("Backup failed: " + e.message); } finally { setLoading(false); setSettingsOpen(false); } };
@@ -898,7 +1040,16 @@ const MainApp = () => {
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20">
-      <Header isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} onEditDeviceName={() => setDeviceModalOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManualSync={syncOffline} isSyncing={isSyncing} offlineCount={offlineCount} />
+      <Header 
+        isGuest={isGuest} 
+        deviceName={deviceName} 
+        onLogout={handleLogout} 
+        onEditDeviceName={() => setDeviceModalOpen(true)} 
+        onOpenSettings={() => setSettingsOpen(true)} 
+        onManualSync={syncOffline}
+        isSyncing={isSyncing}
+        offlineCount={offlineCount}
+      />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading && activeTab !== 'dashboard' ? ( <div className="flex justify-center p-12 text-gray-400">Loading Data...</div> ) : (
             <>
@@ -907,14 +1058,16 @@ const MainApp = () => {
                 {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onExport={() => handleExport(rolls)} onSelectRoll={setEditRoll} />}
                 {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
                 {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}
-                {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onDelete={handleDeleteMaterial} />}
+                {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onEdit={handleEditMaterial} onDelete={handleDeleteMaterial} />}
             </>
         )}
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
+      
       {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
       {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}
       {isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(false)} rolls={rolls} />}
+      
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
       {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
     </div>
