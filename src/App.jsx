@@ -128,7 +128,7 @@ const DataService = {
   }
 };
 
-// --- EXCEL GATE PASS GENERATOR ---
+// --- HELPER: GENERATE EXCEL GATE PASS ---
 const generateChallanExcel = (rolls, details) => {
     try {
         const header = [
@@ -139,7 +139,6 @@ const generateChallanExcel = (rolls, details) => {
             [], 
             ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "Length (m)", "GSM", "Gross Kg", "Net Kg"]
         ];
-
         const body = rolls.map((r, i) => [
             i + 1, 
             r.product_id, 
@@ -151,37 +150,22 @@ const generateChallanExcel = (rolls, details) => {
             parseFloat(r.gross_weight) || 0,
             parseFloat(r.net_weight) || 0
         ]);
-
         const totalNet = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
         const totalGross = rolls.reduce((sum, r) => sum + (parseFloat(r.gross_weight) || 0), 0);
-
-        const footer = [
-            [], 
-            ["", "", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]
-        ];
-
+        const footer = [[], ["", "", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]];
         const finalData = [...header, ...body, ...footer];
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(finalData);
-
-        ws['!cols'] = [
-          { wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, 
-          { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }
-        ];
+        ws['!cols'] = [{ wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
         ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
-
         XLSX.utils.book_append_sheet(wb, ws, "GatePass");
         const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
         XLSX.writeFile(wb, fileName);
         return true;
-    } catch (err) { 
-        console.error(err); 
-        alert("Excel Error: " + err.message); 
-        return false; 
-    }
+    } catch (err) { console.error(err); alert("Excel Error: " + err.message); return false; }
 };
 
-// --- UI COMPONENTS ---
+// --- COMPONENTS ---
 
 const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings, onManualSync, isSyncing, offlineCount }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center print:hidden">
@@ -281,6 +265,7 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
           "Color": r.color, 
           "Size": r.width_inches, 
           "GSM": r.gsm, 
+          "Gross Kg": r.gross_weight,
           "Net Kg": r.net_weight, 
           "Status": r.status 
         }));
@@ -689,7 +674,7 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
     );
 });
 
-// --- UPDATED STOCK VIEW (PERSISTENT FILTERS + ACCURATE EXCEL) ---
+// --- UPDATED STOCK VIEW (PERSISTENT FILTERS + ACCURATE FULL EXCEL) ---
 const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
 
@@ -735,8 +720,9 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   const totalFilteredWeight = filtered.reduce((s, r) => s + (Number(r.net_weight)||0), 0);
   const clearFilters = () => { setTextSearch(''); setFilterQuality(''); setFilterColor(''); setFilterGSM(''); setFilterWidth(''); };
 
+  // RESTORED: FULL COLUMNS (Gross Wt & Status)
   const handleExportFiltered = () => {
-    const ws = XLSX.utils.json_to_sheet(filtered.map(r => ({
+    const dataToExport = filtered.map(r => ({
         "Roll ID": r.product_id,
         "Customer": r.customer_name,
         "Quality": r.quality,
@@ -744,9 +730,12 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
         "GSM": r.gsm,
         "Size": r.width_inches,
         "Length": r.length_meters,
+        "Gross Weight": r.gross_weight,  // Restored
         "Net Weight": r.net_weight,
+        "Status": r.status,              // Restored
         "Date Added": new Date(r.created_at).toLocaleString()
-    })));
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Stock");
     XLSX.writeFile(wb, `Stock_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -799,7 +788,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   );
 });
 
-// --- DISPATCH VIEW (REST OF THE LOGIC) ---
 const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUndoDispatch }) => {
     const [scanId, setScanId] = useState('');
     const [reviewData, setReviewData] = useState(null); 
@@ -835,7 +823,6 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
     );
 });
 
-// --- REST OF THE APP (MainApp, History, Materials) ---
 const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }) => { const [startDate, setStartDate] = useState(''); const [endDate, setEndDate] = useState(''); const [searchText, setSearchText] = useState(''); const history = useMemo(() => { let list = (rolls || []).filter(r => r.status === 'dispatched'); if (startDate) list = list.filter(r => new Date(r.dispatched_at) >= new Date(startDate)); if (endDate) list = list.filter(r => new Date(r.dispatched_at) <= new Date(endDate + 'T23:59:59')); if (searchText) { const lower = searchText.toLowerCase(); list = list.filter(r => (r.customer_name && r.customer_name.toLowerCase().includes(lower)) || (r.product_id && r.product_id.toLowerCase().includes(lower)) || (r.quality && r.quality.toLowerCase().includes(lower)) ); } list.sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at)); return list; }, [rolls, startDate, endDate, searchText]); const totalHistoryWeight = history.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0); return (<div className="pb-24"><div className="flex justify-between items-center mb-4"><h2 className="font-bold text-xl">History</h2><div className="flex gap-2"><button onClick={onOpenReports} className="bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow"><FileText size={16}/> Reports</button><button onClick={() => onExport(history)} className="bg-green-100 text-green-700 px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-1"><Download size={16}/> List</button></div></div><div className="sticky top-16 z-20 bg-slate-50 pt-1 pb-2"><div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3"><div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center"><Search className="text-gray-400" size={20} /><input className="w-full outline-none bg-transparent text-sm" placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} />{searchText && <button onClick={() => setSearchText('')}><X size={16} className="text-gray-400"/></button>}</div><div className="grid grid-cols-2 gap-2"><div><label className="text-[10px] font-bold text-gray-400 uppercase">Start Date</label><input type="date" className="w-full border p-2 rounded text-sm" value={startDate} onChange={e => setStartDate(e.target.value)} /></div><div><label className="text-[10px] font-bold text-gray-400 uppercase">End Date</label><input type="date" className="w-full border p-2 rounded text-sm" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div></div><div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center mb-3 text-sm border border-gray-200"><span className="font-bold text-gray-600">{history.length} Rolls</span><span className="font-bold text-blue-700">{formatCurrency(totalHistoryWeight)} kg</span></div></div>{history.length === 0 ? <div className="text-center text-gray-400 mt-10">No records found.</div> : history.map(r => (<div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-3 rounded-xl border mb-2 text-sm shadow-sm hover:bg-gray-50 cursor-pointer"><div className="flex justify-between mb-1"><span className="font-bold text-gray-800">{r.customer_name || 'Unknown'}</span><span className="text-green-600 font-bold">{r.net_weight} kg</span></div><div className="flex justify-between text-gray-500 text-xs"><span>{r.product_id} • {r.quality}</span><span>{new Date(r.dispatched_at).toLocaleDateString()}</span></div></div>))}</div>); });
 
 const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit, onDelete }) => { 
@@ -962,6 +949,7 @@ const MainApp = () => {
   const handleDeleteMaterial = async (id) => { await DataService.deleteRawMaterial(id); fetchData(); };
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
   const handleFullBackup = async () => { setLoading(true); try { const allRolls = await DataService.getStock(); const allMats = await DataService.getRawMaterials(); const wb = XLSX.utils.book_new(); const rollsData = allRolls.map(r => ({ ID: r.product_id, Customer: r.customer_name, Quality: r.quality, Color: r.color, GSM: r.gsm, Width: r.width_inches, Length: r.length_meters, Net: r.net_weight, Gross: r.gross_weight, Status: r.status, Date_Added: new Date(r.created_at).toLocaleDateString(), Date_Dispatched: r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : '-' })); const wsRolls = XLSX.utils.json_to_sheet(rollsData); XLSX.utils.book_append_sheet(wb, wsRolls, "Rolls Database"); const matData = allMats.map(m => ({ ID: m.id, Name: m.name, Category: m.category, Stock: m.stock_quantity })); const wsMat = XLSX.utils.json_to_sheet(matData); XLSX.utils.book_append_sheet(wb, wsMat, "Raw Materials"); XLSX.writeFile(wb, `KSF_Full_Backup_${new Date().toISOString().split('T')[0]}.xlsx`); alert("Backup downloaded!"); } catch (e) { alert("Backup failed!"); } finally { setLoading(false); setSettingsOpen(false); } };
+  
   if (!user && !isGuest) { return (<div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6"><div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100"><img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" /><h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1><p className="text-gray-500 mb-8">Manage floor efficiently.</p><button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 shadow-lg">Login with Google</button><button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold border">View Only (Guest)</button></div></div>); }
   return (<div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20"><Header isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} onEditDeviceName={() => setDeviceModalOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManualSync={syncOffline} isSyncing={isSyncing} offlineCount={offlineCount} /><main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">{loading && activeTab !== 'dashboard' ? ( <div className="flex justify-center p-12 text-gray-400">Loading Data...</div> ) : (<>{activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}{activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} isSaving={isSaving} />}{activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onSelectRoll={setEditRoll} />}{activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}{activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}{activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onEdit={handleEditMaterial} onDelete={handleDeleteMaterial} />}</>)}</main><BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />{isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}{isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}{isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(false)} rolls={rolls} />}{printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}{editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}</div>);
 };
