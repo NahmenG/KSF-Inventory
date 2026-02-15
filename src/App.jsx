@@ -178,6 +178,74 @@ const DataService = {
   async getRawMaterials() {
     const { data, error } = await supabase.from('raw_materials').select('*').order('name');
     return error ? [] : data;
+  },
+
+  async addRawMaterial(name, category, minLevel) {
+    const newMat = { name, category, min_level: minLevel, stock_quantity: 0, unit: 'kg' };
+    await supabase.from('raw_materials').insert([newMat]);
+  },
+
+  async editRawMaterial(id, updates) {
+    const { error } = await supabase.from('raw_materials').update(updates).eq('id', id);
+    if (error) throw error;
+  },
+
+  async updateRawMaterial(id, qty, isAddition, deviceName) {
+    const { data } = await supabase.from('raw_materials').select('stock_quantity').eq('id', id).single();
+    const currentQty = data ? parseFloat(data.stock_quantity) : 0;
+    const newQty = currentQty + (isAddition ? parseFloat(qty) : -parseFloat(qty));
+    await supabase.from('raw_materials').update({ stock_quantity: newQty, last_updated_by: deviceName }).eq('id', id);
+  },
+
+  async deleteRawMaterial(id) {
+    await supabase.from('raw_materials').delete().eq('id', id);
+  }
+};
+
+// --- HELPER: GENERATE EXCEL GATE PASS ---
+const generateChallanExcel = (rolls, details) => {
+  try {
+    const header = [
+      ["KSF NON WOVEN"],
+      [],
+      ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()],
+      ["Buyer:", details.buyer, "Vehicle:", details.vehicle],
+      [],
+      ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "Length (m)", "GSM", "Gross Kg", "Net Kg"]
+    ];
+    const body = rolls.map((r, i) => [
+      i + 1,
+      r.product_id,
+      r.quality,
+      r.color,
+      r.width_inches,
+      r.length_meters,
+      r.gsm,
+      parseFloat(r.gross_weight) || 0,
+      parseFloat(r.net_weight) || 0
+    ]);
+    const totalNet = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
+    const totalGross = rolls.reduce((sum, r) => sum + (parseFloat(r.gross_weight) || 0), 0);
+    const footer = [
+      [],
+      ["", "", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]
+    ];
+    const finalData = [...header, ...body, ...footer];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(finalData);
+    ws['!cols'] = [
+      { wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 },
+      { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }
+    ];
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
+    XLSX.utils.book_append_sheet(wb, ws, "GatePass");
+    const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    return true;
+  } catch (err) {
+    console.error(err);
+    alert("Excel Error: " + err.message);
+    return false;
   }
 };
 
@@ -256,8 +324,6 @@ const AnalyticsView = ({ rolls, selectedMonth }) => {
   );
 };
 
-// --- UI COMPONENTS ---
-
 const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings, onManualSync, isSyncing, offlineCount, onLogoClick }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center print:hidden">
     <div
@@ -281,7 +347,6 @@ const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, on
               </span>
             )}
           </button>
-          {/* Visible on Mobile & PC */}
           <div
             onClick={onEditDeviceName}
             className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm"
@@ -351,11 +416,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   const qualityData = useMemo(() => {
     const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
     return Object.keys(c).map(k => ({ name: k, value: parseFloat(c[k].toFixed(1)) }));
-  }, [inStock]);
-
-  const colorData = useMemo(() => {
-    const c = {}; inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
-    return Object.keys(c).map(k => ({ name: k, count: parseFloat(c[k].toFixed(1)) })).sort((a, b) => b.count - a.count).slice(0, 8);
   }, [inStock]);
 
   return (
@@ -439,18 +499,14 @@ const DashboardView = React.memo(({ rolls, materials }) => {
 const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, rolls }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionRef = useRef(null);
-  
   const existingCustomers = useMemo(() => {
     const names = rolls.map(r => r.customer_name).filter(Boolean);
     return [...new Set(names)].sort();
   }, [rolls]);
-
   const filteredSuggestions = useMemo(() => {
     const typed = formData.customer_name?.toLowerCase() || '';
     if (!typed) return [];
-    return existingCustomers.filter(name => 
-      name.toLowerCase().includes(typed) && name.toLowerCase() !== typed
-    );
+    return existingCustomers.filter(name => name.toLowerCase().includes(typed) && name.toLowerCase() !== typed);
   }, [existingCustomers, formData.customer_name]);
 
   useEffect(() => {
@@ -505,22 +561,22 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, 
         <div className="col-span-2">
           <label className="text-xs font-bold text-blue-600 uppercase mb-1 flex items-center gap-1"><Hash size={12} /> Roll ID</label>
           <div className="flex gap-2 w-full">
-            <input type="text" className="w-[35%] border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 outline-none uppercase" value={rollPrefix} onChange={(e) => { setRollPrefix(e.target.value.toUpperCase()); localStorage.setItem('ksf_roll_prefix', e.target.value.toUpperCase()); }} />
+            <input type="text" className="w-[35%] border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 focus:border-blue-500 outline-none uppercase" value={rollPrefix} onChange={(e) => { setRollPrefix(e.target.value.toUpperCase()); localStorage.setItem('ksf_roll_prefix', e.target.value.toUpperCase()); }} />
             <div className="flex-1 flex items-center gap-2">
               <span className="text-xl font-bold text-gray-400">-</span>
-              <input type="number" required className="w-full border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 outline-none" value={rollSeq} onChange={(e) => { setRollSeq(e.target.value); localStorage.setItem('ksf_roll_sequence', e.target.value); }} />
+              <input type="number" required className="w-full border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 focus:border-blue-500 outline-none" value={rollSeq} onChange={(e) => { setRollSeq(e.target.value); localStorage.setItem('ksf_roll_sequence', e.target.value); }} />
             </div>
           </div>
         </div>
 
         <div className="col-span-2 relative" ref={suggestionRef}>
-          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><User size={12} /> Customer</label>
-          <input required autoComplete="off" className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} onFocus={() => setShowSuggestions(true)} />
+          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><User size={12}/> Customer</label>
+          <input required autoComplete="off" className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-all" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} onFocus={() => setShowSuggestions(true)} />
           {showSuggestions && filteredSuggestions.length > 0 && (
-            <div className="absolute z-50 w-full bg-white border shadow-2xl max-h-48 overflow-y-auto mt-1 rounded-b-lg">
-              {filteredSuggestions.map((n, i) => (
-                <div key={i} onClick={() => selectSuggestion(n)} className="p-3 border-b hover:bg-blue-50 cursor-pointer text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Clock size={14} className="text-gray-400" /> {n}
+            <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-b-lg shadow-2xl max-h-48 overflow-y-auto mt-1 border-t-0">
+              {filteredSuggestions.map((name, i) => (
+                <div key={i} onClick={() => selectSuggestion(name)} className="p-3 border-b hover:bg-blue-50 cursor-pointer text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Clock size={14} className="text-gray-400" /> {name}
                 </div>
               ))}
             </div>
@@ -624,7 +680,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
               {sortOrder === 'newest' ? <ArrowDown size={18} /> : <ArrowUp size={18} />}
             </button>
             <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border transition-colors ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white hover:bg-gray-50'}`}><Filter size={20} /></button>
-            <button onClick={handleExportFiltered} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1 transition-colors"><Download size={14} /> XLS</button>
+            <button onClick={handleExportFiltered} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1 hover:bg-green-200 transition-colors shadow-sm"><Download size={14} /> XLS</button>
           </div>
           {showFilters && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2 border-t pt-2">
@@ -807,7 +863,7 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
     list.sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
     return list;
   }, [rolls, startDate, endDate, searchText]);
-  const totalHistoryWeight = history.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
+  const totalWeight = history.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
   return (
     <div className="pb-24">
       <div className="flex justify-between items-center mb-4">
@@ -837,10 +893,10 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
         </div>
         <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center mb-3 text-sm border border-gray-200 shadow-inner">
           <span className="font-bold text-gray-600">{history.length} Rolls Dispatched</span>
-          <span className="font-bold text-blue-700">{formatCurrency(totalHistoryWeight)} kg</span>
+          <span className="font-bold text-blue-700">{formatCurrency(totalWeight)} kg</span>
         </div>
       </div>
-      <div className="px-1">
+      <div className="px-1 overflow-y-auto">
       {history.length === 0 ? <div className="text-center text-gray-400 mt-10">No records found.</div> : history.map(r => (
         <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-3 rounded-xl border mb-2 text-sm shadow-sm hover:border-blue-200 cursor-pointer transition-colors">
           <div className="flex justify-between mb-1">
@@ -941,10 +997,6 @@ const MainApp = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [offlineCount, setOfflineCount] = useState(0);
 
-  useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
-  useEffect(() => { localStorage.setItem('ksf_form_data', JSON.stringify(formData)); }, [formData]);
-
-  const fetchDataRef = useRef();
   const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     const serverData = await DataService.getStock();
@@ -957,32 +1009,30 @@ const MainApp = () => {
     setMaterials(await DataService.getRawMaterials());
     if (!isBackground) setLoading(false);
   }, []);
-  fetchDataRef.current = fetchData;
 
   const syncOffline = useCallback(async () => {
     if (!navigator.onLine || isSyncing) return;
     setIsSyncing(true);
     const offline = safeJSONParse('ksf_offline_rolls', []);
     if (offline.length === 0) { setIsSyncing(false); return; }
-    const remaining = [];
-    let successCount = 0;
     for (const roll of offline) {
       try {
         const { roll_seq, isOffline, ...cleanRoll } = roll;
         const { data: existing } = await supabase.from('rolls').select('id').eq('product_id', cleanRoll.product_id).maybeSingle();
         if (!existing) {
           const finalPayload = { ...cleanRoll, created_at: cleanRoll.created_at || new Date() };
-          const { error } = await supabase.from('rolls').insert([finalPayload]);
-          if (error) throw error;
+          await supabase.from('rolls').insert([finalPayload]);
         }
-        successCount++;
-      } catch (e) { remaining.push(roll); }
+      } catch (e) {}
     }
-    if (remaining.length < offline.length) { localStorage.setItem('ksf_offline_rolls', JSON.stringify(remaining)); fetchData(); }
+    localStorage.setItem('ksf_offline_rolls', JSON.stringify([]));
+    fetchData(true);
     setIsSyncing(false);
   }, [isSyncing, fetchData]);
 
   useEffect(() => { window.addEventListener('online', syncOffline); syncOffline(); return () => window.removeEventListener('online', syncOffline); }, [syncOffline]);
+  useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
+  useEffect(() => { localStorage.setItem('ksf_form_data', JSON.stringify(formData)); }, [formData]);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -994,16 +1044,10 @@ const MainApp = () => {
       setUser(session?.user ?? null);
       if (session && !user) { setIsGuest(false); fetchData(); }
     });
-    const interval = setInterval(() => { if ((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000);
-    return () => { subscription.unsubscribe(); clearInterval(interval); };
-  }, [fetchData, user, isGuest]);
+    return () => subscription.unsubscribe();
+  }, [fetchData]);
 
   useEffect(() => { if (user && !isGuest && !deviceName) setDeviceModalOpen(true); }, [user, isGuest, deviceName]);
-
-  const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
-  const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
-  const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
 
   const handleSaveRoll = async (e, customRollId) => {
     e.preventDefault();
@@ -1016,39 +1060,19 @@ const MainApp = () => {
       localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
       setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]);
       setPrintData(newRoll);
-      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
       setIsSaving(false); return true;
     }
     try {
       await DataService.addRoll(newRoll, deviceName);
-      setRolls(prev => [newRoll, ...prev]);
       setPrintData(newRoll);
       fetchData(true);
-      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); return true;
+      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+      return true;
     } catch (err) {
-      if (err.message && err.message.includes('duplicate key')) { alert(`Duplicate ID "${id}"!`); }
-      else {
-        const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
-        localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
-        setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]);
-        setPrintData(newRoll);
-        setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
-        return true;
-      }
+      alert("Error saving roll!");
       return false;
     } finally { setIsSaving(false); }
   };
-
-  const handleDispatch = useCallback(async (rollData) => { await DataService.updateRoll(rollData.id, { ...rollData, status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
-  const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
-  const handleDeleteRoll = async (id) => { setRolls(prevRolls => prevRolls.filter(r => r.id !== id)); try { await DataService.deleteRoll(id); } catch (error) { fetchData(); } };
-  const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
-  const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
-  const handleAddMaterial = async (name, category, minLevel) => { await DataService.addRawMaterial(name, category, minLevel); fetchData(); };
-  const handleEditMaterial = async (id, updates) => { await DataService.editRawMaterial(id, updates); fetchData(); };
-  const handleDeleteMaterial = async (id) => { await DataService.deleteRawMaterial(id); fetchData(); };
-  const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
-  const handleFullBackup = async () => { setLoading(true); try { const allRolls = await DataService.getStock(); const allMats = await DataService.getRawMaterials(); const wb = XLSX.utils.book_new(); const rollsData = allRolls.map(r => ({ ID: r.product_id, Customer: r.customer_name, Quality: r.quality, Color: r.color, GSM: r.gsm, Width: r.width_inches, Length: r.length_meters, Net: r.net_weight, Gross: r.gross_weight, Status: r.status, Date_Added: new Date(r.created_at).toLocaleDateString(), Date_Dispatched: r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : '-' })); const wsRolls = XLSX.utils.json_to_sheet(rollsData); XLSX.utils.book_append_sheet(wb, wsRolls, "Rolls Database"); const matData = allMats.map(m => ({ ID: m.id, Name: m.name, Category: m.category, Stock: m.stock_quantity })); const wsMat = XLSX.utils.json_to_sheet(matData); XLSX.utils.book_append_sheet(wb, wsMat, "Raw Materials"); XLSX.writeFile(wb, `KSF_Full_Backup_${new Date().toISOString().split('T')[0]}.xlsx`); alert("Backup downloaded!"); } catch (e) { alert("Backup failed!"); } finally { setLoading(false); setSettingsOpen(false); } };
 
   if (!user && !isGuest) {
     return (
@@ -1056,9 +1080,8 @@ const MainApp = () => {
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100">
           <img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" />
           <h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1>
-          <p className="text-gray-500 mb-8">Manage floor efficiently.</p>
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 shadow-lg hover:bg-blue-700 transition-all">Login with Google</button>
-          <button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold border hover:bg-gray-50 transition-all">View Only (Guest)</button>
+          <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 shadow-lg hover:bg-blue-700 transition-all">Login with Google</button>
+          <button onClick={() => setIsGuest(true)} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold border hover:bg-gray-50 transition-all">View Only (Guest)</button>
         </div>
       </div>
     );
@@ -1069,7 +1092,7 @@ const MainApp = () => {
       <Header
         isGuest={isGuest}
         deviceName={deviceName}
-        onLogout={handleLogout}
+        onLogout={() => supabase.auth.signOut().then(() => window.location.reload())}
         onEditDeviceName={() => setDeviceModalOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         onManualSync={syncOffline}
@@ -1085,20 +1108,19 @@ const MainApp = () => {
             {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
             {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} isSaving={isSaving} rolls={rolls} />}
             {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
-            {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
-            {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}
-            {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onEdit={handleEditMaterial} onDelete={handleDeleteMaterial} />}
+            {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={d => DataService.updateRoll(d.id, { ...d, status: 'dispatched', dispatched_at: new Date() }, deviceName).then(() => fetchData(true))} onUndoDispatch={id => DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName).then(() => fetchData(true))} />}
+            {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={d => { const ws = XLSX.utils.json_to_sheet(d); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "History"); XLSX.writeFile(wb, "History.xlsx"); }} onOpenReports={() => setReportsOpen(true)} />}
+            {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={(id, qty, isAdd) => DataService.updateRawMaterial(id, qty, isAdd, deviceName).then(() => fetchData())} onAdd={(n, c, l) => DataService.addRawMaterial(n, c, l).then(() => fetchData())} onEdit={(id, u) => DataService.editRawMaterial(id, u).then(() => fetchData())} onDelete={id => DataService.deleteRawMaterial(id).then(() => fetchData())} />}
           </>
         )}
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
 
-      {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
-      {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}
+      {isDeviceModalOpen && <DeviceNameModal onSave={n => { localStorage.setItem('ksf_device_name', n); setDeviceName(n); setDeviceModalOpen(false); }} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
+      {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={async () => { const a = await DataService.getStock(); const ws = XLSX.utils.json_to_sheet(a); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Backup"); XLSX.writeFile(wb, "Backup.xlsx"); }} />}
       {isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(false)} rolls={rolls} />}
-
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
-      {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
+      {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={u => DataService.updateRoll(u.id, u, deviceName).then(() => { setEditRoll(null); fetchData(true); })} onDelete={id => DataService.deleteRoll(id).then(() => { setEditRoll(null); fetchData(); })} />}
     </div>
   );
 };
