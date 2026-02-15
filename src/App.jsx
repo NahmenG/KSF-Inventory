@@ -270,7 +270,7 @@ const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, on
           </button>
           <div
             onClick={onEditDeviceName}
-            className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm hidden md:block"
+            className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm"
           >
             {deviceName || 'Device'} ✎
           </div>
@@ -567,6 +567,16 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       .sort((a, b) => (priority[a.category] || 99) - (priority[b.category] || 99));
   }, [materials]);
 
+  // NEW: AGED STOCK LOGIC
+  const agedStockBreakdown = useMemo(() => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const aged = inStock.filter(r => new Date(r.created_at) < thirtyDaysAgo);
+    const breakdown = {};
+    aged.forEach(r => breakdown[r.quality] = (breakdown[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
+    return Object.keys(breakdown).map(k => ({ quality: k, weight: breakdown[k].toFixed(1) }));
+  }, [inStock]);
+
   const activeDevices = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
@@ -606,13 +616,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div><div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400">kg</span></div></div>
       </div>
 
-      {activeDevices.length > 0 && (
-        <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
-          <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wifi size={18} /> Active Devices</h3>
-          <div className="flex flex-wrap gap-2">{activeDevices.map(d => (<span key={d} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">{d}</span>))}</div>
-        </div>
-      )}
-
       <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
         <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18} /> Recent Activity</h3>
         {recentActivity.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (
@@ -624,13 +627,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         <h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>{qualityData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Pie><RechartsTooltip /><Legend /></PieChart></ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="bg-white p-4 rounded-xl shadow border">
-        <h3 className="font-bold mb-4 text-gray-700">Top Colors in Stock (kg)</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%"><BarChart data={colorData} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} /><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} /><RechartsTooltip /><Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />{colorData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Bar></BarChart></ResponsiveContainer>
         </div>
       </div>
 
@@ -650,39 +646,43 @@ const DashboardView = React.memo(({ rolls, materials }) => {
           </div>
         </div>
       )}
+
+      {/* NEW: AGED STOCK ALERT CARD */}
+      {agedStockBreakdown.length > 0 && (
+        <div className="bg-orange-50 p-4 rounded-xl border-l-4 border-orange-500 shadow-sm">
+          <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2"><Clock size={20} /> Aged Stock Alert ({" > "} 30 Days)</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {agedStockBreakdown.map((item, i) => (
+              <div key={i} className="bg-white p-2 rounded border border-orange-100 text-xs">
+                <div className="text-gray-400 font-bold uppercase">{item.quality}</div>
+                <div className="text-lg font-black text-orange-700">{item.weight} kg</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 });
 
-// --- UPDATED ENTRY VIEW WITH CUSTOMER SEARCH SUGGESTIONS ---
 const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, rolls }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionRef = useRef(null);
-
-  // Extract all unique customer names from history
   const existingCustomers = useMemo(() => {
     const names = rolls.map(r => r.customer_name).filter(Boolean);
     return [...new Set(names)].sort();
   }, [rolls]);
-
-  // Filter suggestions based on typed input
   const filteredSuggestions = useMemo(() => {
     const typed = formData.customer_name?.toLowerCase() || '';
     if (!typed) return [];
-    return existingCustomers.filter(name => 
+    return existingCustomers.filter(name =>
       name.toLowerCase().includes(typed) && name.toLowerCase() !== typed
     );
   }, [existingCustomers, formData.customer_name]);
 
-  // Handle clicking outside to close suggestions
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (suggestionRef.current && !suggestionRef.current.contains(e.target)) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    const handleClickOutside = (e) => { if (suggestionRef.current && !suggestionRef.current.contains(e.target)) setShowSuggestions(false); };
+    document.addEventListener("mousedown", handleClickOutside); return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleValueChange = (field, value) => {
@@ -700,11 +700,7 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, 
     if (field === 'customer_name') setShowSuggestions(true);
   };
 
-  const selectSuggestion = (name) => {
-    setFormData({ ...formData, customer_name: name });
-    setShowSuggestions(false);
-  };
-
+  const selectSuggestion = (name) => { setFormData({ ...formData, customer_name: name }); setShowSuggestions(false); };
   const [rollPrefix, setRollPrefix] = useState(() => localStorage.getItem('ksf_roll_prefix') || 'R');
   const [rollSeq, setRollSeq] = useState(() => localStorage.getItem('ksf_roll_sequence') || '1001');
 
@@ -741,35 +737,19 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, 
             </div>
           </div>
         </div>
-
-        {/* CUSTOMER FIELD WITH DROPDOWN SUGGESTIONS */}
         <div className="col-span-2 relative" ref={suggestionRef}>
-          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-            <User size={12}/> Customer
-          </label>
-          <input 
-            required 
-            autoComplete="off"
-            className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" 
-            value={formData.customer_name} 
-            onChange={e => handleValueChange('customer_name', e.target.value)} 
-            onFocus={() => setShowSuggestions(true)}
-          />
+          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><User size={12} /> Customer</label>
+          <input required autoComplete="off" className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} onFocus={() => setShowSuggestions(true)} />
           {showSuggestions && filteredSuggestions.length > 0 && (
             <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-b-lg shadow-xl max-h-48 overflow-y-auto mt-1">
               {filteredSuggestions.map((name, i) => (
-                <div 
-                  key={i} 
-                  onClick={() => selectSuggestion(name)} 
-                  className="p-3 border-b last:border-0 hover:bg-blue-50 cursor-pointer text-sm font-semibold text-gray-700 flex items-center gap-2"
-                >
+                <div key={i} onClick={() => selectSuggestion(name)} className="p-3 border-b last:border-0 hover:bg-blue-50 cursor-pointer text-sm font-semibold text-gray-700 flex items-center gap-2">
                   <Clock size={14} className="text-gray-400" /> {name}
                 </div>
               ))}
             </div>
           )}
         </div>
-
         <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><select required className="w-full border p-3 rounded bg-white" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}><option value="">Select...</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
         <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><select required className="w-full border p-3 rounded bg-white" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}><option value="">Select...</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
         <div className="col-span-2 grid grid-cols-3 gap-3">
@@ -890,7 +870,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   return (
     <div className="space-y-4 h-full flex flex-col relative pb-20">
       <div className="sticky top-16 z-20 bg-slate-50 pt-3 pb-2 px-1">
-        <div className="bg-white p-3 rounded shadow-sm flex flex-col gap-3">
+        <div className="bg-white p-3 rounded shadow flex flex-col gap-3">
           <div className="flex gap-2">
             <div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center">
               <Search className="text-gray-400" size={20} />
@@ -995,7 +975,7 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
       </div>
 
       {!reviewData && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border text-center">
+        <div className="bg-white p-6 rounded-xl shadow border text-center">
           <div className="flex gap-2 mb-4">
             <input className="flex-1 border-2 border-gray-200 p-3 rounded-lg text-center text-lg font-mono tracking-wider focus:border-blue-500 outline-none" placeholder="Enter / Scan ID" value={scanId} onChange={e => setScanId(e.target.value)} />
             <button onClick={() => setIsScanning(true)} className="bg-gray-900 text-white p-3 rounded-lg"><Camera size={24} /></button>
@@ -1052,7 +1032,7 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
               </div>
             </div>
 
-            <button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg shadow-green-200 flex items-center justify-center gap-2">
+            <button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2">
               <CheckCircle size={20} /> Confirm & Add
             </button>
           </div>
@@ -1114,8 +1094,8 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
         </div>
       </div>
       <div className="sticky top-16 z-20 bg-slate-50 pt-1 pb-2">
-        <div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3">
-          <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center">
+        <div className="bg-white p-4 rounded shadow-sm mb-4 space-y-3">
+          <div className="flex gap-2 border p-2 rounded bg-gray-50 items-center">
             <Search className="text-gray-400" size={20} />
             <input className="w-full outline-none bg-transparent text-sm" placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} />
             {searchText && <button onClick={() => setSearchText('')}><X size={16} className="text-gray-400" /></button>}
@@ -1164,7 +1144,7 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit,
   const handleDelete = (id) => { if (confirm("Delete this material?")) onDelete(id); };
   return (
     <div className="pb-24 flex flex-col h-full">
-      <div className="bg-white p-2 mb-2 rounded shadow-sm flex items-center gap-2 border">
+      <div className="bg-white p-2 mb-2 rounded shadow flex items-center gap-2 border">
         <Search size={18} className="text-gray-400" />
         <input className="w-full outline-none text-sm" placeholder="Search materials..." value={textSearch} onChange={e => setTextSearch(e.target.value)} />
       </div>
@@ -1176,7 +1156,7 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit,
           const limit = parseFloat(m.min_level);
           const isLow = limit > 0 && m.stock_quantity < limit;
           return (
-            <div key={m.id} className={`bg-white p-4 rounded-xl shadow-sm border mb-3 flex justify-between items-center ${isLow ? 'border-l-4 border-l-red-500' : ''}`}>
+            <div key={m.id} className={`bg-white p-4 rounded-xl shadow border mb-3 flex justify-between items-center ${isLow ? 'border-l-4 border-l-red-500' : ''}`}>
               <div><div className="font-bold text-lg text-gray-800 flex items-center gap-2">{m.name}{isLow && <AlertCircle size={16} className="text-red-500" />}</div><div className="text-xs text-gray-400 flex gap-2"><span>{m.category || 'Others'}</span>{limit > 0 && <span>• Alert: &lt; {limit} kg</span>}</div></div>
               <div className="flex items-center gap-3"><span className={`text-2xl font-bold ${isLow ? 'text-red-600' : 'text-blue-600'}`}>{m.stock_quantity < 0 ? 0 : m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>{!isGuest && (<div className="flex flex-col gap-1 items-end"><div className="flex gap-1"><button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded flex items-center justify-center font-bold">+</button><button onClick={() => handleUpdate(m.id, 'sub')} className="bg-red-100 text-red-700 w-8 h-8 rounded flex items-center justify-center font-bold">-</button></div><div className="flex gap-2 mt-1"><button onClick={() => setEditingMaterial(m)} className="text-gray-300 hover:text-blue-500"><Edit3 size={14} /></button><button onClick={() => handleDelete(m.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button></div></div>)}</div>
             </div>
