@@ -7,10 +7,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       workbox: {
-        // Increases the limit to 5 MiB to accommodate the large index.js file
-        maximumFileSizeToCacheInBytes: 5242880,
+        maximumFileSizeToCacheInBytes: 10485760, // Increased to 10MB to be safe
       },
       manifest: {
         name: 'KSF Inventory Manager',
@@ -19,28 +17,22 @@ export default defineConfig({
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
-        orientation: 'portrait',
-        scope: '/',
-        start_url: '/',
         icons: [
-          {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
-          }
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' }
         ]
       }
     })
   ],
+  build: {
+    chunkSizeWarningLimit: 2000, // Silences the 500kb warning
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'recharts'],
+          utils: ['jspdf', 'html2canvas', 'xlsx']
+        }
+      }
+    }
+  }
 })
