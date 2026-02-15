@@ -59,7 +59,8 @@ import {
   RefreshCw,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  User
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -447,7 +448,7 @@ const EditMaterialDetailsModal = ({ material, onSave, onClose }) => {
         <input className="w-full border p-3 rounded mb-4" value={name} onChange={e => setName(e.target.value)} />
         <label className="text-xs font-bold text-gray-500">Category</label>
         <select className="w-full border p-3 rounded mb-4" value={category} onChange={e => setCategory(e.target.value)}>
-          {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
         </select>
         <label className="text-xs font-bold text-gray-500">Low Stock Alert (kg)</label>
         <input className="w-full border p-3 rounded mb-6" type="number" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
@@ -653,7 +654,37 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   );
 });
 
-const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }) => {
+// --- UPDATED ENTRY VIEW WITH CUSTOMER SEARCH SUGGESTIONS ---
+const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, rolls }) => {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionRef = useRef(null);
+
+  // Extract all unique customer names from history
+  const existingCustomers = useMemo(() => {
+    const names = rolls.map(r => r.customer_name).filter(Boolean);
+    return [...new Set(names)].sort();
+  }, [rolls]);
+
+  // Filter suggestions based on typed input
+  const filteredSuggestions = useMemo(() => {
+    const typed = formData.customer_name?.toLowerCase() || '';
+    if (!typed) return [];
+    return existingCustomers.filter(name => 
+      name.toLowerCase().includes(typed) && name.toLowerCase() !== typed
+    );
+  }, [existingCustomers, formData.customer_name]);
+
+  // Handle clicking outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (suggestionRef.current && !suggestionRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleValueChange = (field, value) => {
     const newFormData = { ...formData, [field]: value };
     if (field === 'width_inches' || field === 'gross_weight') {
@@ -666,6 +697,12 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
       }
     }
     setFormData(newFormData);
+    if (field === 'customer_name') setShowSuggestions(true);
+  };
+
+  const selectSuggestion = (name) => {
+    setFormData({ ...formData, customer_name: name });
+    setShowSuggestions(false);
   };
 
   const [rollPrefix, setRollPrefix] = useState(() => localStorage.getItem('ksf_roll_prefix') || 'R');
@@ -704,7 +741,35 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving }
             </div>
           </div>
         </div>
-        <div className="col-span-2"><label className="text-xs font-bold text-gray-500 uppercase">Customer</label><input required className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} /></div>
+
+        {/* CUSTOMER FIELD WITH DROPDOWN SUGGESTIONS */}
+        <div className="col-span-2 relative" ref={suggestionRef}>
+          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+            <User size={12}/> Customer
+          </label>
+          <input 
+            required 
+            autoComplete="off"
+            className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" 
+            value={formData.customer_name} 
+            onChange={e => handleValueChange('customer_name', e.target.value)} 
+            onFocus={() => setShowSuggestions(true)}
+          />
+          {showSuggestions && filteredSuggestions.length > 0 && (
+            <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-b-lg shadow-xl max-h-48 overflow-y-auto mt-1">
+              {filteredSuggestions.map((name, i) => (
+                <div 
+                  key={i} 
+                  onClick={() => selectSuggestion(name)} 
+                  className="p-3 border-b last:border-0 hover:bg-blue-50 cursor-pointer text-sm font-semibold text-gray-700 flex items-center gap-2"
+                >
+                  <Clock size={14} className="text-gray-400" /> {name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><select required className="w-full border p-3 rounded bg-white" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}><option value="">Select...</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
         <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><select required className="w-full border p-3 rounded bg-white" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}><option value="">Select...</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
         <div className="col-span-2 grid grid-cols-3 gap-3">
@@ -753,21 +818,15 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
   );
 });
 
-// --- UPDATED STOCK VIEW (PERSISTENT FILTERS + SORTING TOGGLE + ACCURATE FULL EXCEL) ---
 const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
-
-  // Load Initial State from LocalStorage
   const [textSearch, setTextSearch] = useState(() => localStorage.getItem('ksf_filter_text') || '');
   const [filterQuality, setFilterQuality] = useState(() => localStorage.getItem('ksf_filter_quality') || '');
   const [filterColor, setFilterColor] = useState(() => localStorage.getItem('ksf_filter_color') || '');
   const [filterGSM, setFilterGSM] = useState(() => localStorage.getItem('ksf_filter_gsm') || '');
   const [filterWidth, setFilterWidth] = useState(() => localStorage.getItem('ksf_filter_width') || '');
-  
-  // Sorting State: 'newest' or 'oldest'
   const [sortOrder, setSortOrder] = useState(() => localStorage.getItem('ksf_stock_sort') || 'newest');
 
-  // Save to LocalStorage whenever filters or sort change
   useEffect(() => {
     localStorage.setItem('ksf_filter_text', textSearch);
     localStorage.setItem('ksf_filter_quality', filterQuality);
@@ -778,7 +837,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   }, [textSearch, filterQuality, filterColor, filterGSM, filterWidth, sortOrder]);
 
   const safeRolls = Array.isArray(rolls) ? rolls : [];
-
   const filtered = useMemo(() => {
     const list = safeRolls.filter(r => {
       if (r.status !== 'in_stock') return false;
@@ -797,8 +855,6 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
       if (filterWidth && String(r.width_inches) !== String(filterWidth)) return false;
       return true;
     });
-
-    // Apply Sorting
     return list.sort((a, b) => {
       const dateA = new Date(a.created_at);
       const dateB = new Date(b.created_at);
@@ -829,9 +885,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
     XLSX.writeFile(wb, `Stock_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const toggleSort = () => {
-    setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest');
-  };
+  const toggleSort = () => { setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest'); };
 
   return (
     <div className="space-y-4 h-full flex flex-col relative pb-20">
@@ -842,16 +896,9 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
               <Search className="text-gray-400" size={20} />
               <input className="w-full outline-none bg-transparent" placeholder="e.g. 60gsm 42in White" value={textSearch} onChange={e => setTextSearch(e.target.value)} />
             </div>
-            
-            {/* Sorting Toggle Button */}
-            <button 
-              onClick={toggleSort}
-              className={`p-2 rounded border flex items-center gap-1 font-bold text-xs ${sortOrder === 'oldest' ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}
-              title={sortOrder === 'newest' ? "Sorted: New to Old" : "Sorted: Old to New"}
-            >
+            <button onClick={toggleSort} className={`p-2 rounded border flex items-center gap-1 font-bold text-xs ${sortOrder === 'oldest' ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}>
               {sortOrder === 'newest' ? <ArrowDown size={18}/> : <ArrowUp size={18}/>}
             </button>
-
             <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button>
             <button onClick={handleExportFiltered} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14} /> XLS</button>
           </div>
@@ -1278,7 +1325,7 @@ const MainApp = () => {
         ) : (
           <>
             {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
-            {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} isSaving={isSaving} />}
+            {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} isSaving={isSaving} rolls={rolls} />}
             {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
             {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
             {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}
@@ -1290,7 +1337,7 @@ const MainApp = () => {
 
       {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
       {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}
-      {isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(true)} rolls={rolls} />}
+      {isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(false)} rolls={rolls} />}
 
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
       {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
