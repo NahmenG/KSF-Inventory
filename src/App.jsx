@@ -241,9 +241,13 @@ const generateChallanExcel = (rolls, details) => {
 
 // --- UI COMPONENTS ---
 
-const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings, onManualSync, isSyncing, offlineCount }) => (
+const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings, onManualSync, isSyncing, offlineCount, onLogoClick }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center print:hidden">
-    <div className="flex items-center pl-1">
+    {/* LOGO ACTS AS HOME BUTTON */}
+    <div
+      onClick={onLogoClick}
+      className="flex items-center pl-1 cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
+    >
       <img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" />
     </div>
     <div className="flex items-center gap-2 text-sm">
@@ -280,8 +284,8 @@ const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, on
 ));
 
 const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
+  // REMOVED 'dashboard' FROM TABS TO HIDE FROM FOOTER
   const tabs = [
-    { id: 'dashboard', label: 'Home', icon: Activity },
     !isGuest && { id: 'entry', label: 'Add', icon: Plus },
     { id: 'stock', label: 'Stock', icon: Database },
     { id: 'dispatch', label: 'Disp', icon: Truck },
@@ -1231,8 +1235,43 @@ const MainApp = () => {
   const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
   const handleFullBackup = async () => { setLoading(true); try { const allRolls = await DataService.getStock(); const allMats = await DataService.getRawMaterials(); const wb = XLSX.utils.book_new(); const rollsData = allRolls.map(r => ({ ID: r.product_id, Customer: r.customer_name, Quality: r.quality, Color: r.color, GSM: r.gsm, Width: r.width_inches, Length: r.length_meters, Net: r.net_weight, Gross: r.gross_weight, Status: r.status, Date_Added: new Date(r.created_at).toLocaleDateString(), Date_Dispatched: r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : '-' })); const wsRolls = XLSX.utils.json_to_sheet(rollsData); XLSX.utils.book_append_sheet(wb, wsRolls, "Rolls Database"); const matData = allMats.map(m => ({ ID: m.id, Name: m.name, Category: m.category, Stock: m.stock_quantity })); const wsMat = XLSX.utils.json_to_sheet(matData); XLSX.utils.book_append_sheet(wb, wsMat, "Raw Materials"); XLSX.writeFile(wb, `KSF_Full_Backup_${new Date().toISOString().split('T')[0]}.xlsx`); alert("Backup downloaded!"); } catch (e) { alert("Backup failed!"); } finally { setLoading(false); setSettingsOpen(false); } };
 
-  if (!user && !isGuest) { return (<div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6"><div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100"><img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" /><h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1><p className="text-gray-500 mb-8">Manage floor efficiently.</p><button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 shadow-lg">Login with Google</button><button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold border">View Only (Guest)</button></div></div>); }
-  return (<div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20"><Header isGuest={isGuest} deviceName={deviceName} onLogout={handleLogout} onEditDeviceName={() => setDeviceModalOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManualSync={syncOffline} isSyncing={isSyncing} offlineCount={offlineCount} /><main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">{loading && activeTab !== 'dashboard' ? (<div className="flex justify-center p-12 text-gray-400">Loading Data...</div>) : (<>{activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}{activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} isSaving={isSaving} />}{activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onSelectRoll={setEditRoll} />}{activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}{activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}{activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onEdit={handleEditMaterial} onDelete={handleDeleteMaterial} />}</>)}</main><BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />{isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}{isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}{isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(false)} rolls={rolls} />}{printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}{editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}</div>);
+  return (
+    <div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20">
+      <Header
+        isGuest={isGuest}
+        deviceName={deviceName}
+        onLogout={handleLogout}
+        onEditDeviceName={() => setDeviceModalOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onManualSync={syncOffline}
+        isSyncing={isSyncing}
+        offlineCount={offlineCount}
+        onLogoClick={() => setActiveTab('dashboard')}
+      />
+      <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
+        {loading && activeTab !== 'dashboard' ? (
+          <div className="flex justify-center p-12 text-gray-400">Loading Data...</div>
+        ) : (
+          <>
+            {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
+            {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} isSaving={isSaving} />}
+            {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
+            {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
+            {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}
+            {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onEdit={handleEditMaterial} onDelete={handleDeleteMaterial} />}
+          </>
+        )}
+      </main>
+      <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
+
+      {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
+      {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}
+      {isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(true)} rolls={rolls} />}
+
+      {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
+      {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
+    </div>
+  );
 };
 
 export default function App() { return (<ErrorBoundary><MainApp /></ErrorBoundary>); }
