@@ -56,7 +56,10 @@ import {
   Hash,
   Image as ImageIcon,
   Share2,
-  RefreshCw
+  RefreshCw,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -243,7 +246,6 @@ const generateChallanExcel = (rolls, details) => {
 
 const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings, onManualSync, isSyncing, offlineCount, onLogoClick }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center print:hidden">
-    {/* LOGO ACTS AS HOME BUTTON */}
     <div
       onClick={onLogoClick}
       className="flex items-center pl-1 cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
@@ -284,7 +286,6 @@ const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, on
 ));
 
 const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
-  // REMOVED 'dashboard' FROM TABS TO HIDE FROM FOOTER
   const tabs = [
     !isGuest && { id: 'entry', label: 'Add', icon: Plus },
     { id: 'stock', label: 'Stock', icon: Database },
@@ -421,7 +422,7 @@ const AddMaterialModal = ({ onSave, onClose }) => {
         </div>
         <input className="w-full border p-3 rounded mb-4" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
         <select className="w-full border p-3 rounded mb-4" value={category} onChange={e => setCategory(e.target.value)}>
-          {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+          {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <input className="w-full border p-3 rounded mb-6" type="number" placeholder="Alert Level (kg)" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
         <button onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add</button>
@@ -446,7 +447,7 @@ const EditMaterialDetailsModal = ({ material, onSave, onClose }) => {
         <input className="w-full border p-3 rounded mb-4" value={name} onChange={e => setName(e.target.value)} />
         <label className="text-xs font-bold text-gray-500">Category</label>
         <select className="w-full border p-3 rounded mb-4" value={category} onChange={e => setCategory(e.target.value)}>
-          {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+          {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <label className="text-xs font-bold text-gray-500">Low Stock Alert (kg)</label>
         <input className="w-full border p-3 rounded mb-6" type="number" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
@@ -752,7 +753,7 @@ const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
   );
 });
 
-// --- UPDATED STOCK VIEW (PERSISTENT FILTERS + ACCURATE FULL EXCEL) ---
+// --- UPDATED STOCK VIEW (PERSISTENT FILTERS + SORTING TOGGLE + ACCURATE FULL EXCEL) ---
 const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
 
@@ -762,15 +763,19 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   const [filterColor, setFilterColor] = useState(() => localStorage.getItem('ksf_filter_color') || '');
   const [filterGSM, setFilterGSM] = useState(() => localStorage.getItem('ksf_filter_gsm') || '');
   const [filterWidth, setFilterWidth] = useState(() => localStorage.getItem('ksf_filter_width') || '');
+  
+  // Sorting State: 'newest' or 'oldest'
+  const [sortOrder, setSortOrder] = useState(() => localStorage.getItem('ksf_stock_sort') || 'newest');
 
-  // Save to LocalStorage whenever filters change
+  // Save to LocalStorage whenever filters or sort change
   useEffect(() => {
     localStorage.setItem('ksf_filter_text', textSearch);
     localStorage.setItem('ksf_filter_quality', filterQuality);
     localStorage.setItem('ksf_filter_color', filterColor);
     localStorage.setItem('ksf_filter_gsm', filterGSM);
     localStorage.setItem('ksf_filter_width', filterWidth);
-  }, [textSearch, filterQuality, filterColor, filterGSM, filterWidth]);
+    localStorage.setItem('ksf_stock_sort', sortOrder);
+  }, [textSearch, filterQuality, filterColor, filterGSM, filterWidth, sortOrder]);
 
   const safeRolls = Array.isArray(rolls) ? rolls : [];
 
@@ -792,13 +797,18 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
       if (filterWidth && String(r.width_inches) !== String(filterWidth)) return false;
       return true;
     });
-    return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [safeRolls, textSearch, filterQuality, filterColor, filterGSM, filterWidth]);
+
+    // Apply Sorting
+    return list.sort((a, b) => {
+      const dateA = new Date(a.created_at);
+      const dateB = new Date(b.created_at);
+      return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+    });
+  }, [safeRolls, textSearch, filterQuality, filterColor, filterGSM, filterWidth, sortOrder]);
 
   const totalFilteredWeight = filtered.reduce((s, r) => s + (Number(r.net_weight) || 0), 0);
   const clearFilters = () => { setTextSearch(''); setFilterQuality(''); setFilterColor(''); setFilterGSM(''); setFilterWidth(''); };
 
-  // RESTORED: FULL COLUMNS (Gross Wt & Status)
   const handleExportFiltered = () => {
     const dataToExport = filtered.map(r => ({
       "Roll ID": r.product_id,
@@ -819,6 +829,10 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
     XLSX.writeFile(wb, `Stock_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const toggleSort = () => {
+    setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest');
+  };
+
   return (
     <div className="space-y-4 h-full flex flex-col relative pb-20">
       <div className="sticky top-16 z-20 bg-slate-50 pt-3 pb-2 px-1">
@@ -828,6 +842,16 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
               <Search className="text-gray-400" size={20} />
               <input className="w-full outline-none bg-transparent" placeholder="e.g. 60gsm 42in White" value={textSearch} onChange={e => setTextSearch(e.target.value)} />
             </div>
+            
+            {/* Sorting Toggle Button */}
+            <button 
+              onClick={toggleSort}
+              className={`p-2 rounded border flex items-center gap-1 font-bold text-xs ${sortOrder === 'oldest' ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}
+              title={sortOrder === 'newest' ? "Sorted: New to Old" : "Sorted: Old to New"}
+            >
+              {sortOrder === 'newest' ? <ArrowDown size={18}/> : <ArrowUp size={18}/>}
+            </button>
+
             <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button>
             <button onClick={handleExportFiltered} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14} /> XLS</button>
           </div>
