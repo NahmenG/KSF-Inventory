@@ -8,6 +8,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      workbox: {
+        // Increases the limit to 5 MiB to accommodate the large index.js file
+        maximumFileSizeToCacheInBytes: 5242880,
+      },
       manifest: {
         name: 'KSF Inventory Manager',
         short_name: 'KSF Stock',
