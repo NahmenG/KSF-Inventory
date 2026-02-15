@@ -200,6 +200,53 @@ const DataService = {
   }
 };
 
+// --- HELPER: GENERATE EXCEL GATE PASS ---
+const generateChallanExcel = (rolls, details) => {
+  try {
+    const header = [
+      ["KSF NON WOVEN"],
+      [],
+      ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()],
+      ["Buyer:", details.buyer, "Vehicle:", details.vehicle],
+      [],
+      ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "Length (m)", "GSM", "Gross Kg", "Net Kg"]
+    ];
+    const body = rolls.map((r, i) => [
+      i + 1,
+      r.product_id,
+      r.quality,
+      r.color,
+      r.width_inches,
+      r.length_meters,
+      r.gsm,
+      parseFloat(r.gross_weight) || 0,
+      parseFloat(r.net_weight) || 0
+    ]);
+    const totalNet = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
+    const totalGross = rolls.reduce((sum, r) => sum + (parseFloat(r.gross_weight) || 0), 0);
+    const footer = [
+      [],
+      ["", "", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]
+    ];
+    const finalData = [...header, ...body, ...footer];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(finalData);
+    ws['!cols'] = [
+      { wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 },
+      { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }
+    ];
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
+    XLSX.utils.book_append_sheet(wb, ws, "GatePass");
+    const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    return true;
+  } catch (err) {
+    console.error(err);
+    alert("Excel Error: " + err.message);
+    return false;
+  }
+};
+
 // --- UI COMPONENTS ---
 
 const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings, onManualSync, isSyncing, offlineCount, onLogoClick }) => (
@@ -268,10 +315,11 @@ const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
   );
 });
 
-// --- ANALYTICS COMPONENT ---
+// --- ANALYTICS VIEW ---
 const AnalyticsView = ({ rolls, selectedMonth }) => {
   const data = useMemo(() => {
-    const daysInMonth = new Date(selectedMonth.split('-')[0], selectedMonth.split('-')[1], 0).getDate();
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
     const daily = [];
     for (let i = 1; i <= daysInMonth; i++) {
       const dateStr = `${selectedMonth}-${String(i).padStart(2, '0')}`;
@@ -362,7 +410,7 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
       filename = `Dispatch_Monthly_${selectedMonth}.xlsx`;
     }
     if (filteredData.length === 0) { alert("No data found."); return; }
-    const ws = XLSX.utils.json_to_sheet(filteredData.map(r => ({
+    const dataToExport = filteredData.map(r => ({
       "Roll ID": r.product_id,
       "Date": new Date(r.created_at).toLocaleDateString(),
       "Customer": r.customer_name || '-',
@@ -373,7 +421,8 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
       "Gross Kg": r.gross_weight,
       "Net Kg": r.net_weight,
       "Status": r.status
-    })));
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Report");
     XLSX.writeFile(wb, filename);
@@ -385,7 +434,7 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
       <div className="bg-white p-6 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold flex items-center gap-2"><FileText size={22} /> Reports & Analytics</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
         </div>
 
         {!showAnalytics ? (
@@ -408,8 +457,8 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
               </div>
             </div>
             <div className="flex flex-col gap-3">
-              <button onClick={handleDownload} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-colors"><Download size={20} /> Download Excel Report</button>
-              <button onClick={() => setShowAnalytics(true)} className="w-full bg-white border-2 border-blue-600 text-blue-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors"><BarChart2 size={20} /> View Monthly Visual Analytics</button>
+              <button onClick={handleDownload} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all"><Download size={20} /> Download Excel Report</button>
+              <button onClick={() => setShowAnalytics(true)} className="w-full bg-white border-2 border-blue-600 text-blue-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-50 transition-all"><BarChart2 size={20} /> View Monthly Visual Analytics</button>
             </div>
           </div>
         ) : (
@@ -429,7 +478,7 @@ const SettingsModal = ({ visible, onClose, onBackup }) => (!visible ? null : (
     <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl border">
       <div className="flex justify-between mb-6">
         <h2 className="text-xl font-bold flex items-center gap-2"><Settings /> Settings</h2>
-        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X /></button>
+        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
       </div>
       <button onClick={onBackup} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors">
         <Download /> Backup Database
@@ -460,7 +509,7 @@ const AddMaterialModal = ({ onSave, onClose }) => {
       <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl border">
         <div className="flex justify-between mb-4">
           <h2 className="text-xl font-bold">Add Material</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X /></button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
         </div>
         <div className="space-y-4">
           <div>
@@ -477,7 +526,7 @@ const AddMaterialModal = ({ onSave, onClose }) => {
             <label className="text-xs font-bold text-gray-400 uppercase mb-1 block">Alert Level (kg)</label>
             <input className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" type="number" placeholder="Set stock limit" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
           </div>
-          <button onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition-colors mt-2 shadow-lg shadow-blue-100">Add Material</button>
+          <button onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition-all mt-2 shadow-lg shadow-blue-100">Add Material</button>
         </div>
       </div>
     </div>
@@ -494,7 +543,7 @@ const EditMaterialDetailsModal = ({ material, onSave, onClose }) => {
       <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl border">
         <div className="flex justify-between mb-4">
           <h2 className="text-xl font-bold">Edit Material</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X /></button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
         </div>
         <div className="space-y-4">
           <div>
@@ -511,7 +560,7 @@ const EditMaterialDetailsModal = ({ material, onSave, onClose }) => {
             <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Low Stock Alert (kg)</label>
             <input className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" type="number" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
           </div>
-          <button onClick={handleSave} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition-colors mt-2 shadow-lg shadow-blue-100">Save Changes</button>
+          <button onClick={handleSave} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition-all mt-2 shadow-lg shadow-blue-100">Save Changes</button>
         </div>
       </div>
     </div>
@@ -528,7 +577,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-4">
       <div className="text-white font-bold mb-4">Scan Barcode</div>
       <div id="reader" className="w-full bg-white rounded overflow-hidden max-w-sm shadow-2xl border-4 border-white/20"></div>
-      <button onClick={onClose} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-full font-bold shadow-lg active:scale-95 transition-transform">Close</button>
+      <button onClick={onClose} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-full font-bold shadow-lg active:scale-95 transition-all">Close</button>
     </div>
   );
 };
@@ -568,7 +617,7 @@ const LabelPrint = ({ data, onClose }) => {
         <div className="p-4 border-b flex flex-col gap-3">
           <div className="flex justify-between items-center">
             <h2 className="font-bold text-lg">Label Preview</h2>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button onClick={() => setShowBrand(!showBrand)} className={`flex items-center justify-center gap-1 text-xs font-bold p-2 rounded ${showBrand ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -603,7 +652,7 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
         </div>
         <div className="p-4 bg-gray-50 flex gap-2 border-t">
-          <button onClick={handleDownloadPDF} disabled={isGenerating} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center active:scale-95 transition-transform">
+          <button onClick={handleDownloadPDF} disabled={isGenerating} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center active:scale-95 transition-all">
             {isGenerating ? 'Generating...' : <><Printer size={18} /> Save PDF for Print</>}
           </button>
           <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50 transition-colors">Close</button>
@@ -636,29 +685,27 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     return Object.keys(breakdown).map(k => ({ quality: k, weight: breakdown[k].toFixed(1) }));
   }, [inStock]);
 
-  const activeDevices = useMemo(() => {
-    const d = new Date(); d.setDate(d.getDate() - 7);
-    return [...new Set(rolls.filter(r => new Date(r.updated_at) > d).map(r => r.device_name))].filter(Boolean);
-  }, [rolls]);
-
   const qualityData = useMemo(() => {
-    const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
+    const c = {};
+    inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
     return Object.keys(c).map(k => ({ name: k, value: parseFloat(c[k].toFixed(1)) }));
   }, [inStock]);
 
   const colorData = useMemo(() => {
-    const c = {}; inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
+    const c = {};
+    inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
     return Object.keys(c).map(k => ({ name: k, count: parseFloat(c[k].toFixed(1)) })).sort((a, b) => b.count - a.count).slice(0, 8);
   }, [inStock]);
 
   const recentActivity = rolls.slice(0, 5).map(r => ({
-    ...r, action: r.status === 'dispatched' ? 'Dispatched' : (Math.abs(new Date(r.created_at) - new Date(r.updated_at)) < 60000 ? 'Produced' : 'Edited'),
+    ...r,
+    action: r.status === 'dispatched' ? 'Dispatched' : (Math.abs(new Date(r.created_at) - new Date(r.updated_at)) < 60000 ? 'Produced' : 'Edited'),
     time: new Date(r.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }));
 
   return (
     <div className="space-y-6 pb-20">
-      <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-blue-600">
+      <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-blue-600 border border-gray-100">
         <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18} /> Factory Velocity (Today)</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-green-50 p-3 rounded-lg border border-green-100">
@@ -682,13 +729,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
           <div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400">kg</span></div>
         </div>
       </div>
-
-      {activeDevices.length > 0 && (
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wifi size={18} /> Active Devices</h3>
-          <div className="flex flex-wrap gap-2">{activeDevices.map(d => (<span key={d} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">{d}</span>))}</div>
-        </div>
-      )}
 
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18} /> Recent Activity</h3>
@@ -749,7 +789,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
 
       {agedStockBreakdown.length > 0 && (
         <div className="bg-orange-50 p-4 rounded-xl border-l-4 border-orange-500 shadow-sm border">
-          <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2"><Clock size={20} /> Aged Stock Alert (>30 Days)</h3>
+          <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2"><Clock size={20} /> Aged Stock Alert ({">"} 30 Days)</h3>
           <div className="grid grid-cols-2 gap-2">
             {agedStockBreakdown.map((item, i) => (
               <div key={i} className="bg-white p-2 rounded border border-orange-100 text-xs">
@@ -1144,94 +1184,26 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
             <span>Total: {sessionList.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0).toFixed(1)} kg</span>
           </div>
           <div className="max-h-64 overflow-y-auto">
-          {sessionList.map((item, i) => (
-            <div key={i} className="p-3 border-b flex justify-between items-center last:border-0 hover:bg-gray-50">
-              <div>
-                <div className="font-mono text-gray-800 font-bold">{item.product_id}</div>
-                <div className="text-xs text-gray-500 mt-0.5 tracking-tight">
-                  {item.quality} • {item.color} • {item.gsm} GSM • {item.width_inches}"
+            {sessionList.map((item, i) => (
+              <div key={i} className="p-3 border-b flex justify-between items-center last:border-0 hover:bg-gray-50">
+                <div>
+                  <div className="font-mono text-gray-800 font-bold">{item.product_id}</div>
+                  <div className="text-xs text-gray-500 mt-0.5 tracking-tight">
+                    {item.quality} • {item.color} • {item.gsm} GSM • {item.width_inches}"
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold text-lg text-gray-900">{item.net_weight} <span className="text-xs font-normal text-gray-400">kg</span></div>
+                  <button onClick={() => handleRemoveFromManifest(i, item)} className="text-xs text-red-500 border border-red-100 bg-red-50 px-2 py-0.5 rounded mt-1 hover:bg-red-100 transition-colors">Remove</button>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="font-bold text-lg text-gray-900">{item.net_weight} <span className="text-xs font-normal text-gray-400">kg</span></div>
-                <button onClick={() => handleRemoveFromManifest(i, item)} className="text-xs text-red-500 border border-red-100 bg-red-50 px-2 py-0.5 rounded mt-1 hover:bg-red-100 transition-colors">Remove</button>
-              </div>
-            </div>
-          ))}
+            ))}
           </div>
           <div className="p-4 bg-gray-50 border-t">
             <button onClick={handlePrint} className="w-full bg-green-700 text-white py-4 rounded-xl font-bold flex justify-center gap-2 items-center hover:bg-green-800 shadow-lg active:scale-95 transition-all"><FileSpreadsheet size={20} /> Generate Excel Gate Pass</button>
           </div>
         </div>
       )}
-    </div>
-  );
-});
-
-// --- HISTORY & MATERIALS VIEW ---
-
-const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }) => {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [searchText, setSearchText] = useState('');
-  const history = useMemo(() => {
-    let list = (rolls || []).filter(r => r.status === 'dispatched');
-    if (startDate) list = list.filter(r => new Date(r.dispatched_at) >= new Date(startDate));
-    if (endDate) list = list.filter(r => new Date(r.dispatched_at) <= new Date(endDate + 'T23:59:59'));
-    if (searchText) {
-      const lower = searchText.toLowerCase();
-      list = list.filter(r => (r.customer_name && r.customer_name.toLowerCase().includes(lower)) || (r.product_id && r.product_id.toLowerCase().includes(lower)) || (r.quality && r.quality.toLowerCase().includes(lower)));
-    }
-    list.sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
-    return list;
-  }, [rolls, startDate, endDate, searchText]);
-  const totalHistoryWeight = history.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
-  return (
-    <div className="pb-24">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="font-bold text-xl">History</h2>
-        <div className="flex gap-2">
-          <button onClick={onOpenReports} className="bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow hover:bg-blue-700 transition-colors"><FileText size={16} /> Reports</button>
-          <button onClick={() => onExport(history)} className="bg-green-100 text-green-700 px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-1 hover:bg-green-200 transition-colors"><Download size={16} /> List</button>
-        </div>
-      </div>
-      <div className="sticky top-16 z-20 bg-slate-50 pt-1 pb-2">
-        <div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3 border border-gray-100">
-          <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-            <Search className="text-gray-400" size={20} />
-            <input className="w-full outline-none bg-transparent text-sm" placeholder="Search customer or ID..." value={searchText} onChange={e => setSearchText(e.target.value)} />
-            {searchText && <button onClick={() => setSearchText('')}><X size={16} className="text-gray-400" /></button>}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase">Start Date</label>
-              <input type="date" className="w-full border p-2 rounded text-sm outline-none focus:ring-2 focus:ring-blue-100" value={startDate} onChange={e => setStartDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase">End Date</label>
-              <input type="date" className="w-full border p-2 rounded text-sm outline-none focus:ring-2 focus:ring-blue-100" value={endDate} onChange={e => setEndDate(e.target.value)} />
-            </div>
-          </div>
-        </div>
-        <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center mb-3 text-sm border border-gray-200 shadow-inner">
-          <span className="font-bold text-gray-600">{history.length} Rolls Dispatched</span>
-          <span className="font-bold text-blue-700">{formatCurrency(totalHistoryWeight)} kg</span>
-        </div>
-      </div>
-      <div className="px-1 overflow-y-auto">
-      {history.length === 0 ? <div className="text-center text-gray-400 mt-10">No records found.</div> : history.map(r => (
-        <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-3 rounded-xl border mb-2 text-sm shadow-sm hover:border-blue-200 cursor-pointer transition-colors">
-          <div className="flex justify-between mb-1">
-            <span className="font-bold text-gray-800">{r.customer_name || 'Unknown'}</span>
-            <span className="text-green-600 font-bold">{r.net_weight} kg</span>
-          </div>
-          <div className="flex justify-between text-gray-500 text-[11px] tracking-tight">
-            <span>{r.product_id} • {r.quality}</span>
-            <span>{new Date(r.dispatched_at).toLocaleDateString()}</span>
-          </div>
-        </div>
-      ))}
-      </div>
     </div>
   );
 });
@@ -1301,7 +1273,6 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit,
   );
 });
 
-// --- MAIN CONTAINER ---
 const MainApp = () => {
   const [user, setUser] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
@@ -1362,8 +1333,23 @@ const MainApp = () => {
   }, [isSyncing, fetchData]);
 
   useEffect(() => { window.addEventListener('online', syncOffline); syncOffline(); return () => window.removeEventListener('online', syncOffline); }, [syncOffline]);
-  useEffect(() => { const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } }; checkSession(); const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session && !user) { setIsGuest(false); fetchData(); } }); const interval = setInterval(() => { if ((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000); return () => { subscription.unsubscribe(); clearInterval(interval); }; }, [fetchData]);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) { setUser(session.user); setIsGuest(false); fetchData(); }
+    };
+    checkSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session && !user) { setIsGuest(false); fetchData(); }
+    });
+    const interval = setInterval(() => { if ((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000);
+    return () => { subscription.unsubscribe(); clearInterval(interval); };
+  }, [fetchData, user, isGuest]);
+
   useEffect(() => { if (user && !isGuest && !deviceName) setDeviceModalOpen(true); }, [user, isGuest, deviceName]);
+
   const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
   const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
@@ -1411,8 +1397,20 @@ const MainApp = () => {
   const handleAddMaterial = async (name, category, minLevel) => { await DataService.addRawMaterial(name, category, minLevel); fetchData(); };
   const handleEditMaterial = async (id, updates) => { await DataService.editRawMaterial(id, updates); fetchData(); };
   const handleDeleteMaterial = async (id) => { await DataService.deleteRawMaterial(id); fetchData(); };
-  const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
-  const handleFullBackup = async () => { setLoading(true); try { const allRolls = await DataService.getStock(); const allMats = await DataService.getRawMaterials(); const wb = XLSX.utils.book_new(); const rollsData = allRolls.map(r => ({ ID: r.product_id, Customer: r.customer_name, Quality: r.quality, Color: r.color, GSM: r.gsm, Width: r.width_inches, Length: r.length_meters, Net: r.net_weight, Gross: r.gross_weight, Status: r.status, Date_Added: new Date(r.created_at).toLocaleDateString(), Date_Dispatched: r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : '-' })); const wsRolls = XLSX.utils.json_to_sheet(rollsData); XLSX.utils.book_append_sheet(wb, wsRolls, "Rolls Database"); const matData = allMats.map(m => ({ ID: m.id, Name: m.name, Category: m.category, Stock: m.stock_quantity })); const wsMat = XLSX.utils.json_to_sheet(matData); XLSX.utils.book_append_sheet(wb, wsMat, "Raw Materials"); XLSX.writeFile(wb, `KSF_Full_Backup_${new Date().toISOString().split('T')[0]}.xlsx`); alert("Backup downloaded!"); } catch (e) { alert("Backup failed!"); } finally { setLoading(false); setSettingsOpen(false); } };
+
+  if (!user && !isGuest) {
+    return (
+      <div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100">
+          <img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" />
+          <h1 className="text-2xl font-bold mb-2 text-gray-900">KSF Inventory</h1>
+          <p className="text-gray-500 mb-8">Manage floor efficiently.</p>
+          <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mb-3 shadow-lg hover:bg-blue-700 transition-all">Login with Google</button>
+          <button onClick={handleGuestEntry} className="w-full bg-white text-gray-700 py-3.5 rounded-xl font-bold border hover:bg-gray-50 transition-all">View Only (Guest)</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20">
