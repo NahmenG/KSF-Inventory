@@ -57,7 +57,6 @@ import {
   Image as ImageIcon,
   Share2,
   RefreshCw,
-  ArrowUpDown,
   ArrowUp,
   ArrowDown,
   User
@@ -86,7 +85,7 @@ class ErrorBoundary extends React.Component {
               localStorage.clear();
               window.location.reload();
             }}
-            className="bg-red-600 text-white px-6 py-3 rounded font-bold"
+            className="bg-red-600 text-white px-6 py-3 rounded font-bold shadow-lg"
           >
             Reset App
           </button>
@@ -359,24 +358,22 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
 
   return (
     <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-      <div className="bg-white p-6 rounded-lg w-full max-w-sm">
+      <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold flex items-center gap-2"><FileText size={22} /> Reports</h2>
-          <button onClick={onClose}><X size={20} /></button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
         </div>
         <div className="space-y-4">
-          <select className="w-full border p-3 rounded" value={reportType} onChange={e => setReportType(e.target.value)}>
+          <select className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={reportType} onChange={e => setReportType(e.target.value)}>
             <option value="production_daily">Daily Production</option>
             <option value="production_monthly">Monthly Production</option>
             <option value="dispatch_monthly">Monthly Dispatch</option>
           </select>
           {reportType === 'production_daily' ?
-            <input type="date" className="w-full border p-3 rounded" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /> :
-            <input type="month" className="w-full border p-3 rounded" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} />
+            <input type="date" className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /> :
+            <input type="month" className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} />
           }
-          <button onClick={handleDownload} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2">
-            <Download size={18} /> Download
-          </button>
+          <button onClick={handleDownload} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all"><Download size={20} /> Download Excel Report</button>
         </div>
       </div>
     </div>
@@ -385,12 +382,12 @@ const ReportsModal = ({ visible, onClose, rolls }) => {
 
 const SettingsModal = ({ visible, onClose, onBackup }) => (!visible ? null : (
   <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-    <div className="bg-white p-6 rounded-lg w-full max-w-sm">
+    <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl border">
       <div className="flex justify-between mb-6">
         <h2 className="text-xl font-bold flex items-center gap-2"><Settings /> Settings</h2>
-        <button onClick={onClose}><X /></button>
+        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
       </div>
-      <button onClick={onBackup} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2">
+      <button onClick={onBackup} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors">
         <Download /> Backup Database
       </button>
     </div>
@@ -401,10 +398,10 @@ const DeviceNameModal = ({ onSave, initialName, onClose }) => {
   const [name, setName] = useState(initialName || '');
   return (
     <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-      <div className="bg-white p-6 rounded-lg w-full max-w-sm text-center">
+      <div className="bg-white p-6 rounded-lg w-full max-w-sm text-center shadow-2xl border">
         <h2 className="text-xl font-bold mb-4">Device Name</h2>
-        <input className="w-full border p-3 rounded mb-4 text-center" value={name} onChange={e => setName(e.target.value)} />
-        <button onClick={() => onSave(name)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Save</button>
+        <input className="w-full border p-3 rounded mb-4 text-center outline-none focus:ring-2 focus:ring-blue-500" value={name} onChange={e => setName(e.target.value)} placeholder="Enter Device Name" />
+        <button onClick={() => onSave(name)} className="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700 transition-colors">Save</button>
       </div>
     </div>
   );
@@ -416,17 +413,19 @@ const AddMaterialModal = ({ onSave, onClose }) => {
   const [minLevel, setMinLevel] = useState('');
   return (
     <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-      <div className="bg-white p-6 rounded-lg w-full max-w-sm">
+      <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl border">
         <div className="flex justify-between mb-4">
           <h2 className="text-xl font-bold">Add Material</h2>
-          <button onClick={onClose}><X /></button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
         </div>
-        <input className="w-full border p-3 rounded mb-4" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
-        <select className="w-full border p-3 rounded mb-4" value={category} onChange={e => setCategory(e.target.value)}>
-          {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <input className="w-full border p-3 rounded mb-6" type="number" placeholder="Alert Level (kg)" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
-        <button onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Add</button>
+        <div className="space-y-4">
+          <input className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="Material Name" value={name} onChange={e => setName(e.target.value)} />
+          <select className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={category} onChange={e => setCategory(e.target.value)}>
+            {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <input className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" type="number" placeholder="Alert Level (kg)" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
+          <button onClick={() => onSave(name, category, minLevel)} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">Add Material</button>
+        </div>
       </div>
     </div>
   );
@@ -439,20 +438,19 @@ const EditMaterialDetailsModal = ({ material, onSave, onClose }) => {
   const handleSave = () => { onSave({ ...material, name, category, min_level: minLevel }); };
   return (
     <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-      <div className="bg-white p-6 rounded-lg w-full max-w-sm">
+      <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl border">
         <div className="flex justify-between mb-4">
           <h2 className="text-xl font-bold">Edit Material</h2>
-          <button onClick={onClose}><X /></button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
         </div>
-        <label className="text-xs font-bold text-gray-500">Name</label>
-        <input className="w-full border p-3 rounded mb-4" value={name} onChange={e => setName(e.target.value)} />
-        <label className="text-xs font-bold text-gray-500">Category</label>
-        <select className="w-full border p-3 rounded mb-4" value={category} onChange={e => setCategory(e.target.value)}>
-          {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-        </select>
-        <label className="text-xs font-bold text-gray-500">Low Stock Alert (kg)</label>
-        <input className="w-full border p-3 rounded mb-6" type="number" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
-        <button onClick={handleSave} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Save Changes</button>
+        <div className="space-y-4">
+          <input className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={name} onChange={e => setName(e.target.value)} />
+          <select className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={category} onChange={e => setCategory(e.target.value)}>
+            {MAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <input className="w-full border p-3 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" type="number" value={minLevel} onChange={e => setMinLevel(e.target.value)} />
+          <button onClick={handleSave} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all">Save Changes</button>
+        </div>
       </div>
     </div>
   );
@@ -467,8 +465,8 @@ const BarcodeScanner = ({ onScan, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-4">
       <div className="text-white font-bold mb-4">Scan Barcode</div>
-      <div id="reader" className="w-full bg-white rounded overflow-hidden max-w-sm"></div>
-      <button onClick={onClose} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-full font-bold">Close</button>
+      <div id="reader" className="w-full bg-white rounded overflow-hidden max-w-sm shadow-2xl border-4 border-white/20"></div>
+      <button onClick={onClose} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-full font-bold shadow-lg active:scale-95 transition-all">Close</button>
     </div>
   );
 };
@@ -504,11 +502,11 @@ const LabelPrint = ({ data, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden flex flex-col max-h-screen">
+      <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden flex flex-col max-h-screen shadow-2xl border">
         <div className="p-4 border-b flex flex-col gap-3">
           <div className="flex justify-between items-center">
             <h2 className="font-bold text-lg">Label Preview</h2>
-            <button onClick={onClose}><X size={20} /></button>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button onClick={() => setShowBrand(!showBrand)} className={`flex items-center justify-center gap-1 text-xs font-bold p-2 rounded ${showBrand ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -542,11 +540,11 @@ const LabelPrint = ({ data, onClose }) => {
             </div>
           </div>
         </div>
-        <div className="p-4 bg-gray-50 flex gap-2">
-          <button onClick={handleDownloadPDF} disabled={isGenerating} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center">
+        <div className="p-4 bg-gray-50 flex gap-2 border-t">
+          <button onClick={handleDownloadPDF} disabled={isGenerating} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center active:scale-95 transition-all">
             {isGenerating ? 'Generating...' : <><Printer size={18} /> Save PDF for Print</>}
           </button>
-          <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50">Close</button>
+          <button onClick={onClose} className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50 transition-colors">Close</button>
         </div>
       </div>
     </div>
@@ -567,7 +565,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       .sort((a, b) => (priority[a.category] || 99) - (priority[b.category] || 99));
   }, [materials]);
 
-  // NEW: AGED STOCK LOGIC
   const agedStockBreakdown = useMemo(() => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -577,61 +574,95 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     return Object.keys(breakdown).map(k => ({ quality: k, weight: breakdown[k].toFixed(1) }));
   }, [inStock]);
 
-  const activeDevices = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return [...new Set(rolls.filter(r => new Date(r.updated_at) > d).map(r => r.device_name))].filter(Boolean);
-  }, [rolls]);
-
   const qualityData = useMemo(() => {
-    const c = {};
-    inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
+    const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
     return Object.keys(c).map(k => ({ name: k, value: parseFloat(c[k].toFixed(1)) }));
   }, [inStock]);
 
   const colorData = useMemo(() => {
-    const c = {};
-    inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
+    const c = {}; inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
     return Object.keys(c).map(k => ({ name: k, count: parseFloat(c[k].toFixed(1)) })).sort((a, b) => b.count - a.count).slice(0, 8);
   }, [inStock]);
 
-  const recentActivity = rolls.slice(0, 5).map(r => ({
-    ...r,
-    action: r.status === 'dispatched' ? 'Dispatched' : (Math.abs(new Date(r.created_at) - new Date(r.updated_at)) < 60000 ? 'Produced' : 'Edited'),
-    time: new Date(r.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }));
-
   return (
     <div className="space-y-6 pb-20">
-      <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-600">
-        <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18} /> Factory Velocity (Today)</h3>
+      <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-blue-600 border border-gray-100">
+        <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3"><TrendingUp size={18} /> Factory Activity (Today)</h3>
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-green-50 p-3 rounded-lg"><div className="text-xs text-green-700 font-bold uppercase flex items-center gap-1"><ArrowDownRight size={14} /> Produced</div><div className="text-2xl font-bold text-green-800">{producedToday} <span className="text-xs font-normal">Rolls</span></div></div>
-          <div className="bg-orange-50 p-3 rounded-lg"><div className="text-xs text-orange-700 font-bold uppercase flex items-center gap-1"><ArrowUpRight size={14} /> Dispatched</div><div className="text-2xl font-bold text-orange-800">{dispatchedToday} <span className="text-xs font-normal">Rolls</span></div></div>
+          <div className="bg-green-50 p-3 rounded-lg border border-green-100 text-center">
+            <div className="text-[10px] text-green-700 font-bold uppercase tracking-tight">Produced</div>
+            <div className="text-2xl font-black text-green-800">{producedToday}</div>
+          </div>
+          <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 text-center">
+            <div className="text-[10px] text-orange-700 font-bold uppercase tracking-tight">Dispatched</div>
+            <div className="text-2xl font-black text-orange-800">{dispatchedToday}</div>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Count</div><div className="text-3xl font-bold text-blue-600">{inStock.length}</div></div>
-        <div className="bg-white p-4 rounded-xl shadow border border-gray-100"><div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div><div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400">kg</span></div></div>
-      </div>
-
-      <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
-        <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={18} /> Recent Activity</h3>
-        {recentActivity.length === 0 ? <div className="text-gray-400 text-sm">No recent activity</div> : (
-          <div className="space-y-3">{recentActivity.map(r => (<div key={r.id} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0"><div><div className="font-bold text-sm text-gray-800">{r.product_id} <span className={`text-[10px] uppercase px-1 rounded ${r.action === 'Produced' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.action}</span></div><div className="text-xs text-gray-500">by {r.device_name || 'Unknown'}</div></div><div className="text-right"><div className="font-bold text-sm">{r.net_weight} kg</div><div className="text-[10px] text-gray-400">{r.time}</div></div></div>))}</div>
-        )}
-      </div>
-
-      <div className="bg-white p-4 rounded-xl shadow border">
-        <h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>{qualityData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}</Pie><RechartsTooltip /><Legend /></PieChart></ResponsiveContainer>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+          <div className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Total Stock Count</div>
+          <div className="text-3xl font-black text-blue-600">{inStock.length} Rolls</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+          <div className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Total Stock Weight</div>
+          <div className="text-2xl font-black text-green-600">{formatCurrency(totalWeight)} <span className="text-sm font-normal text-gray-400 uppercase">kg</span></div>
         </div>
       </div>
 
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <h3 className="font-bold mb-4 text-gray-700">Stock by Quality (kg)</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>
+                {qualityData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}
+              </Pie>
+              <RechartsTooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <h3 className="font-bold mb-4 text-gray-700">Stock by Color (kg)</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={colorData} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+              <XAxis type="number" hide />
+              <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} />
+              <RechartsTooltip />
+              <Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="count" position="right" style={{ fontSize: '12px', fill: '#666' }} />
+                {colorData.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* ALERT CARDS - AGED STOCK ABOVE LOW MATERIAL */}
+      {agedStockBreakdown.length > 0 && (
+        <div className="bg-orange-50 p-4 rounded-xl border-l-4 border-orange-500 shadow-sm border border-orange-100">
+          <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2">
+            <Clock size={20} /> Aged Stock Alert ({" > "} 30 Days)
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {agedStockBreakdown.map((item, i) => (
+              <div key={i} className="bg-white p-2 rounded border border-orange-100 text-xs shadow-sm">
+                <div className="text-gray-400 font-bold uppercase">{item.quality}</div>
+                <div className="text-lg font-black text-orange-700">{item.weight} kg</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {lowStockMaterials.length > 0 && (
-        <div className="bg-red-50 p-4 rounded-xl border-l-4 border-red-500 shadow-sm">
+        <div className="bg-red-50 p-4 rounded-xl border-l-4 border-red-500 shadow-sm border border-red-100">
           <h3 className="font-bold text-red-800 flex items-center gap-2 mb-2"><AlertCircle size={20} /> Low Material Alert</h3>
           <div className="space-y-2">
             {lowStockMaterials.map(m => (
@@ -640,22 +671,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
                   <span className="font-bold text-gray-700 block">{m.name}</span>
                   <span className="text-[10px] uppercase text-gray-400 font-bold">{m.category}</span>
                 </div>
-                <span className="font-bold text-red-600">{m.stock_quantity} kg <span className="text-gray-400 font-normal text-xs">/ {m.min_level} kg</span></span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* NEW: AGED STOCK ALERT CARD */}
-      {agedStockBreakdown.length > 0 && (
-        <div className="bg-orange-50 p-4 rounded-xl border-l-4 border-orange-500 shadow-sm">
-          <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2"><Clock size={20} /> Aged Stock Alert ({" > "} 30 Days)</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {agedStockBreakdown.map((item, i) => (
-              <div key={i} className="bg-white p-2 rounded border border-orange-100 text-xs">
-                <div className="text-gray-400 font-bold uppercase">{item.quality}</div>
-                <div className="text-lg font-black text-orange-700">{item.weight} kg</div>
+                <span className="font-bold text-red-600">{m.stock_quantity} kg</span>
               </div>
             ))}
           </div>
@@ -668,14 +684,16 @@ const DashboardView = React.memo(({ rolls, materials }) => {
 const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, rolls }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionRef = useRef(null);
+
   const existingCustomers = useMemo(() => {
     const names = rolls.map(r => r.customer_name).filter(Boolean);
     return [...new Set(names)].sort();
   }, [rolls]);
+
   const filteredSuggestions = useMemo(() => {
     const typed = formData.customer_name?.toLowerCase() || '';
     if (!typed) return [];
-    return existingCustomers.filter(name =>
+    return existingCustomers.filter(name => 
       name.toLowerCase().includes(typed) && name.toLowerCase() !== typed
     );
   }, [existingCustomers, formData.customer_name]);
@@ -721,79 +739,52 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, 
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24">
+    <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24 border-gray-100">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-lg font-bold flex items-center gap-2"><Package className="text-blue-600" /> New Roll Entry</h2>
-        <button onClick={() => { setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); }} className="text-xs font-bold text-red-500 flex items-center gap-1 border border-red-100 bg-red-50 px-2 py-1 rounded hover:bg-red-100"><RotateCcw size={12} /> Clear Form</button>
+        <button onClick={() => setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' })} className="text-xs font-bold text-red-500 border border-red-100 bg-red-50 px-2 py-1 rounded">
+          <RotateCcw size={12} /> Clear Form
+        </button>
       </div>
       <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <label className="text-xs font-bold text-blue-600 uppercase flex items-center gap-1 mb-1"><Hash size={12} /> Roll Number (Prefix - Sequence)</label>
+          <label className="text-xs font-bold text-blue-600 uppercase mb-1 flex items-center gap-1"><Hash size={12} /> Roll ID</label>
           <div className="flex gap-2 w-full">
-            <input type="text" className="w-[35%] min-w-0 border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg md:text-xl font-bold text-blue-900 focus:border-blue-500 outline-none text-center uppercase" placeholder="PREFIX" value={rollPrefix} onChange={(e) => { setRollPrefix(e.target.value.toUpperCase()); localStorage.setItem('ksf_roll_prefix', e.target.value.toUpperCase()); }} />
+            <input type="text" className="w-[35%] border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 focus:outline-none uppercase" value={rollPrefix} onChange={(e) => { setRollPrefix(e.target.value.toUpperCase()); localStorage.setItem('ksf_roll_prefix', e.target.value.toUpperCase()); }} />
             <div className="flex-1 flex items-center gap-2">
               <span className="text-xl font-bold text-gray-400">-</span>
-              <input type="number" required className="w-full min-w-0 border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg md:text-xl font-bold text-blue-900 focus:border-blue-500 outline-none" placeholder="1001" value={rollSeq} onChange={(e) => { setRollSeq(e.target.value); localStorage.setItem('ksf_roll_sequence', e.target.value); }} />
+              <input type="number" required className="w-full border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 focus:outline-none" value={rollSeq} onChange={(e) => { setRollSeq(e.target.value); localStorage.setItem('ksf_roll_sequence', e.target.value); }} />
             </div>
           </div>
         </div>
+
         <div className="col-span-2 relative" ref={suggestionRef}>
-          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><User size={12} /> Customer</label>
-          <input required autoComplete="off" className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-colors" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} onFocus={() => setShowSuggestions(true)} />
+          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><User size={12}/> Customer</label>
+          <input required autoComplete="off" className="w-full border-b-2 border-gray-200 bg-gray-50 p-3 rounded focus:border-blue-500 outline-none transition-all" value={formData.customer_name} onChange={e => handleValueChange('customer_name', e.target.value)} onFocus={() => setShowSuggestions(true)} />
           {showSuggestions && filteredSuggestions.length > 0 && (
-            <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-b-lg shadow-xl max-h-48 overflow-y-auto mt-1">
+            <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-b-lg shadow-2xl max-h-48 overflow-y-auto mt-1">
               {filteredSuggestions.map((name, i) => (
-                <div key={i} onClick={() => selectSuggestion(name)} className="p-3 border-b last:border-0 hover:bg-blue-50 cursor-pointer text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <div key={i} onClick={() => selectSuggestion(name)} className="p-3 border-b hover:bg-blue-50 cursor-pointer text-sm font-semibold text-gray-700 flex items-center gap-2 transition-colors">
                   <Clock size={14} className="text-gray-400" /> {name}
                 </div>
               ))}
             </div>
           )}
         </div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><select required className="w-full border p-3 rounded bg-white" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}><option value="">Select...</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><select required className="w-full border p-3 rounded bg-white" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}><option value="">Select...</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+
+        <div><label className="text-xs font-bold text-gray-500 uppercase">Quality</label><select required className="w-full border p-3 rounded bg-white outline-none focus:ring-2 focus:ring-blue-100" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}><option value="">Select...</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
+        <div><label className="text-xs font-bold text-gray-500 uppercase">Color</label><select required className="w-full border p-3 rounded bg-white outline-none focus:ring-2 focus:ring-blue-100" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}><option value="">Select...</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
         <div className="col-span-2 grid grid-cols-3 gap-3">
-          <div><label className="text-xs font-bold text-gray-500 uppercase">GSM</label><input type="number" className="w-full border p-3 rounded" value={formData.gsm} onChange={e => handleValueChange('gsm', e.target.value)} /></div>
-          <div><label className="text-xs font-bold text-gray-500 uppercase">Width (in)</label><input type="number" className="w-full border p-3 rounded" value={formData.width_inches} onChange={e => handleValueChange('width_inches', e.target.value)} /></div>
-          <div><label className="text-xs font-bold text-gray-500 uppercase">Length (m)</label><input type="number" className="w-full border p-3 rounded" value={formData.length_meters} onChange={e => handleValueChange('length_meters', e.target.value)} /></div>
+          <div><label className="text-xs font-bold text-gray-500 uppercase">GSM</label><input type="number" className="w-full border p-3 rounded outline-none" value={formData.gsm} onChange={e => handleValueChange('gsm', e.target.value)} /></div>
+          <div><label className="text-xs font-bold text-gray-500 uppercase">Width (in)</label><input type="number" className="w-full border p-3 rounded outline-none" value={formData.width_inches} onChange={e => handleValueChange('width_inches', e.target.value)} /></div>
+          <div><label className="text-xs font-bold text-gray-500 uppercase">Length (m)</label><input type="number" className="w-full border p-3 rounded outline-none" value={formData.length_meters} onChange={e => handleValueChange('length_meters', e.target.value)} /></div>
         </div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-3 rounded" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} /></div>
-        <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border-2 border-blue-100 p-3 rounded font-bold text-blue-900" value={formData.net_weight} onChange={e => handleValueChange('net_weight', e.target.value)} /></div>
-        <button type="submit" disabled={isSaving} className={`col-span-2 p-4 rounded-xl font-bold mt-4 shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'}`}>
+        <div><label className="text-xs font-bold text-gray-500 uppercase">Gross Kg</label><input type="number" className="w-full border p-3 rounded outline-none" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} /></div>
+        <div><label className="text-xs font-bold text-gray-500 uppercase">Net Kg</label><input type="number" className="w-full border-2 border-blue-100 p-3 rounded font-bold text-blue-900 outline-none" value={formData.net_weight} onChange={e => handleValueChange('net_weight', e.target.value)} /></div>
+        <button type="submit" disabled={isSaving} className={`col-span-2 p-4 rounded-xl font-bold mt-4 shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 ${isSaving ? 'bg-gray-400' : 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700'}`}>
           {isSaving ? <><Loader className="animate-spin" size={20} /> Saving...</> : 'Save & Print Label'}
         </button>
       </form>
-    </div>
-  );
-});
-
-const EditModal = React.memo(({ roll, isGuest, onClose, onSave, onDelete }) => {
-  const [editData, setEditData] = useState({ ...roll });
-  const handleDelete = () => { if (window.confirm("Delete this roll?")) { onDelete(roll.id); onClose(); } };
-  const isDispatched = roll.status === 'dispatched';
-  return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white p-6 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between mb-4 items-center border-b pb-2"><h2 className="font-bold text-lg">Edit Roll {roll.product_id}</h2><button onClick={onClose} className="bg-gray-100 p-2 rounded-full"><X size={20} /></button></div>
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="col-span-2"><label className="text-xs font-bold text-gray-500">Customer</label><input disabled={isGuest} className="w-full border p-2 rounded" value={editData.customer_name || ''} onChange={e => setEditData({ ...editData, customer_name: e.target.value })} /></div>
-          <div><label className="text-xs font-bold text-gray-500">Quality</label><select disabled={isGuest} className="w-full border p-2 rounded bg-white" value={editData.quality} onChange={e => setEditData({ ...editData, quality: e.target.value })}>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
-          <div><label className="text-xs font-bold text-gray-500">Color</label><select disabled={isGuest} className="w-full border p-2 rounded bg-white" value={editData.color} onChange={e => setEditData({ ...editData, color: e.target.value })}>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-          <div><label className="text-xs font-bold text-gray-500">GSM</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.gsm} onChange={e => setEditData({ ...editData, gsm: e.target.value })} /></div>
-          <div><label className="text-xs font-bold text-gray-500">Width (in)</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.width_inches} onChange={e => setEditData({ ...editData, width_inches: e.target.value })} /></div>
-          <div><label className="text-xs font-bold text-gray-500">Length (m)</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.length_meters} onChange={e => setEditData({ ...editData, length_meters: e.target.value })} /></div>
-          <div className="border-t col-span-2 my-2"></div>
-          <div><label className="text-xs font-bold text-gray-500">Net Kg</label><input disabled={isGuest} type="number" className="w-full border-2 border-blue-100 p-2 rounded font-bold" value={editData.net_weight} onChange={e => setEditData({ ...editData, net_weight: e.target.value })} /></div>
-          <div><label className="text-xs font-bold text-gray-500">Gross Kg</label><input disabled={isGuest} type="number" className="w-full border p-2 rounded" value={editData.gross_weight} onChange={e => setEditData({ ...editData, gross_weight: e.target.value })} /></div>
-        </div>
-        {!isGuest && (
-          <div className="flex flex-col gap-2">
-            {isDispatched && (<button onClick={() => onSave({ ...editData, status: 'in_stock', dispatched_at: null })} className="bg-orange-100 text-orange-700 p-3 rounded font-bold">Return to Stock</button>)}
-            <button onClick={() => onSave(editData)} className="bg-blue-600 text-white p-3 rounded font-bold">Save Changes</button>
-            {!isDispatched && (<button onClick={handleDelete} className="bg-white border border-red-500 text-red-500 p-3 rounded font-bold flex items-center justify-center gap-2"><Trash2 size={18} /> Delete Roll</button>)}
-          </div>
-        )}
-      </div>
     </div>
   );
 });
@@ -846,7 +837,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   const clearFilters = () => { setTextSearch(''); setFilterQuality(''); setFilterColor(''); setFilterGSM(''); setFilterWidth(''); };
 
   const handleExportFiltered = () => {
-    const dataToExport = filtered.map(r => ({
+    const ws = XLSX.utils.json_to_sheet(filtered.map(r => ({
       "Roll ID": r.product_id,
       "Customer": r.customer_name,
       "Quality": r.quality,
@@ -858,8 +849,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
       "Net Weight": r.net_weight,
       "Status": r.status,
       "Date Added": new Date(r.created_at).toLocaleString()
-    }));
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Stock");
     XLSX.writeFile(wb, `Stock_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -868,47 +858,47 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   const toggleSort = () => { setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest'); };
 
   return (
-    <div className="space-y-4 h-full flex flex-col relative pb-20">
-      <div className="sticky top-16 z-20 bg-slate-50 pt-3 pb-2 px-1">
-        <div className="bg-white p-3 rounded shadow flex flex-col gap-3">
+    <div className="space-y-4 h-full flex flex-col relative pb-20 px-1">
+      <div className="sticky top-16 z-20 bg-slate-50 pt-3 pb-2">
+        <div className="bg-white p-3 rounded-xl shadow-sm flex flex-col gap-3 border border-gray-100">
           <div className="flex gap-2">
-            <div className="flex-1 flex gap-2 border p-2 rounded bg-gray-50 items-center">
+            <div className="flex-1 flex gap-2 border p-2 rounded-lg bg-gray-50 items-center focus-within:ring-2 focus-within:ring-blue-100 transition-all">
               <Search className="text-gray-400" size={20} />
-              <input className="w-full outline-none bg-transparent" placeholder="e.g. 60gsm 42in White" value={textSearch} onChange={e => setTextSearch(e.target.value)} />
+              <input className="w-full outline-none bg-transparent" placeholder="Search stock..." value={textSearch} onChange={e => setTextSearch(e.target.value)} />
             </div>
-            <button onClick={toggleSort} className={`p-2 rounded border flex items-center gap-1 font-bold text-xs ${sortOrder === 'oldest' ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}>
-              {sortOrder === 'newest' ? <ArrowDown size={18}/> : <ArrowUp size={18}/>}
+            <button onClick={toggleSort} className={`p-2 rounded-lg border transition-colors ${sortOrder === 'oldest' ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}>
+              {sortOrder === 'newest' ? <ArrowDown size={18} /> : <ArrowUp size={18} />}
             </button>
-            <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded border ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}><Filter size={20} /></button>
-            <button onClick={handleExportFiltered} className="bg-green-100 text-green-700 px-3 rounded text-sm font-bold flex items-center gap-1"><Download size={14} /> XLS</button>
-          </div>
-          <div className="bg-gray-900 text-white p-3 rounded flex justify-between items-center text-sm">
-            <div><div className="text-gray-400 text-xs uppercase">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
-            <div className="text-right"><div className="text-gray-400 text-xs uppercase">Total Weight</div><div className="font-bold text-lg text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
+            <button onClick={() => setShowFilters(!showFilters)} className={`p-2 rounded-lg border transition-colors ${showFilters ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white hover:bg-gray-50'}`}><Filter size={20} /></button>
+            <button onClick={handleExportFiltered} className="bg-green-100 text-green-700 px-3 rounded-lg text-sm font-bold flex items-center gap-1 hover:bg-green-200 transition-colors shadow-sm"><Download size={14} /> XLS</button>
           </div>
           {showFilters && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2">
-              <select className="border p-2 rounded text-sm" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}><option value="">All Qualities</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select>
-              <select className="border p-2 rounded text-sm" value={filterColor} onChange={e => setFilterColor(e.target.value)}><option value="">All Colors</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select>
-              <input className="border p-2 rounded text-sm" placeholder="GSM" value={filterGSM} onChange={e => setFilterGSM(e.target.value)} type="number" />
-              <input className="border p-2 rounded text-sm" placeholder="Width" value={filterWidth} onChange={e => setFilterWidth(e.target.value)} type="number" />
-              <button onClick={clearFilters} className="col-span-2 md:col-span-4 text-xs text-red-500 font-bold text-center mt-1">Clear All Filters</button>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-2 border-t pt-2">
+              <select className="border p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100" value={filterQuality} onChange={e => setFilterQuality(e.target.value)}><option value="">All Qualities</option>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select>
+              <select className="border p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100" value={filterColor} onChange={e => setFilterColor(e.target.value)}><option value="">All Colors</option>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select>
+              <input className="border p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="GSM" value={filterGSM} onChange={e => setFilterGSM(e.target.value)} type="number" />
+              <input className="border p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="Width" value={filterWidth} onChange={e => setFilterWidth(e.target.value)} type="number" />
+              <button onClick={clearFilters} className="col-span-2 md:col-span-4 text-xs text-red-500 font-bold text-center mt-1 py-1 hover:bg-red-50 rounded">Clear All Filters</button>
             </div>
           )}
+          <div className="bg-gray-900 text-white p-3 rounded-lg flex justify-between items-center text-sm shadow-inner">
+            <div><div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider tracking-tighter">Found</div><div className="font-bold">{filtered.length} Rolls</div></div>
+            <div className="text-right"><div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider tracking-tighter">Total weight</div><div className="font-bold text-lg text-yellow-400">{formatCurrency(totalFilteredWeight)} kg</div></div>
+          </div>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto pb-24">
         {filtered.length === 0 ? (<div className="text-center text-gray-400 mt-10">No matching rolls found.</div>) : filtered.map(r => (
-          <div key={r.id || r.product_id} onClick={() => onSelectRoll(r)} className={`bg-white p-4 rounded-xl border mb-2 shadow-sm flex justify-between items-center cursor-pointer active:bg-blue-50 ${r.isOffline ? 'border-l-4 border-l-yellow-400' : 'border-gray-100'}`}>
+          <div key={r.id || r.product_id} onClick={() => onSelectRoll(r)} className={`bg-white p-4 rounded-xl border mb-2 shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.98] transition-all ${r.isOffline ? 'border-l-4 border-l-yellow-400' : 'border-gray-100 hover:border-blue-200'}`}>
             <div>
-              <div className="font-bold text-blue-600 text-lg flex items-center gap-2">{r.product_id} {r.isOffline && <span className="bg-yellow-100 text-yellow-800 text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1"><CloudOff size={10} /> PENDING</span>}</div>
-              <div className="text-[10px] text-gray-400 mb-1">{r.created_at ? new Date(r.created_at).toLocaleString() : 'Date Unknown'}</div>
+              <div className="font-bold text-blue-600 text-lg flex items-center gap-2">{r.product_id} {r.isOffline && <span className="bg-yellow-100 text-yellow-800 text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1">OFFLINE</span>}</div>
+              <div className="text-[10px] text-gray-400 mb-1 tracking-tight">{r.created_at ? new Date(r.created_at).toLocaleString() : 'Date Unknown'}</div>
               <div className="font-semibold text-gray-800">{r.customer_name}</div>
-              <div className="text-xs text-gray-500 mt-1 inline-flex gap-2"><span className="bg-gray-100 px-2 py-0.5 rounded">{r.quality}</span><span className="bg-gray-100 px-2 py-0.5 rounded">{r.color}</span><span className="bg-gray-100 px-2 py-0.5 rounded">{r.gsm} GSM</span></div>
+              <div className="text-xs text-gray-500 mt-1 inline-flex gap-2 flex-wrap"><span className="bg-gray-100 px-2 py-0.5 rounded font-medium">{r.quality}</span><span className="bg-gray-100 px-2 py-0.5 rounded font-medium">{r.color}</span><span className="bg-gray-100 px-2 py-0.5 rounded font-medium">{r.gsm} GSM</span></div>
             </div>
             <div className="text-right">
-              <div className="font-bold text-xl">{r.net_weight} <span className="text-xs font-normal">kg</span></div>
-              <button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="mt-2 bg-blue-50 text-blue-600 p-2 rounded-full hover:bg-blue-100"><Printer size={16} /></button>
+              <div className="font-bold text-xl text-gray-900">{r.net_weight} <span className="text-xs font-normal text-gray-400">kg</span></div>
+              <button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="mt-2 bg-blue-50 text-blue-600 p-2 rounded-full hover:bg-blue-100 active:scale-90 transition-all"><Printer size={16} /></button>
             </div>
           </div>
         ))}
@@ -969,70 +959,48 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-4 rounded-xl text-white shadow-lg">
         <h3 className="font-bold mb-3 flex items-center gap-2"><Truck size={20} /> Dispatch Manifest</h3>
         <div className="grid grid-cols-2 gap-2">
-          <input className="w-full p-2 rounded text-black text-sm" placeholder="Customer Name" value={customerName} onChange={e => setCustomerName(e.target.value)} />
-          <input className="w-full p-2 rounded text-black text-sm" placeholder="Vehicle No" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
+          <input className="w-full p-2 rounded-lg text-black text-sm outline-none" placeholder="Customer Name" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+          <input className="w-full p-2 rounded-lg text-black text-sm outline-none" placeholder="Vehicle No" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
         </div>
       </div>
 
       {!reviewData && (
-        <div className="bg-white p-6 rounded-xl shadow border text-center">
+        <div className="bg-white p-6 rounded-xl shadow-sm border text-center border-gray-100">
           <div className="flex gap-2 mb-4">
-            <input className="flex-1 border-2 border-gray-200 p-3 rounded-lg text-center text-lg font-mono tracking-wider focus:border-blue-500 outline-none" placeholder="Enter / Scan ID" value={scanId} onChange={e => setScanId(e.target.value)} />
-            <button onClick={() => setIsScanning(true)} className="bg-gray-900 text-white p-3 rounded-lg"><Camera size={24} /></button>
+            <input className="flex-1 border-2 border-gray-200 p-3 rounded-lg text-center text-lg font-mono tracking-wider focus:border-blue-500 outline-none transition-all" placeholder="Enter / Scan ID" value={scanId} onChange={e => setScanId(e.target.value)} />
+            <button onClick={() => setIsScanning(true)} className="bg-gray-900 text-white p-3 rounded-lg hover:bg-black transition-colors"><Camera size={24} /></button>
           </div>
-          <button onClick={() => handleSearch()} className="bg-blue-600 text-white w-full py-4 rounded-lg font-bold shadow-lg shadow-blue-200">Search Roll</button>
+          <button onClick={() => handleSearch()} className="bg-blue-600 text-white w-full py-4 rounded-lg font-bold shadow-lg shadow-blue-100 active:scale-95 transition-all">Search Roll</button>
         </div>
       )}
 
       {reviewData && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
+          <div className="bg-white p-6 rounded-xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl border">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
               <h3 className="font-bold text-lg flex items-center gap-2 text-blue-600"><Edit3 size={18} /> Verify & Dispatch</h3>
-              <button onClick={() => setReviewData(null)} className="bg-gray-100 p-1 rounded-full"><X size={20} /></button>
+              <button onClick={() => setReviewData(null)} className="bg-gray-100 p-1 rounded-full hover:bg-gray-200 transition-colors"><X size={20} /></button>
             </div>
 
             <div className="bg-blue-50 p-3 rounded text-center mb-4 border border-blue-100">
-              <div className="text-xs font-bold text-blue-400 uppercase">Roll ID</div>
+              <div className="text-xs font-bold text-blue-400 uppercase tracking-tight">Roll ID</div>
               <div className="text-xl font-black text-blue-800 tracking-widest">{reviewData.product_id}</div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-6">
               <div className="col-span-2">
                 <label className="text-[10px] font-bold text-gray-500 uppercase">Customer</label>
-                <input className="w-full border p-2 rounded bg-gray-50" value={reviewData.customer_name} onChange={e => setReviewData({ ...reviewData, customer_name: e.target.value })} />
+                <input className="w-full border p-2 rounded bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" value={reviewData.customer_name} onChange={e => setReviewData({ ...reviewData, customer_name: e.target.value })} />
               </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Quality</label>
-                <select className="w-full border p-2 rounded bg-white text-sm" value={reviewData.quality} onChange={e => setReviewData({ ...reviewData, quality: e.target.value })}>
-                  {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Color</label>
-                <select className="w-full border p-2 rounded bg-white text-sm" value={reviewData.color} onChange={e => setReviewData({ ...reviewData, color: e.target.value })}>
-                  {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase">GSM</label>
-                <input type="number" className="w-full border p-2 rounded" value={reviewData.gsm} onChange={e => setReviewData({ ...reviewData, gsm: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Size (in)</label>
-                <input type="number" className="w-full border p-2 rounded" value={reviewData.width_inches} onChange={e => setReviewData({ ...reviewData, width_inches: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Net Kg</label>
-                <input type="number" className="w-full border-2 border-green-500 p-2 rounded font-bold text-green-700" value={reviewData.net_weight} onChange={e => setReviewData({ ...reviewData, net_weight: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Gross Kg</label>
-                <input type="number" className="w-full border p-2 rounded" value={reviewData.gross_weight} onChange={e => setReviewData({ ...reviewData, gross_weight: e.target.value })} />
-              </div>
+              <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Quality</label><select className="w-full border p-2 rounded bg-white text-sm outline-none" value={reviewData.quality} onChange={e => setReviewData({ ...reviewData, quality: e.target.value })}>{QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}</select></div>
+              <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Color</label><select className="w-full border p-2 rounded bg-white text-sm outline-none" value={reviewData.color} onChange={e => setReviewData({ ...reviewData, color: e.target.value })}>{COLORS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+              <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">GSM</label><input type="number" className="w-full border p-2 rounded outline-none focus:ring-2 focus:ring-blue-100" value={reviewData.gsm} onChange={e => setReviewData({ ...reviewData, gsm: e.target.value })} /></div>
+              <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Size (in)</label><input type="number" className="w-full border p-2 rounded outline-none focus:ring-2 focus:ring-blue-100" value={reviewData.width_inches} onChange={e => setReviewData({ ...reviewData, width_inches: e.target.value })} /></div>
+              <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Net Weight</label><input type="number" className="w-full border-2 border-green-500 p-2 rounded font-bold text-green-700 outline-none" value={reviewData.net_weight} onChange={e => setReviewData({ ...reviewData, net_weight: e.target.value })} /></div>
+              <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Gross Kg</label><input type="number" className="w-full border p-2 rounded outline-none focus:ring-2 focus:ring-blue-100" value={reviewData.gross_weight} onChange={e => setReviewData({ ...reviewData, gross_weight: e.target.value })} /></div>
             </div>
 
-            <button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2">
+            <button onClick={handleConfirmDispatch} className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg shadow-green-100 flex items-center justify-center gap-2 active:scale-95 transition-all">
               <CheckCircle size={20} /> Confirm & Add
             </button>
           </div>
@@ -1040,27 +1008,29 @@ const DispatchView = React.memo(({ rolls, isGuest, deviceName, onDispatch, onUnd
       )}
 
       {sessionList.length > 0 && (
-        <div className="bg-white rounded-xl shadow border overflow-hidden">
+        <div className="bg-white rounded-xl shadow border overflow-hidden border-gray-100">
           <div className="p-3 bg-gray-50 border-b flex justify-between font-bold text-gray-500 text-sm">
             <span>Items: {sessionList.length}</span>
-            <span>Total: {sessionList.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0)} kg</span>
+            <span>Total: {sessionList.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0).toFixed(1)} kg</span>
           </div>
-          {sessionList.map((item, i) => (
-            <div key={i} className="p-3 border-b flex justify-between items-center last:border-0 hover:bg-gray-50">
-              <div>
-                <div className="font-mono text-gray-800 font-bold">{item.product_id}</div>
-                <div className="text-xs text-gray-500 mt-0.5">
-                  {item.quality} • {item.color} • {item.gsm} GSM • {item.width_inches}"
+          <div className="max-h-64 overflow-y-auto">
+            {sessionList.map((item, i) => (
+              <div key={i} className="p-3 border-b flex justify-between items-center last:border-0 hover:bg-gray-50 transition-colors">
+                <div>
+                  <div className="font-mono text-gray-800 font-bold">{item.product_id}</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5 tracking-tight uppercase">
+                    {item.quality} • {item.color} • {item.gsm} GSM • {item.width_inches}"
+                  </div>
+                </div>
+                <div className="text-right flex flex-col items-end">
+                  <div className="font-bold text-lg text-gray-900">{item.net_weight} <span className="text-[10px] font-normal text-gray-400">kg</span></div>
+                  <button onClick={() => handleRemoveFromManifest(i, item)} className="text-[10px] text-red-500 border border-red-100 bg-red-50 px-2 py-0.5 rounded mt-1 hover:bg-red-100 transition-colors">Remove</button>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="font-bold text-lg">{item.net_weight} <span className="text-xs font-normal text-gray-400">kg</span></div>
-                <button onClick={() => handleRemoveFromManifest(i, item)} className="text-xs text-red-500 border border-red-100 bg-red-50 px-2 py-1 rounded mt-1">Remove</button>
-              </div>
-            </div>
-          ))}
-          <div className="p-4">
-            <button onClick={handlePrint} className="w-full bg-green-700 text-white py-4 rounded-xl font-bold flex justify-center gap-2 items-center hover:bg-green-800 shadow-lg"><FileSpreadsheet size={20} /> Generate Excel Gate Pass</button>
+            ))}
+          </div>
+          <div className="p-4 bg-gray-50 border-t">
+            <button onClick={handlePrint} className="w-full bg-green-700 text-white py-4 rounded-xl font-bold flex justify-center gap-2 items-center hover:bg-green-800 shadow-lg active:scale-95 transition-all"><FileSpreadsheet size={20} /> Generate Gate Pass</button>
           </div>
         </div>
       )}
@@ -1083,45 +1053,48 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
     list.sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
     return list;
   }, [rolls, startDate, endDate, searchText]);
-  const totalHistoryWeight = history.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
+  const totalWeight = history.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
+
   return (
-    <div className="pb-24">
+    <div className="pb-24 px-1">
       <div className="flex justify-between items-center mb-4">
         <h2 className="font-bold text-xl">History</h2>
         <div className="flex gap-2">
-          <button onClick={onOpenReports} className="bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow"><FileText size={16} /> Reports</button>
-          <button onClick={() => onExport(history)} className="bg-green-100 text-green-700 px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-1"><Download size={16} /> List</button>
+          <button onClick={onOpenReports} className="bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow hover:bg-blue-700 transition-colors"><FileText size={16} /> Reports</button>
+          <button onClick={() => onExport(history)} className="bg-green-100 text-green-700 px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-1 hover:bg-green-200 transition-colors shadow-sm"><Download size={16} /> List</button>
         </div>
       </div>
       <div className="sticky top-16 z-20 bg-slate-50 pt-1 pb-2">
-        <div className="bg-white p-4 rounded shadow-sm mb-4 space-y-3">
-          <div className="flex gap-2 border p-2 rounded bg-gray-50 items-center">
+        <div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3 border border-gray-100">
+          <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center focus-within:ring-2 focus-within:ring-blue-100 transition-all">
             <Search className="text-gray-400" size={20} />
-            <input className="w-full outline-none bg-transparent text-sm" placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} />
+            <input className="w-full outline-none bg-transparent text-sm" placeholder="Search history..." value={searchText} onChange={e => setSearchText(e.target.value)} />
             {searchText && <button onClick={() => setSearchText('')}><X size={16} className="text-gray-400" /></button>}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase">Start Date</label>
-              <input type="date" className="w-full border p-2 rounded text-sm" value={startDate} onChange={e => setStartDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase">End Date</label>
-              <input type="date" className="w-full border p-2 rounded text-sm" value={endDate} onChange={e => setEndDate(e.target.value)} />
-            </div>
+            <div><label className="text-[10px] font-bold text-gray-400 uppercase">From</label><input type="date" className="w-full border p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
+            <div><label className="text-[10px] font-bold text-gray-400 uppercase">To</label><input type="date" className="w-full border p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
           </div>
         </div>
         <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center mb-3 text-sm border border-gray-200">
           <span className="font-bold text-gray-600">{history.length} Rolls</span>
-          <span className="font-bold text-blue-700">{formatCurrency(totalHistoryWeight)} kg</span>
+          <span className="font-bold text-blue-700">{formatCurrency(totalWeight)} kg</span>
         </div>
       </div>
-      {history.length === 0 ? <div className="text-center text-gray-400 mt-10">No records found.</div> : history.map(r => (
-        <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-3 rounded-xl border mb-2 text-sm shadow-sm hover:bg-gray-50 cursor-pointer">
-          <div className="flex justify-between mb-1"><span className="font-bold text-gray-800">{r.customer_name || 'Unknown'}</span><span className="text-green-600 font-bold">{r.net_weight} kg</span></div>
-          <div className="flex justify-between text-gray-500 text-xs"><span>{r.product_id} • {r.quality}</span><span>{new Date(r.dispatched_at).toLocaleDateString()}</span></div>
+      <div className="space-y-2">
+      {history.length === 0 ? <div className="text-center text-gray-400 mt-10 italic">No records found...</div> : history.map(r => (
+        <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-3 rounded-xl border border-gray-100 mb-2 text-sm shadow-sm hover:border-blue-200 cursor-pointer transition-all">
+          <div className="flex justify-between mb-1">
+            <span className="font-bold text-gray-800">{r.customer_name || 'Unknown'}</span>
+            <span className="text-green-600 font-bold">{r.net_weight} kg</span>
+          </div>
+          <div className="flex justify-between text-gray-500 text-[10px] tracking-tight uppercase">
+            <span>{r.product_id} • {r.quality}</span>
+            <span>{new Date(r.dispatched_at).toLocaleDateString()}</span>
+          </div>
         </div>
       ))}
+      </div>
     </div>
   );
 });
@@ -1131,49 +1104,39 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit,
   const [isAddModalOpen, setAddModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState(null);
   const [textSearch, setTextSearch] = useState('');
-  const filteredMaterials = useMemo(() => {
-    return (materials || []).filter(m => {
-      const matchesCat = activeCat === 'Others' ? (m.category === 'Others' || !m.category) : m.category === activeCat;
-      const matchesSearch = !textSearch || m.name.toLowerCase().includes(textSearch.toLowerCase());
-      return matchesCat && matchesSearch;
-    });
-  }, [materials, activeCat, textSearch]);
+  const filtered = useMemo(() => (materials || []).filter(m => (activeCat === 'Others' ? (m.category === 'Others' || !m.category) : m.category === activeCat) && (!textSearch || m.name.toLowerCase().includes(textSearch.toLowerCase()))), [materials, activeCat, textSearch]);
   const handleUpdate = (id, type) => { const qty = prompt(`Enter Kg to ${type === 'add' ? 'add' : 'remove'}:`); if (qty) onUpdate(id, qty, type === 'add'); };
-  const handleSaveNewMaterial = (name, category, minLevel) => { onAdd(name, category, minLevel); setAddModalOpen(false); };
-  const handleSaveEditMaterial = (updates) => { onEdit(updates.id, updates); setEditingMaterial(null); };
-  const handleDelete = (id) => { if (confirm("Delete this material?")) onDelete(id); };
   return (
-    <div className="pb-24 flex flex-col h-full">
-      <div className="bg-white p-2 mb-2 rounded shadow flex items-center gap-2 border">
-        <Search size={18} className="text-gray-400" />
-        <input className="w-full outline-none text-sm" placeholder="Search materials..." value={textSearch} onChange={e => setTextSearch(e.target.value)} />
-      </div>
-      <div className="flex overflow-x-auto gap-2 pb-4 mb-2 hide-scrollbar">
-        {MAT_CATEGORIES.map(cat => (<button key={cat} onClick={() => setActiveCat(cat)} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-colors ${activeCat === cat ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-500 border'}`}>{cat}</button>))}
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        {filteredMaterials.length === 0 ? (<div className="text-center text-gray-400 mt-10">No materials found.</div>) : filteredMaterials.map(m => {
-          const limit = parseFloat(m.min_level);
-          const isLow = limit > 0 && m.stock_quantity < limit;
+    <div className="pb-24 flex flex-col h-full px-1">
+      <div className="bg-white p-2 mb-2 rounded-xl shadow-sm flex items-center gap-2 border border-gray-100 focus-within:ring-2 focus-within:ring-blue-100 transition-all"><Search size={18} className="text-gray-400" /><input className="w-full outline-none text-sm bg-transparent" placeholder="Search materials..." value={textSearch} onChange={e => setTextSearch(e.target.value)} /></div>
+      <div className="flex overflow-x-auto gap-2 pb-4 mb-2 hide-scrollbar">{MAT_CATEGORIES.map(cat => (<button key={cat} onClick={() => setActiveCat(cat)} className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold transition-all border ${activeCat === cat ? 'bg-blue-600 text-white border-blue-600 shadow-md active:scale-95' : 'bg-white text-gray-500 border-gray-100 hover:bg-gray-50'}`}>{cat}</button>))}</div>
+      <div className="flex-1 overflow-y-auto space-y-3">
+        {filtered.length === 0 ? <div className="text-center text-gray-400 mt-10 italic">No materials found...</div> : filtered.map(m => {
+          const isLow = m.min_level > 0 && m.stock_quantity < m.min_level;
           return (
-            <div key={m.id} className={`bg-white p-4 rounded-xl shadow border mb-3 flex justify-between items-center ${isLow ? 'border-l-4 border-l-red-500' : ''}`}>
-              <div><div className="font-bold text-lg text-gray-800 flex items-center gap-2">{m.name}{isLow && <AlertCircle size={16} className="text-red-500" />}</div><div className="text-xs text-gray-400 flex gap-2"><span>{m.category || 'Others'}</span>{limit > 0 && <span>• Alert: &lt; {limit} kg</span>}</div></div>
-              <div className="flex items-center gap-3"><span className={`text-2xl font-bold ${isLow ? 'text-red-600' : 'text-blue-600'}`}>{m.stock_quantity < 0 ? 0 : m.stock_quantity} <span className="text-sm font-normal text-gray-400">kg</span></span>{!isGuest && (<div className="flex flex-col gap-1 items-end"><div className="flex gap-1"><button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded flex items-center justify-center font-bold">+</button><button onClick={() => handleUpdate(m.id, 'sub')} className="bg-red-100 text-red-700 w-8 h-8 rounded flex items-center justify-center font-bold">-</button></div><div className="flex gap-2 mt-1"><button onClick={() => setEditingMaterial(m)} className="text-gray-300 hover:text-blue-500"><Edit3 size={14} /></button><button onClick={() => handleDelete(m.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button></div></div>)}</div>
+            <div key={m.id} className={`bg-white p-4 rounded-xl shadow-sm border flex justify-between items-center transition-all ${isLow ? 'border-l-4 border-l-red-500' : 'border-gray-100 hover:border-blue-200'}`}>
+              <div><div className="font-bold text-lg text-gray-800 flex items-center gap-2">{m.name}{isLow && <AlertCircle size={16} className="text-red-500 animate-pulse" />}</div><div className="text-[10px] text-gray-400 uppercase font-bold tracking-tight">{m.category || 'Others'}{m.min_level > 0 && ` • Alert: < ${m.min_level} kg`}</div></div>
+              <div className="flex items-center gap-3">
+                <span className={`text-2xl font-black ${isLow ? 'text-red-600' : 'text-blue-600'}`}>{m.stock_quantity} kg</span>
+                {!isGuest && (
+                  <div className="flex flex-col gap-1 items-end">
+                    <div className="flex gap-1"><button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded-lg flex items-center justify-center font-bold hover:bg-green-200 transition-colors">+</button><button onClick={() => handleUpdate(m.id, 'sub')} className="bg-red-100 text-red-700 w-8 h-8 rounded-lg flex items-center justify-center font-bold">-</button></div>
+                    <div className="flex gap-3 mt-1"><button onClick={() => setEditingMaterial(m)} className="text-gray-300 hover:text-blue-500 transition-colors"><Edit3 size={14} /></button><button onClick={() => { if(confirm("Delete this?")) onDelete(m.id); }} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14} /></button></div>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
-      {!isGuest && (
-        <div className="fixed bottom-24 right-6">
-          <button onClick={() => setAddModalOpen(true)} className="bg-blue-600 text-white p-4 rounded-full shadow-lg shadow-blue-300 flex items-center justify-center"><Plus size={24} /></button>
-        </div>
-      )}
-      {isAddModalOpen && <AddMaterialModal onSave={handleSaveNewMaterial} onClose={() => setAddModalOpen(false)} />}
-      {editingMaterial && <EditMaterialDetailsModal material={editingMaterial} onSave={handleSaveEditMaterial} onClose={() => setEditingMaterial(null)} />}
+      {!isGuest && (<div className="fixed bottom-24 right-6"><button onClick={() => setAddModalOpen(true)} className="bg-blue-600 text-white p-4 rounded-full shadow-xl active:scale-95 transition-all hover:bg-blue-700"><Plus size={24} /></button></div>)}
+      {isAddModalOpen && <AddMaterialModal onSave={(n, c, l) => { onAdd(n, c, l); setAddModalOpen(false); }} onClose={() => setAddModalOpen(false)} />}
+      {editingMaterial && <EditMaterialDetailsModal material={editingMaterial} onSave={(u) => { onEdit(editingMaterial.id, u); setEditingMaterial(null); }} onClose={() => setEditingMaterial(null)} />}
     </div>
   );
 });
 
+// --- MAIN CONTAINER ---
 const MainApp = () => {
   const [user, setUser] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
@@ -1192,106 +1155,101 @@ const MainApp = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [offlineCount, setOfflineCount] = useState(0);
 
-  useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
-  useEffect(() => { localStorage.setItem('ksf_form_data', JSON.stringify(formData)); }, [formData]);
-
-  const fetchDataRef = useRef();
   const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
-    const serverData = await DataService.getStock();
-    const offlineData = safeJSONParse('ksf_offline_rolls', []);
-    setOfflineCount(offlineData.length);
-    const serverIds = new Set(serverData.map(r => r.product_id));
-    const uniqueOffline = offlineData.filter(r => !serverIds.has(r.product_id));
-    const taggedOffline = uniqueOffline.map(r => ({ ...r, isOffline: true }));
-    setRolls([...taggedOffline, ...serverData]);
-    setMaterials(await DataService.getRawMaterials());
-    if (!isBackground) setLoading(false);
+    try {
+      const serverData = await DataService.getStock();
+      const offlineData = safeJSONParse('ksf_offline_rolls', []);
+      setOfflineCount(offlineData.length);
+      const serverIds = new Set(serverData.map(r => r.product_id));
+      const uniqueOffline = offlineData.filter(r => !serverIds.has(r.product_id)).map(r => ({ ...r, isOffline: true }));
+      setRolls([...uniqueOffline, ...serverData]);
+      setMaterials(await DataService.getRawMaterials());
+    } catch (e) { console.error(e); } finally { if (!isBackground) setLoading(false); }
   }, []);
-  fetchDataRef.current = fetchData;
 
   const syncOffline = useCallback(async () => {
     if (!navigator.onLine || isSyncing) return;
     setIsSyncing(true);
     const offline = safeJSONParse('ksf_offline_rolls', []);
     if (offline.length === 0) { setIsSyncing(false); return; }
-    const remaining = [];
-    let successCount = 0;
     for (const roll of offline) {
       try {
         const { roll_seq, isOffline, ...cleanRoll } = roll;
         const { data: existing } = await supabase.from('rolls').select('id').eq('product_id', cleanRoll.product_id).maybeSingle();
         if (!existing) {
           const finalPayload = { ...cleanRoll, created_at: cleanRoll.created_at || new Date() };
-          const { error } = await supabase.from('rolls').insert([finalPayload]);
-          if (error) throw error;
+          await supabase.from('rolls').insert([finalPayload]);
         }
-        successCount++;
-      } catch (e) { remaining.push(roll); }
+      } catch (e) {}
     }
-    if (remaining.length < offline.length) { localStorage.setItem('ksf_offline_rolls', JSON.stringify(remaining)); fetchData(); }
+    localStorage.setItem('ksf_offline_rolls', JSON.stringify([]));
+    fetchData(true);
     setIsSyncing(false);
   }, [isSyncing, fetchData]);
 
   useEffect(() => { window.addEventListener('online', syncOffline); syncOffline(); return () => window.removeEventListener('online', syncOffline); }, [syncOffline]);
-  useEffect(() => { const checkSession = async () => { const { data: { session } } = await supabase.auth.getSession(); if (session) { setUser(session.user); setIsGuest(false); fetchData(); } }; checkSession(); const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); if (session && !user) { setIsGuest(false); fetchData(); } }); const interval = setInterval(() => { if ((user || isGuest) && fetchDataRef.current) fetchDataRef.current(true); }, 10000); return () => { subscription.unsubscribe(); clearInterval(interval); }; }, [fetchData]);
+  useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
+  useEffect(() => { localStorage.setItem('ksf_form_data', JSON.stringify(formData)); }, [formData]);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) { setUser(session.user); setIsGuest(false); fetchData(); }
+    };
+    checkSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session && !user) { setIsGuest(false); fetchData(); }
+    });
+    return () => subscription.unsubscribe();
+  }, [fetchData]);
+
   useEffect(() => { if (user && !isGuest && !deviceName) setDeviceModalOpen(true); }, [user, isGuest, deviceName]);
-  const handleLogin = async () => { await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); };
-  const handleGuestEntry = () => { setIsGuest(true); fetchData(); };
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsGuest(false); setRolls([]); };
-  const handleSaveDeviceName = (name) => { localStorage.setItem('ksf_device_name', name); setDeviceName(name); setDeviceModalOpen(false); };
 
   const handleSaveRoll = async (e, customRollId) => {
     e.preventDefault();
     if (isSaving) return false;
     setIsSaving(true);
-    const id = customRollId;
-    const newRoll = { ...formData, product_id: id, status: 'in_stock', created_at: new Date().toISOString() };
+    const newRoll = { ...formData, product_id: customRollId, status: 'in_stock', created_at: new Date().toISOString() };
     if (!navigator.onLine) {
       const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
       localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
       setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]);
       setPrintData(newRoll);
-      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
       setIsSaving(false); return true;
     }
     try {
       await DataService.addRoll(newRoll, deviceName);
-      setRolls(prev => [newRoll, ...prev]);
       setPrintData(newRoll);
       fetchData(true);
-      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' })); return true;
+      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+      return true;
     } catch (err) {
-      if (err.message && err.message.includes('duplicate key')) { alert(`Duplicate ID "${id}"!`); }
-      else {
-        const offlineRolls = safeJSONParse('ksf_offline_rolls', []);
-        localStorage.setItem('ksf_offline_rolls', JSON.stringify([...offlineRolls, newRoll]));
-        setRolls(prev => [{ ...newRoll, isOffline: true }, ...prev]);
-        setPrintData(newRoll);
-        setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
-        return true;
-      }
+      alert("Error saving roll!");
       return false;
     } finally { setIsSaving(false); }
   };
 
-  const handleDispatch = useCallback(async (rollData) => { await DataService.updateRoll(rollData.id, { ...rollData, status: 'dispatched', dispatched_at: new Date() }, deviceName); fetchData(true); }, [deviceName, fetchData]);
-  const handleUndoDispatch = useCallback(async (id) => { await DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName); fetchData(true); }, [deviceName, fetchData]);
-  const handleDeleteRoll = async (id) => { setRolls(prevRolls => prevRolls.filter(r => r.id !== id)); try { await DataService.deleteRoll(id); } catch (error) { fetchData(); } };
-  const handleEditRoll = useCallback(async (updates) => { await DataService.updateRoll(updates.id, updates, deviceName); setEditRoll(null); fetchData(true); }, [deviceName, fetchData]);
-  const handleMaterialUpdate = async (id, qty, isAdd) => { await DataService.updateRawMaterial(id, qty, isAdd, deviceName); fetchData(); };
-  const handleAddMaterial = async (name, category, minLevel) => { await DataService.addRawMaterial(name, category, minLevel); fetchData(); };
-  const handleEditMaterial = async (id, updates) => { await DataService.editRawMaterial(id, updates); fetchData(); };
-  const handleDeleteMaterial = async (id) => { await DataService.deleteRawMaterial(id); fetchData(); };
-  const handleExport = (data = rolls) => { const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "KSF_Data.xlsx"); };
-  const handleFullBackup = async () => { setLoading(true); try { const allRolls = await DataService.getStock(); const allMats = await DataService.getRawMaterials(); const wb = XLSX.utils.book_new(); const rollsData = allRolls.map(r => ({ ID: r.product_id, Customer: r.customer_name, Quality: r.quality, Color: r.color, GSM: r.gsm, Width: r.width_inches, Length: r.length_meters, Net: r.net_weight, Gross: r.gross_weight, Status: r.status, Date_Added: new Date(r.created_at).toLocaleDateString(), Date_Dispatched: r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : '-' })); const wsRolls = XLSX.utils.json_to_sheet(rollsData); XLSX.utils.book_append_sheet(wb, wsRolls, "Rolls Database"); const matData = allMats.map(m => ({ ID: m.id, Name: m.name, Category: m.category, Stock: m.stock_quantity })); const wsMat = XLSX.utils.json_to_sheet(matData); XLSX.utils.book_append_sheet(wb, wsMat, "Raw Materials"); XLSX.writeFile(wb, `KSF_Full_Backup_${new Date().toISOString().split('T')[0]}.xlsx`); alert("Backup downloaded!"); } catch (e) { alert("Backup failed!"); } finally { setLoading(false); setSettingsOpen(false); } };
+  if (!user && !isGuest) {
+    return (
+      <div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100 tracking-tight">
+          <img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" />
+          <h1 className="text-2xl font-black mb-2 text-gray-900">KSF Inventory</h1>
+          <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold mb-3 shadow-lg active:scale-95 transition-all">Login with Google</button>
+          <button onClick={() => setIsGuest(true)} className="w-full bg-white text-gray-700 py-4 rounded-xl font-bold border hover:bg-gray-50 active:scale-95 transition-all">View Only (Guest)</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 font-sans pt-16 pb-20">
       <Header
         isGuest={isGuest}
         deviceName={deviceName}
-        onLogout={handleLogout}
+        onLogout={() => supabase.auth.signOut().then(() => window.location.reload())}
         onEditDeviceName={() => setDeviceModalOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         onManualSync={syncOffline}
@@ -1301,26 +1259,26 @@ const MainApp = () => {
       />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading && activeTab !== 'dashboard' ? (
-          <div className="flex justify-center p-12 text-gray-400">Loading Data...</div>
+          <div className="flex justify-center p-12 text-gray-400 italic">Accessing database...</div>
         ) : (
           <>
             {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
             {activeTab === 'entry' && <NewProductView formData={formData} setFormData={setFormData} onSubmit={handleSaveRoll} isSaving={isSaving} rolls={rolls} />}
             {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
-            {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} isGuest={isGuest} deviceName={deviceName} onDispatch={handleDispatch} onUndoDispatch={handleUndoDispatch} />}
-            {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={handleExport} onOpenReports={() => setReportsOpen(true)} />}
-            {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={handleMaterialUpdate} onAdd={handleAddMaterial} onEdit={handleEditMaterial} onDelete={handleDeleteMaterial} />}
+            {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} deviceName={deviceName} onDispatch={d => DataService.updateRoll(d.id, { ...d, status: 'dispatched', dispatched_at: new Date() }, deviceName).then(() => fetchData(true))} onUndoDispatch={id => DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName).then(() => fetchData(true))} />}
+            {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={d => { const ws = XLSX.utils.json_to_sheet(d); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "History"); XLSX.writeFile(wb, "History.xlsx"); }} onOpenReports={() => setReportsOpen(true)} />}
+            {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={(id, q, a) => DataService.updateRawMaterial(id, q, a, deviceName).then(() => fetchData())} onAdd={(n, c, l) => supabase.from('raw_materials').insert([{ name: n, category: c, min_level: l, stock_quantity: 0 }]).then(() => fetchData())} onEdit={(id, u) => supabase.from('raw_materials').update(u).eq('id', id).then(() => fetchData())} onDelete={id => supabase.from('raw_materials').delete().eq('id', id).then(() => fetchData())} />}
           </>
         )}
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
 
-      {isDeviceModalOpen && <DeviceNameModal onSave={handleSaveDeviceName} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
-      {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={handleFullBackup} />}
+      {isDeviceModalOpen && <DeviceNameModal onSave={n => { localStorage.setItem('ksf_device_name', n); setDeviceName(n); setDeviceModalOpen(false); }} initialName={deviceName} onClose={() => setDeviceModalOpen(false)} />}
+      {isSettingsOpen && <SettingsModal visible={isSettingsOpen} onClose={() => setSettingsOpen(false)} onBackup={async () => { const a = await DataService.getStock(); const ws = XLSX.utils.json_to_sheet(a); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Backup"); XLSX.writeFile(wb, "KSF_Backup.xlsx"); }} />}
       {isReportsOpen && <ReportsModal visible={isReportsOpen} onClose={() => setReportsOpen(false)} rolls={rolls} />}
 
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
-      {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={handleEditRoll} onDelete={handleDeleteRoll} />}
+      {editRoll && <EditModal roll={editRoll} isGuest={isGuest} onClose={() => setEditRoll(null)} onSave={u => DataService.updateRoll(u.id, u, deviceName).then(() => { setEditRoll(null); fetchData(true); })} onDelete={id => supabase.from('rolls').delete().eq('id', id).then(() => { setEditRoll(null); fetchData(); })} />}
     </div>
   );
 };
