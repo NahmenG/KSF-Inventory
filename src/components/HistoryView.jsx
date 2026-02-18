@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Printer, Download, ArrowDown, ArrowUp, Clock, Filter, X, ChevronDown, History } from 'lucide-react';
+import { Download, ArrowDown, ArrowUp, Clock, Filter, X, ChevronDown, History } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
-  // 1. COMPACT SEARCH STATE
+  // 1. MULTI-PARAMETER SEARCH STATE
   const [filters, setFilters] = useState({
     customer: '',
     quality: '',
@@ -15,23 +15,33 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
 
   // 2. DYNAMIC DROPDOWN DATA
   const uniqueQualities = useMemo(() => {
-    return [...new Set(rolls.map(r => r.quality))].filter(Boolean).sort();
+    const qualities = rolls.map(r => r.quality).filter(Boolean);
+    return [...new Set(qualities)].sort();
   }, [rolls]);
 
   const uniqueColors = useMemo(() => {
-    return [...new Set(rolls.map(r => r.color))].filter(Boolean).sort();
+    const colors = rolls.map(r => r.color).filter(Boolean).sort();
+    return [...new Set(colors)].sort();
   }, [rolls]);
 
   // 3. FILTERING LOGIC (Master History includes both Stock and Dispatched)
   const filtered = useMemo(() => {
     return rolls.filter(r => {
+      // Logic for Buyer / ID
       const matchCustomer = !filters.customer || 
         (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
         r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
       
+      // Logic for Quality Dropdown
       const matchQuality = !filters.quality || r.quality === filters.quality;
+      
+      // Logic for GSM Search
       const matchGSM = !filters.gsm || String(r.gsm) === filters.gsm;
+      
+      // Logic for Width / Size Search
       const matchWidth = !filters.width || String(r.width_inches) === filters.width;
+      
+      // Logic for Color Dropdown
       const matchColor = !filters.color || r.color === filters.color;
       
       return matchCustomer && matchQuality && matchGSM && matchWidth && matchColor;
@@ -39,7 +49,11 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
     .sort((a, b) => {
       const dateA = new Date(a.created_at);
       const dateB = new Date(b.created_at);
-      return sort === 'newest' ? dateB - dateA : dateA - dateB;
+      if (sort === 'newest') {
+        return dateB - dateA;
+      } else {
+        return dateA - dateB;
+      }
     });
   }, [rolls, filters, sort]);
 
@@ -57,32 +71,48 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
       "Production Date": new Date(r.created_at).toLocaleString(),
       "Dispatch Date": r.dispatched_at ? new Date(r.dispatched_at).toLocaleString() : 'N/A'
     }));
+    
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Master_History");
-    XLSX.writeFile(wb, `KSF_History_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Master_History_Log");
+    XLSX.writeFile(wb, `KSF_Master_History_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const clearFilters = () => setFilters({ customer: '', quality: '', gsm: '', width: '', color: '' });
+  // 5. RESET FILTERS
+  const clearFilters = () => {
+    setFilters({
+      customer: '',
+      quality: '',
+      gsm: '',
+      width: '',
+      color: ''
+    });
+  };
 
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
       {/* SECTION 1: STICKY SEARCH PANEL */}
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
-        <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="text-[9px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-1">
-              <History size={12} className="text-blue-500" /> Master History Search
-            </h3>
-            {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color) && (
-              <button onClick={clearFilters} className="text-[9px] font-black text-red-500 flex items-center gap-1">
-                <X size={10} /> Reset
-              </button>
-            )}
-          </div>
+        <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100 relative">
+          
+          {/* RESET ALL FILTERS BUTTON (TOP RIGHT CROSS) */}
+          {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color) && (
+            <button 
+              onClick={clearFilters} 
+              className="absolute top-3 right-3 p-1.5 bg-red-50 text-red-500 rounded-full hover:bg-red-100 transition-colors z-10 shadow-sm border border-red-100"
+              title="Reset All Filters"
+            >
+              <X size={14} />
+            </button>
+          )}
+
+          <h3 className="text-[9px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-1 mb-2">
+            <History size={12} className="text-blue-500" /> Master History Search
+          </h3>
           
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            {/* Buyer Input */}
             <input 
               className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
               placeholder="Buyer / ID" 
@@ -90,6 +120,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
               onChange={e => setFilters({...filters, customer: e.target.value})} 
             />
 
+            {/* Quality Dropdown */}
             <div className="relative">
               <select 
                 className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100"
@@ -97,11 +128,14 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
                 onChange={e => setFilters({...filters, quality: e.target.value})}
               >
                 <option value="">Quality</option>
-                {uniqueQualities.map(q => <option key={q} value={q}>{q}</option>)}
+                {uniqueQualities.map(q => (
+                  <option key={q} value={q}>{q}</option>
+                ))}
               </select>
               <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
 
+            {/* GSM Input */}
             <input 
               type="number"
               className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
@@ -110,6 +144,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
               onChange={e => setFilters({...filters, gsm: e.target.value})} 
             />
 
+            {/* Size Input */}
             <input 
               type="number"
               className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
@@ -118,6 +153,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
               onChange={e => setFilters({...filters, width: e.target.value})} 
             />
 
+            {/* Color Dropdown */}
             <div className="relative">
               <select 
                 className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100"
@@ -125,7 +161,9 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
                 onChange={e => setFilters({...filters, color: e.target.value})}
               >
                 <option value="">Color</option>
-                {uniqueColors.map(c => <option key={c} value={c}>{c}</option>)}
+                {uniqueColors.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
               <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
@@ -147,12 +185,12 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
           </div>
         </div>
 
-        {/* SECTION 2: COMPACT BLACK SUMMATION BAR */}
+        {/* SECTION 2: COMPACT BLACK SUMMATION BAR (HISTORY COLOR THEME) */}
         <div className="bg-gray-900 text-white p-3 md:p-4 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800 transition-all">
           <div className="flex flex-col">
             <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Master Count</span>
-            <span className="text-xl md:text-2xl font-black">
-              {filtered.length} <span className="text-[10px] md:text-xs font-normal opacity-40">Rolls</span>
+            <span className="text-xl md:text-2xl font-black text-orange-400">
+              {filtered.length} <span className="text-[10px] md:text-xs font-normal opacity-40 text-white">Rolls</span>
             </span>
           </div>
           <div className="text-right flex flex-col">
@@ -165,7 +203,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
         </div>
       </div>
 
-      {/* SECTION 3: LIST */}
+      {/* SECTION 3: LISTING */}
       <div className="space-y-2 px-1">
         {filtered.map(r => (
           <div 
@@ -182,10 +220,10 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
               </div>
               <div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div>
               <div className="text-[10px] text-gray-400 uppercase font-black mt-1 flex flex-wrap gap-2">
-                <span className="bg-slate-50 px-1.5 rounded text-gray-600">{r.quality}</span>
-                <span className="text-blue-500">{r.color}</span>
-                <span className="text-orange-600 bg-orange-50 px-1.5 rounded">{r.gsm} GSM</span>
-                <span className="text-green-600 bg-green-50 px-1.5 rounded">{r.width_inches}"</span>
+                <span className="bg-slate-50 px-1.5 rounded text-gray-600 font-bold">{r.quality}</span>
+                <span className="text-blue-500 font-bold">{r.color}</span>
+                <span className="text-orange-600 bg-orange-50 px-1.5 rounded font-bold">{r.gsm} GSM</span>
+                <span className="text-green-600 bg-green-50 px-1.5 rounded font-bold">{r.width_inches}" Size</span>
               </div>
             </div>
             <div className="text-right flex flex-col items-end min-w-[100px]">
