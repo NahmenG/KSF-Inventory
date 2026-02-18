@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { TrendingUp, Clock, Wifi, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { TrendingUp, Clock, Wifi, ArrowDownRight, ArrowUpRight, AlertCircle } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList 
@@ -10,16 +10,14 @@ const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#8
 const formatCurrency = (val) => new Intl.NumberFormat('en-IN').format(val);
 
 const DashboardView = React.memo(({ rolls, materials }) => {
-  // 1. Logic for Stock Numbers
   const inStock = rolls.filter(r => r.status === 'in_stock');
   const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
   
-  // 2. Logic for Daily Velocity
   const today = new Date().toLocaleDateString();
   const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === today).length;
   const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
 
-  // 3. Logic for Aged Stock (> 30 Days)
+  // 1. Aged Stock Logic
   const agedStockBreakdown = useMemo(() => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -31,7 +29,18 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     return Object.keys(breakdown).map(k => ({ quality: k, weight: breakdown[k].toFixed(1) }));
   }, [inStock]);
 
-  // 4. Chart Data Preparation
+  // 2. Low Material Alert Logic
+  const lowStockMaterials = useMemo(() => {
+    const priority = { 'Polymers': 1, 'Filler': 2, 'Additives': 3, 'Colour': 4, 'Others': 5 };
+    return (materials || [])
+      .filter(m => {
+        const limit = parseFloat(m.min_level);
+        return limit > 0 && m.stock_quantity < limit;
+      })
+      .sort((a, b) => (priority[a.category] || 99) - (priority[b.category] || 99));
+  }, [materials]);
+
+  // 3. Chart Preparation
   const qualityData = useMemo(() => {
     const c = {};
     inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
@@ -75,26 +84,18 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         <div className="bg-white p-4 rounded-xl shadow border border-gray-100 flex flex-col justify-center">
           <div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div>
           <div className="text-2xl font-bold text-green-600">
-            {formatCurrency(totalWeight)} <span className="text-sm font-normal">kg</span>
+            {formatCurrency(totalWeight)} <span className="text-sm text-gray-400 font-normal">kg</span>
           </div>
         </div>
       </div>
 
       {/* Quality Chart */}
       <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
-        <h3 className="font-bold mb-4 text-gray-700 text-sm uppercase tracking-wider">Weight by Quality</h3>
+        <h3 className="font-bold mb-4 text-gray-700 text-sm uppercase tracking-wider text-center">Weight by Quality</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie 
-                data={qualityData} 
-                cx="50%" cy="50%" 
-                innerRadius={60} 
-                outerRadius={80} 
-                paddingAngle={5} 
-                dataKey="value" 
-                label
-              >
+              <Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label>
                 {qualityData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                 ))}
@@ -108,7 +109,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
 
       {/* Color Chart */}
       <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
-        <h3 className="font-bold mb-4 text-gray-700 text-sm uppercase tracking-wider">Top Colors in Stock</h3>
+        <h3 className="font-bold mb-4 text-gray-700 text-sm uppercase tracking-wider text-center">Top Colors in Stock</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={colorData} layout="vertical">
@@ -124,7 +125,9 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* Aged Stock Section */}
+      {/* --- ALERT SECTION --- */}
+
+      {/* Aged Stock Alert (Top) */}
       {agedStockBreakdown.length > 0 && (
         <div className="bg-orange-50 p-4 rounded-xl border-l-4 border-orange-500 shadow-sm border border-orange-100">
           <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2">
@@ -135,6 +138,29 @@ const DashboardView = React.memo(({ rolls, materials }) => {
               <div key={i} className="bg-white p-2 rounded border border-orange-100 text-xs shadow-sm">
                 <div className="text-gray-400 font-bold uppercase">{item.quality}</div>
                 <div className="text-lg font-black text-orange-700">{item.weight} kg</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Low Material Alert (Bottom) */}
+      {lowStockMaterials.length > 0 && (
+        <div className="bg-red-50 p-4 rounded-xl border-l-4 border-red-500 shadow-sm border border-red-100">
+          <h3 className="font-bold text-red-800 flex items-center gap-2 mb-2">
+            <AlertCircle size={20} /> Low Material Alert
+          </h3>
+          <div className="space-y-2">
+            {lowStockMaterials.map(m => (
+              <div key={m.id} className="flex justify-between items-center bg-white p-2 rounded border border-red-100 text-sm shadow-sm">
+                <div>
+                  <span className="font-bold text-gray-700 block">{m.name}</span>
+                  <span className="text-[10px] uppercase text-gray-400 font-bold">{m.category}</span>
+                </div>
+                <div className="text-right">
+                  <span className="font-bold text-red-600 block">{m.stock_quantity} kg</span>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">Below {m.min_level} kg</span>
+                </div>
               </div>
             ))}
           </div>
