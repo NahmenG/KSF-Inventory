@@ -1,152 +1,203 @@
-import React, { useMemo, useState } from 'react';
-import { Search, Clock, Download, Filter, X, Calendar, Package } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search, Printer, Download, ArrowDown, ArrowUp, Clock, Filter, X, ChevronDown, Calendar, Tag } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const formatCurrency = (val) => new Intl.NumberFormat('en-IN').format(val);
-
 const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
-  // 1. Multi-Parameter Search State
+  // 1. COMPACT SEARCH STATE (Matches Stock Tab)
   const [filters, setFilters] = useState({
     customer: '',
+    quality: '',
     gsm: '',
     width: '',
     color: ''
   });
+  const [sort, setSort] = useState('newest');
 
-  // 2. Advanced Filtering Logic for Dispatched Items
-  const list = useMemo(() => {
-    return rolls
-      .filter(r => {
-        const isDispatched = r.status === 'dispatched';
-        const matchCustomer = !filters.customer || 
-          (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
-          r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
-        const matchGSM = !filters.gsm || String(r.gsm) === filters.gsm;
-        const matchWidth = !filters.width || String(r.width_inches) === filters.width;
-        const matchColor = !filters.color || (r.color || '').toLowerCase().includes(filters.color.toLowerCase());
-        
-        return isDispatched && matchCustomer && matchGSM && matchWidth && matchColor;
-      })
-      .sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at));
-  }, [rolls, filters]);
+  // 2. DYNAMIC DROPDOWN DATA
+  const uniqueQualities = useMemo(() => {
+    return [...new Set(rolls.map(r => r.quality))].filter(Boolean).sort();
+  }, [rolls]);
 
-  const totalWeight = useMemo(() => {
-    return list.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
-  }, [list]);
+  const uniqueColors = useMemo(() => {
+    return [...new Set(rolls.map(r => r.color))].filter(Boolean).sort();
+  }, [rolls]);
 
+  // 3. FILTERING LOGIC (Shows everything: in_stock and dispatched)
+  const filtered = useMemo(() => {
+    return rolls.filter(r => {
+      const matchCustomer = !filters.customer || 
+        (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
+        r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
+      
+      const matchQuality = !filters.quality || r.quality === filters.quality;
+      const matchGSM = !filters.gsm || String(r.gsm) === filters.gsm;
+      const matchWidth = !filters.width || String(r.width_inches) === filters.width;
+      const matchColor = !filters.color || r.color === filters.color;
+      
+      return matchCustomer && matchQuality && matchGSM && matchWidth && matchColor;
+    })
+    .sort((a, b) => {
+      const dateA = new Date(a.created_at);
+      const dateB = new Date(b.created_at);
+      return sort === 'newest' ? dateB - dateA : dateA - dateB;
+    });
+  }, [rolls, filters, sort]);
+
+  // 4. EXCEL EXPORT
   const handleExport = () => {
-    const exportData = list.map(r => ({
+    const data = filtered.map(r => ({
       "Roll ID": r.product_id,
-      "Buyer": r.customer_name,
+      "Status": r.status === 'in_stock' ? 'In Stock' : 'Dispatched',
+      "Buyer": r.customer_name || 'Stock',
       "Quality": r.quality,
       "Color": r.color,
       "GSM": r.gsm,
-      "Width (in)": r.width_inches,
-      "Net Kg": r.net_weight,
-      "Dispatched Date": new Date(r.dispatched_at).toLocaleString()
+      "Size (in)": r.width_inches,
+      "Net Weight": r.net_weight,
+      "Production Date": new Date(r.created_at).toLocaleString(),
+      "Dispatch Date": r.dispatched_at ? new Date(r.dispatched_at).toLocaleString() : 'N/A'
     }));
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "DispatchHistory");
-    XLSX.writeFile(wb, `KSF_History_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Master_History");
+    XLSX.writeFile(wb, `KSF_Master_History_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const clearFilters = () => setFilters({ customer: '', gsm: '', width: '', color: '' });
+  const clearFilters = () => setFilters({ customer: '', quality: '', gsm: '', width: '', color: '' });
 
   return (
-    <div className="space-y-4 pb-20">
-      {/* STICKY SEARCH PANEL */}
-      <div className="sticky top-0 z-30 bg-slate-50 pt-2 space-y-2">
-        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-[10px] font-black uppercase text-orange-600 tracking-widest flex items-center gap-2">
-              <Calendar size={14} /> Dispatch History Filters
+    <div className="space-y-4 pb-20 animate-in fade-in duration-500">
+      
+      {/* SECTION 1: STICKY SEARCH PANEL (Same as Stock Tab) */}
+      <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
+        <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-[9px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-1">
+              <History size={12} className="text-blue-500" /> Master History Search
             </h3>
-            {(filters.customer || filters.gsm || filters.width || filters.color) && (
-              <button onClick={clearFilters} className="text-[10px] font-bold text-red-500 flex items-center gap-1">
-                <X size={12} /> Clear Filters
+            {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color) && (
+              <button onClick={clearFilters} className="text-[9px] font-black text-red-500 flex items-center gap-1">
+                <X size={10} /> Reset
               </button>
             )}
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <input 
-              className="border p-2 rounded-lg text-xs font-semibold bg-gray-50 outline-none focus:ring-2 focus:ring-orange-100" 
+              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
               placeholder="Buyer / ID" 
               value={filters.customer} 
               onChange={e => setFilters({...filters, customer: e.target.value})} 
             />
+
+            <div className="relative">
+              <select 
+                className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100"
+                value={filters.quality}
+                onChange={e => setFilters({...filters, quality: e.target.value})}
+              >
+                <option value="">Quality</option>
+                {uniqueQualities.map(q => <option key={q} value={q}>{q}</option>)}
+              </select>
+              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+
             <input 
               type="number"
-              className="border p-2 rounded-lg text-xs font-semibold bg-gray-50 outline-none focus:ring-2 focus:ring-orange-100" 
+              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
               placeholder="GSM" 
               value={filters.gsm} 
               onChange={e => setFilters({...filters, gsm: e.target.value})} 
             />
+
             <input 
               type="number"
-              className="border p-2 rounded-lg text-xs font-semibold bg-gray-50 outline-none focus:ring-2 focus:ring-orange-100" 
+              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
               placeholder="Size" 
               value={filters.width} 
               onChange={e => setFilters({...filters, width: e.target.value})} 
             />
-            <input 
-              className="border p-2 rounded-lg text-xs font-semibold bg-gray-50 outline-none focus:ring-2 focus:ring-orange-100" 
-              placeholder="Color" 
-              value={filters.color} 
-              onChange={e => setFilters({...filters, color: e.target.value})} 
-            />
+
+            <div className="relative">
+              <select 
+                className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100"
+                value={filters.color}
+                onChange={e => setFilters({...filters, color: e.target.value})}
+              >
+                <option value="">Color</option>
+                {uniqueColors.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
           </div>
 
-          <button onClick={handleExport} className="w-full mt-3 bg-green-100 text-green-700 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-green-200 transition-colors">
-            <Download size={16}/> Export History to XLS
-          </button>
+          <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
+            <button 
+              onClick={() => setSort(sort === 'newest' ? 'oldest' : 'newest')} 
+              className="flex-1 py-1.5 border border-gray-100 rounded-lg bg-white text-[10px] font-black text-gray-600 flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all"
+            >
+              {sort === 'newest' ? <ArrowDown size={12} className="text-blue-500"/> : <ArrowUp size={12} className="text-blue-500"/>} Sort Date
+            </button>
+            <button 
+              onClick={handleExport} 
+              className="flex-1 bg-green-600 text-white rounded-lg font-black text-[10px] flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all"
+            >
+              <Download size={12}/> Master Export
+            </button>
+          </div>
         </div>
 
-        {/* LARGE BLACK SUMMATION BAR */}
-        <div className="bg-gray-900 text-white p-5 rounded-xl flex justify-between items-center shadow-xl border border-gray-800">
+        {/* SECTION 2: COMPACT BLACK SUMMATION BAR (Same as Stock Tab) */}
+        <div className="bg-gray-900 text-white p-3 md:p-4 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800 transition-all">
           <div className="flex flex-col">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Dispatched Count</span>
-            <span className="text-3xl font-black">{list.length} <span className="text-xs font-normal opacity-50 text-white">Rolls</span></span>
+            <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Master Count</span>
+            <span className="text-xl md:text-2xl font-black">
+              {filtered.length} <span className="text-[10px] md:text-xs font-normal opacity-40">Rolls</span>
+            </span>
           </div>
           <div className="text-right flex flex-col">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Total Weight Out</span>
-            <span className="text-3xl font-black text-orange-400">
-              {totalWeight.toFixed(1)} 
-              <span className="text-xs font-normal text-white ml-1">kg</span>
+            <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Master Weight</span>
+            <span className="text-xl md:text-2xl font-black text-green-400">
+              {filtered.reduce((s,r)=>s+(parseFloat(r.net_weight)||0),0).toFixed(1)} 
+              <span className="text-[10px] md:text-xs font-normal text-white/50 ml-1">kg</span>
             </span>
           </div>
         </div>
       </div>
 
-      {/* DISPATCHED ROLL LIST */}
-      <div className="space-y-2">
-        {list.length === 0 ? (
-          <div className="text-center py-20 text-gray-400 italic bg-white rounded-xl border border-dashed">
-            No history found matching these filters.
+      {/* SECTION 3: MASTER LOG LIST */}
+      <div className="space-y-2 mt-2 px-1">
+        {filtered.length === 0 ? (
+          <div className="text-center py-20 text-gray-400 bg-white rounded-2xl border-2 border-dashed border-gray-100 font-black italic">
+            No history found for these filters.
           </div>
         ) : (
-          list.map(r => (
+          filtered.map(r => (
             <div 
               key={r.id} 
               onClick={() => onSelectRoll(r)} 
-              className="bg-white p-4 rounded-xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-orange-200 cursor-pointer"
+              className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200 cursor-pointer group"
             >
-              <div>
-                <div className="font-bold text-gray-800 text-lg flex items-center gap-2">
+              <div className="flex-1">
+                <div className="font-black text-blue-600 text-lg flex items-center gap-2">
                   {r.product_id}
-                  <span className="text-[10px] bg-orange-50 text-orange-600 px-2 py-0.5 rounded flex items-center gap-1 font-bold">
-                    <Clock size={10} /> {new Date(r.dispatched_at).toLocaleDateString()}
+                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                    {r.status === 'in_stock' ? 'In Stock' : 'Dispatched'}
                   </span>
                 </div>
-                <div className="font-bold text-sm text-blue-700">{r.customer_name || 'Unknown Buyer'}</div>
-                <div className="text-[10px] text-gray-400 uppercase font-bold mt-1">
-                  {r.quality} • <span className="text-orange-600">{r.gsm} GSM</span> • <span className="text-green-600">{r.width_inches}"</span>
+                <div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div>
+                <div className="text-[10px] text-gray-400 uppercase font-black mt-1 flex flex-wrap gap-2">
+                  <span className="bg-slate-50 px-1.5 rounded text-gray-600">{r.quality}</span>
+                  <span className="text-blue-500">{r.color}</span>
+                  <span className="text-orange-600 bg-orange-50 px-1.5 rounded">{r.gsm} GSM</span>
+                  <span className="text-green-600 bg-green-50 px-1.5 rounded">{r.width_inches}"</span>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="font-black text-xl text-green-700">{r.net_weight} kg</div>
-                <div className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Tap to Edit History</div>
+              <div className="text-right flex flex-col items-end min-w-[100px]">
+                <div className="font-black text-2xl text-gray-900 leading-none">{r.net_weight} <span className="text-[10px] font-normal text-gray-400">kg</span></div>
+                <div className="text-[10px] font-bold text-gray-400 flex items-center gap-1 mt-2">
+                   <Clock size={10} /> {new Date(r.created_at).toLocaleDateString()}
+                </div>
               </div>
             </div>
           ))
