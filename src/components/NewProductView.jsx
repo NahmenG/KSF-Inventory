@@ -83,39 +83,57 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     }
 
     setIsSaving(true);
+
+    // CLEAN PAYLOAD: Only send exactly what the database needs.
+    // We remove any extra fields that might cause a "Failed to Fetch" (CORS/DB Error)
     const newRoll = { 
-      ...formData, 
-      product_id: fullId, 
-      status: 'in_stock', 
-      device_name: deviceName || 'Station 1', 
-      created_at: new Date().toISOString() 
+      product_id: String(fullId), 
+      customer_name: String(formData.customer_name), 
+      quality: String(formData.quality || 'Semi'), 
+      color: String(formData.color || 'White'), 
+      gsm: parseFloat(formData.gsm) || 0, 
+      width_inches: parseFloat(formData.width_inches) || 0, 
+      length_meters: parseFloat(formData.length_meters) || 0, 
+      net_weight: parseFloat(formData.net_weight) || 0, 
+      gross_weight: parseFloat(formData.gross_weight) || 0,
+      status: 'in_stock',
+      device_name: String(deviceName || 'New_Station'),
+      created_at: new Date().toISOString()
     };
 
     try {
-      const { error } = await supabase.from('rolls').insert([newRoll]);
+      // Use the .select() at the end to confirm the DB actually received it
+      const { data, error } = await supabase
+        .from('rolls')
+        .insert([newRoll])
+        .select();
       
-      if (!error) {
-        // SUCCESS: Auto-increment sequence number
-        const nextSeq = String(Number(rollSeq) + 1);
-        setRollSeq(nextSeq);
-        localStorage.setItem('ksf_roll_sequence', nextSeq);
-        localStorage.setItem('ksf_roll_prefix', rollPrefix);
-
-        onPrint(newRoll); // Triggers Label UI
-        onSaved(); // Triggers Global Refresh
-        
-        // Reset only weights, keep Quality/Buyer for bulk entry speed
-        setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
-      } else {
-        // DUPLICATE ID CHECK
+      if (error) {
+        console.error("Supabase Error Details:", error);
         if (error.code === '23505') {
-          setErrorMsg(`Duplicate Error: ID ${fullId} already exists!`);
+          setErrorMsg(`Duplicate ID: ${fullId} already exists!`);
         } else {
-          setErrorMsg("Database Error: " + error.message);
+          setErrorMsg(`DB Error ${error.code}: ${error.message}`);
         }
+        setIsSaving(false);
+        return;
       }
+
+      // SUCCESS Logic
+      const nextSeq = String(Number(rollSeq) + 1);
+      setRollSeq(nextSeq);
+      localStorage.setItem('ksf_roll_sequence', nextSeq);
+      
+      onPrint(newRoll);
+      onSaved();
+      
+      // Clear specific fields
+      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+      setErrorMsg('');
+
     } catch (err) {
-      setErrorMsg("Network Error: Check internet connection.");
+      console.error("Connection Error:", err);
+      setErrorMsg("Network Fail: Check internet or Supabase project status.");
     } finally {
       setIsSaving(false);
     }
