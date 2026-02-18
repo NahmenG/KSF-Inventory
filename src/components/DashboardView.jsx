@@ -26,7 +26,23 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   const todayDate = new Date();
   const todayStr = todayDate.toLocaleDateString();
   
-  // 1. RECENT LOG LOGIC
+  // 1. TIMELINE LOGIC: Start from 1st of the month to Today
+  const timelineData = useMemo(() => {
+    const data = [];
+    const startOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+    
+    for (let d = new Date(startOfMonth); d <= todayDate; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toLocaleDateString();
+      data.push({
+        date: d.getDate().toString(), // Show just the day number to save space as it condenses
+        fullDate: dateStr,
+        Produced: rolls.filter(r => new Date(r.created_at).toLocaleDateString() === dateStr).length,
+        Dispatched: rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === dateStr).length
+      });
+    }
+    return data;
+  }, [rolls, todayDate]);
+
   const recentActivity = useMemo(() => {
     return [...rolls]
       .sort((a, b) => {
@@ -58,7 +74,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       });
   }, [rolls]);
 
-  // 2. PIE CHART LEGEND LOGIC
   const qualityChartData = useMemo(() => {
     const c = {}; 
     inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
@@ -68,7 +83,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     }));
   }, [inStock]);
 
-  // 3. HORIZONTAL BAR CHART LOGIC
   const colorChartData = useMemo(() => {
     const c = {}; 
     inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
@@ -86,6 +100,16 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       .filter(m => m.min_level > 0 && m.stock_quantity < m.min_level)
       .sort((a, b) => (MAT_ORDER[a.category] || 99) - (MAT_ORDER[b.category] || 99));
   }, [materials]);
+
+  const agedData = useMemo(() => {
+    const aged = inStock.filter(r => {
+      const diffDays = Math.ceil(Math.abs(todayDate - new Date(r.created_at)) / (1000 * 60 * 60 * 24));
+      return diffDays > 30;
+    });
+    const weights = {};
+    aged.forEach(r => { weights[r.quality] = (weights[r.quality] || 0) + (parseFloat(r.net_weight) || 0); });
+    return Object.keys(weights).map(k => ({ quality: k, weight: weights[k].toFixed(1) }));
+  }, [inStock, todayDate]);
 
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
@@ -119,6 +143,26 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
+      {/* PRODUCTION VS DISPATCH TIMELINE (RESTORED & DYNAMIC) */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2">
+          <BarChart3 size={14} className="text-blue-600" /> Monthly Performance (1st to Today)
+        </h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={timelineData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" fontSize={9} tick={{fontWeight: 'bold'}} />
+              <YAxis fontSize={9} />
+              <Tooltip labelFormatter={(value, name) => `Day ${value}`} />
+              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
+              <Bar dataKey="Produced" fill="#22c55e" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="Dispatched" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
       {/* RECENT LOG CARD */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-3 bg-gray-50/50 border-b">
@@ -129,7 +173,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
             <div key={i} className="px-4 py-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-black text-gray-800 text-sm tracking-tight">{r.product_id}</span>
+                  <span className="font-black text-gray-900 text-sm tracking-tight">{r.product_id}</span>
                   <div className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-full">
                     {r.activityIcon}
                     <span className="text-[9px] font-black uppercase text-gray-600">{r.activityType}</span>
@@ -150,7 +194,23 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* PIE CHART */}
+      {/* AGED STOCK */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-3 bg-red-50/30 border-b flex items-center gap-2">
+          <History size={16} className="text-red-500" />
+          <h3 className="font-black text-gray-400 text-[10px] uppercase">Stock Over 30 Days Old</h3>
+        </div>
+        <div className="p-3 grid grid-cols-2 gap-2">
+          {agedData.map((d, i) => (
+            <div key={i} className="bg-white border p-2 rounded-lg flex justify-between items-center">
+              <span className="text-[10px] font-bold text-gray-500 uppercase">{d.quality}</span>
+              <span className="text-sm font-black text-red-600">{d.weight} Kg</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* CHARTS */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2"><PieIcon size={14}/> Quality Breakdown</h3>
         <div className="h-72">
@@ -166,7 +226,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* HORIZONTAL BAR CHART */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2"><BarChart3 size={14}/> Color Analysis (Kg)</h3>
         <div className="h-80">
