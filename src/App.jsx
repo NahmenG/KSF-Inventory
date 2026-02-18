@@ -1,123 +1,95 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from './supabaseClient';
+import React, { useMemo } from 'react';
+import { TrendingUp, Clock, AlertCircle, Package, History } from 'lucide-react';
 
-// Modular Components
-import Header from './components/Header.jsx';
-import BottomNav from './components/BottomNav.jsx';
-import DashboardView from './components/DashboardView.jsx';
-import NewProductView from './components/NewProductView.jsx';
-import StockView from './components/StockView.jsx';
-import DispatchView from './components/DispatchView.jsx';
-import HistoryView from './components/HistoryView.jsx';
-import MaterialsView from './components/MaterialsView.jsx';
-import EditModal from './components/EditModal.jsx';
-import LabelPrint from './components/LabelPrint.jsx';
+const DashboardView = React.memo(({ rolls, materials }) => {
+  const inStock = rolls.filter(r => r.status === 'in_stock');
+  const today = new Date();
+  
+  // Stats for Velocity
+  const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === today.toLocaleDateString());
+  const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today.toLocaleDateString());
 
-const safeJSONParse = (key, fallback) => {
-  try {
-    const item = localStorage.getItem(key);
-    if (!item || item === 'undefined' || item === 'null') return fallback;
-    return JSON.parse(item);
-  } catch (e) { return fallback; }
-};
+  // 1. Recent Activity (Latest 5 rolls regardless of status)
+  const recentActivity = useMemo(() => {
+    return [...rolls].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+  }, [rolls]);
 
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [isGuest, setIsGuest] = useState(false);
-  const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || '');
-  const [loading, setLoading] = useState(false);
-  const [rolls, setRolls] = useState([]);
-  const [materials, setMaterials] = useState([]);
-  const [printData, setPrintData] = useState(null);
-  const [editRoll, setEditRoll] = useState(null);
-  const [offlineCount, setOfflineCount] = useState(0);
+  // 2. Aged Stock (In stock for more than 30 days)
+  const agedStock = useMemo(() => {
+    return inStock.filter(r => {
+      const createdDate = new Date(r.created_at);
+      const diffTime = Math.abs(today - createdDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays > 30;
+    }).slice(0, 5); // Show top 5 oldest
+  }, [inStock]);
 
-  // --- STARTUP LOGIC ---
-  const [activeTab, setActiveTab] = useState(() => {
-    const lastTab = localStorage.getItem('ksf_active_tab');
-    const lastVisit = localStorage.getItem('ksf_last_visit');
-    const now = Date.now();
-    
-    // If more than 30 minutes (1800000 ms) passed, reset to Dashboard
-    if (!lastVisit || (now - parseInt(lastVisit)) > 1800000) {
-      return 'dashboard';
-    }
-    return lastTab || 'dashboard';
-  });
-
-  // Update visit timestamp on every interaction/render
-  useEffect(() => {
-    localStorage.setItem('ksf_active_tab', activeTab);
-    localStorage.setItem('ksf_last_visit', Date.now().toString());
-  }, [activeTab]);
-
-  const fetchData = useCallback(async (isBackground = false) => {
-    if (!isBackground) setLoading(true);
-    try {
-      let allRolls = [];
-      let from = 0;
-      const step = 1000;
-      while (true) {
-        const { data, error } = await supabase.from('rolls').select('*').order('created_at', { ascending: false }).range(from, from + step - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        allRolls = [...allRolls, ...data];
-        if (data.length < step) break;
-        from += step;
-      }
-      setRolls(allRolls);
-      const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
-      setMaterials(mats || []);
-    } catch (e) { console.error(e); } finally { if (!isBackground) setLoading(false); }
-  }, []);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) { setUser(session.user); fetchData(); }
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session) fetchData();
-    });
-    return () => subscription.unsubscribe();
-  }, [fetchData]);
-
-  const handleMaterialUpdate = async (id, qty, isAdd) => {
-    const mat = materials.find(m => m.id === id);
-    if (!mat) return;
-    const current = parseFloat(mat.stock_quantity) || 0;
-    const change = parseFloat(qty);
-    const newVal = isAdd ? current + change : current - change;
-    const { error } = await supabase.from('raw_materials').update({ stock_quantity: newVal }).eq('id', id);
-    if (!error) fetchData(true);
-  };
-
-  if (!user && !isGuest) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100">
-          <img src="/logo.png" className="h-24 mx-auto mb-8 object-contain" alt="KSF" />
-          <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold mb-3 shadow-lg active:scale-95 transition-all">Login with Google</button>
-          <button onClick={() => setIsGuest(true)} className="w-full bg-white text-gray-700 py-4 rounded-xl font-bold border hover:bg-gray-50 active:scale-95 transition-all">View Only (Guest)</button>
-        </div>
-      </div>
-    );
-  }
+  const stockWeight = inStock.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
+  const lowMaterials = materials.filter(m => m.min_level > 0 && m.stock_quantity < m.min_level);
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-16 pb-20">
-      <Header deviceName={deviceName} offlineCount={offlineCount} onLogout={() => {localStorage.clear(); window.location.reload();}} onEditDeviceName={() => {const n = prompt("Device:"); if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)}}} onLogoClick={() => setActiveTab('dashboard')} />
-      <main className="max-w-7xl mx-auto p-4 md:p-6">
-        {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
-        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
-        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
-        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
-        {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} />}
-        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={handleMaterialUpdate} />}
-      </main>
-      <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
-      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={() => { setEditRoll(null); fetchData(true); }} />}
-      {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
+    <div className="space-y-6 pb-20 animate-in fade-in duration-500">
+      {/* Velocity Card */}
+      <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-blue-600 border border-gray-100">
+        <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3 text-sm uppercase tracking-wider"><TrendingUp size={18} /> Today's Velocity</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-green-50 p-3 rounded-lg text-center"><div className="text-[10px] text-green-700 font-bold uppercase">Produced</div><div className="text-2xl font-black text-green-800">{producedToday.length}</div></div>
+          <div className="bg-orange-50 p-3 rounded-lg text-center"><div className="text-[10px] text-orange-700 font-bold uppercase">Dispatched</div><div className="text-2xl font-black text-orange-800">{dispatchedToday.length}</div></div>
+        </div>
+      </div>
+
+      {/* Recent Activity Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-3 bg-gray-50/50 border-b flex items-center gap-2">
+          <Clock size={16} className="text-blue-500" />
+          <h3 className="font-bold text-gray-700 text-xs uppercase tracking-widest">Recent Activity</h3>
+        </div>
+        <div className="divide-y">
+          {recentActivity.map((r, i) => (
+            <div key={i} className="p-3 flex justify-between items-center text-sm">
+              <div>
+                <div className="font-bold text-gray-800">{r.product_id}</div>
+                <div className="text-[10px] text-gray-400 uppercase font-bold">{r.customer_name || 'Stock'}</div>
+              </div>
+              <div className={`text-[10px] font-black px-2 py-1 rounded uppercase ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                {r.status.replace('_', ' ')}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Aged Stock Card (New) */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-3 bg-red-50/30 border-b flex items-center gap-2">
+          <History size={16} className="text-red-500" />
+          <h3 className="font-bold text-gray-700 text-xs uppercase tracking-widest">Aged Stock (>30 Days)</h3>
+        </div>
+        <div className="p-2 divide-y">
+          {agedStock.length > 0 ? agedStock.map((r, i) => (
+            <div key={i} className="p-2 flex justify-between items-center text-sm">
+              <span className="font-bold text-gray-700">{r.product_id}</span>
+              <span className="text-red-600 font-black text-xs">{Math.ceil((today - new Date(r.created_at)) / (1000 * 60 * 60 * 24))} Days Old</span>
+            </div>
+          )) : <div className="p-4 text-center text-xs text-gray-400 italic">No aged stock found.</div>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow border border-gray-100 text-center"><div className="text-gray-500 text-[10px] font-bold uppercase">Stock Count</div><div className="text-2xl font-black text-blue-600">{inStock.length}</div></div>
+        <div className="bg-white p-4 rounded-xl shadow border border-gray-100 text-center"><div className="text-gray-500 text-[10px] font-bold uppercase">Total Wt</div><div className="text-2xl font-black text-green-600">{stockWeight.toFixed(1)}</div></div>
+      </div>
+
+      {lowMaterials.length > 0 && (
+        <div className="bg-red-50 p-4 rounded-xl border-l-4 border-red-500 border border-red-100">
+          <h3 className="font-bold text-red-800 flex items-center gap-2 mb-2 text-xs uppercase"><AlertCircle size={16} /> Low Materials</h3>
+          {lowMaterials.map(m => (
+            <div key={m.id} className="flex justify-between text-sm py-1 font-bold"><span>{m.name}</span><span className="text-red-600">{m.stock_quantity} kg</span></div>
+          ))}
+        </div>
+      )}
     </div>
   );
-}
+});
+
+export default DashboardView;
