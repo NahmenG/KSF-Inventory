@@ -34,15 +34,40 @@ function App() {
   const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     try {
-      const { data: serverData } = await supabase.from('rolls').select('*').order('created_at', { ascending: false });
+      let allRolls = [];
+      let from = 0;
+      const step = 1000;
+      
+      // Loop to bypass Supabase 1000 record limit
+      while (true) {
+        const { data, error } = await supabase
+          .from('rolls')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(from, from + step - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        allRolls = [...allRolls, ...data];
+        if (data.length < step) break;
+        from += step;
+      }
+
       const offlineData = safeJSONParse('ksf_offline_rolls', []);
       setOfflineCount(offlineData.length);
-      const serverIds = new Set(serverData?.map(r => r.product_id) || []);
+      const serverIds = new Set(allRolls.map(r => r.product_id));
       const uniqueOffline = offlineData.filter(r => !serverIds.has(r.product_id)).map(r => ({ ...r, isOffline: true }));
-      setRolls([...uniqueOffline, ...(serverData || [])]);
+      
+      setRolls([...uniqueOffline, ...allRolls]);
+      
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       setMaterials(mats || []);
-    } catch (e) { console.error(e); } finally { if (!isBackground) setLoading(false); }
+    } catch (e) { 
+      console.error("Data Fetch Error:", e); 
+    } finally { 
+      if (!isBackground) setLoading(false); 
+    }
   }, []);
 
   useEffect(() => {
