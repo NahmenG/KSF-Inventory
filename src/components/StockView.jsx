@@ -14,7 +14,6 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
   const [sort, setSort] = useState('newest');
 
   // 2. DYNAMIC DROPDOWN DATA
-  // We extract unique values from the current rolls to populate the dropdowns automatically
   const uniqueQualities = useMemo(() => {
     return [...new Set(rolls.map(r => r.quality))].filter(Boolean).sort();
   }, [rolls]);
@@ -69,8 +68,9 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* SECTION 1: COMPACT STICKY SEARCH PANEL */}
-      <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2">
+      {/* SECTION 1: STICKY SEARCH PANEL & SUMMATION BAR */}
+      {/* 'sticky top-0' keeps this container at the top of the viewport */}
+      <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
         <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100">
           <div className="flex justify-between items-center mb-2">
             <h3 className="text-[9px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-1">
@@ -86,9 +86,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
             )}
           </div>
           
-          {/* HORIZONTAL COMPACT GRID WITH DROPDOWNS */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            {/* Buyer / ID Search (Manual Type) */}
             <input 
               className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
               placeholder="Buyer / ID" 
@@ -96,7 +94,6 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
               onChange={e => setFilters({...filters, customer: e.target.value})} 
             />
 
-            {/* Quality Dropdown */}
             <div className="relative">
               <select 
                 className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100"
@@ -109,7 +106,6 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
               <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
 
-            {/* GSM Search (Manual Type) */}
             <input 
               type="number"
               className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
@@ -118,7 +114,6 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
               onChange={e => setFilters({...filters, gsm: e.target.value})} 
             />
 
-            {/* Size Search (Manual Type) */}
             <input 
               type="number"
               className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
@@ -127,7 +122,6 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
               onChange={e => setFilters({...filters, width: e.target.value})} 
             />
 
-            {/* Color Dropdown */}
             <div className="relative">
               <select 
                 className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100"
@@ -144,7 +138,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
           <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
             <button 
               onClick={() => setSort(sort === 'newest' ? 'oldest' : 'newest')} 
-              className="flex-1 py-1.5 border border-gray-100 rounded-lg bg-white text-[10px] font-black text-gray-600 flex items-center justify-center gap-1 active:scale-95 transition-all"
+              className="flex-1 py-1.5 border border-gray-100 rounded-lg bg-white text-[10px] font-black text-gray-600 flex items-center justify-center gap-1 active:scale-95 transition-all shadow-sm"
             >
               {sort === 'newest' ? <ArrowDown size={12} className="text-blue-500"/> : <ArrowUp size={12} className="text-blue-500"/>} Sort
             </button>
@@ -157,7 +151,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
           </div>
         </div>
 
-        {/* SECTION 2: COMPACT BLACK SUMMATION BAR */}
+        {/* COMPACT BLACK SUMMATION BAR (Also Sticky) */}
         <div className="bg-gray-900 text-white p-3 md:p-4 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800 transition-all">
           <div className="flex flex-col">
             <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Stock Count</span>
@@ -175,8 +169,8 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
         </div>
       </div>
 
-      {/* SECTION 3: INTERACTIVE ROLL LIST */}
-      <div className="space-y-2 mt-4">
+      {/* SECTION 2: INTERACTIVE ROLL LIST */}
+      <div className="space-y-2 mt-2 px-1">
         {filtered.length === 0 ? (
           <div className="text-center py-20 text-gray-400 bg-white rounded-2xl border-2 border-dashed border-gray-100 font-black italic">
             No stock matches these filters.
