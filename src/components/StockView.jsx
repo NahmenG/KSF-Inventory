@@ -1,18 +1,29 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Printer, Download, ArrowDown, ArrowUp, Clock, Filter, X } from 'lucide-react';
+import { Search, Printer, Download, ArrowDown, ArrowUp, Clock, Filter, X, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
   // 1. MULTI-PARAMETER SEARCH STATE
   const [filters, setFilters] = useState({
     customer: '',
+    quality: '',
     gsm: '',
     width: '',
     color: ''
   });
   const [sort, setSort] = useState('newest');
 
-  // 2. FILTERING LOGIC
+  // 2. DYNAMIC DROPDOWN DATA
+  // We extract unique values from the current rolls to populate the dropdowns automatically
+  const uniqueQualities = useMemo(() => {
+    return [...new Set(rolls.map(r => r.quality))].filter(Boolean).sort();
+  }, [rolls]);
+
+  const uniqueColors = useMemo(() => {
+    return [...new Set(rolls.map(r => r.color))].filter(Boolean).sort();
+  }, [rolls]);
+
+  // 3. FILTERING LOGIC
   const filtered = useMemo(() => {
     return rolls.filter(r => {
       const isStock = r.status === 'in_stock';
@@ -21,11 +32,12 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
         (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
         r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
       
+      const matchQuality = !filters.quality || r.quality === filters.quality;
       const matchGSM = !filters.gsm || String(r.gsm) === filters.gsm;
       const matchWidth = !filters.width || String(r.width_inches) === filters.width;
-      const matchColor = !filters.color || (r.color || '').toLowerCase().includes(filters.color.toLowerCase());
+      const matchColor = !filters.color || r.color === filters.color;
       
-      return isStock && matchCustomer && matchGSM && matchWidth && matchColor;
+      return isStock && matchCustomer && matchQuality && matchGSM && matchWidth && matchColor;
     })
     .sort((a,b) => {
       const dateA = new Date(a.created_at);
@@ -34,7 +46,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
     });
   }, [rolls, filters, sort]);
 
-  // 3. EXCEL EXPORT
+  // 4. EXCEL EXPORT
   const handleExport = () => {
     const data = filtered.map(r => ({
       "Roll ID": r.product_id,
@@ -52,86 +64,100 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
     XLSX.writeFile(wb, `KSF_Stock_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const clearFilters = () => setFilters({ customer: '', gsm: '', width: '', color: '' });
+  const clearFilters = () => setFilters({ customer: '', quality: '', gsm: '', width: '', color: '' });
 
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* SECTION 1: STICKY SEARCH PANEL */}
+      {/* SECTION 1: COMPACT STICKY SEARCH PANEL */}
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2">
-        <div className="bg-white p-4 rounded-2xl shadow-md border border-gray-100">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-[10px] font-black uppercase text-blue-600 tracking-[0.2em] flex items-center gap-2">
-              <Filter size={14} /> Advanced Filters
+        <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-[9px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-1">
+              <Filter size={12} /> Search Inventory
             </h3>
-            {(filters.customer || filters.gsm || filters.width || filters.color) && (
+            {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color) && (
               <button 
                 onClick={clearFilters} 
-                className="text-[10px] font-black text-red-500 flex items-center gap-1 bg-red-50 px-2 py-1 rounded-lg transition-colors"
+                className="text-[9px] font-black text-red-500 flex items-center gap-1"
               >
-                <X size={12} /> Reset
+                <X size={10} /> Reset
               </button>
             )}
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Buyer / ID</label>
-              <input 
-                className="border border-gray-100 p-2.5 rounded-xl text-xs font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all" 
-                placeholder="Ex: Reliance" 
-                value={filters.customer} 
-                onChange={e => setFilters({...filters, customer: e.target.value})} 
-              />
+          {/* HORIZONTAL COMPACT GRID WITH DROPDOWNS */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            {/* Buyer / ID Search (Manual Type) */}
+            <input 
+              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
+              placeholder="Buyer / ID" 
+              value={filters.customer} 
+              onChange={e => setFilters({...filters, customer: e.target.value})} 
+            />
+
+            {/* Quality Dropdown */}
+            <div className="relative">
+              <select 
+                className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100"
+                value={filters.quality}
+                onChange={e => setFilters({...filters, quality: e.target.value})}
+              >
+                <option value="">Quality</option>
+                {uniqueQualities.map(q => <option key={q} value={q}>{q}</option>)}
+              </select>
+              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black text-gray-400 uppercase ml-1">GSM</label>
-              <input 
-                type="number"
-                className="border border-gray-100 p-2.5 rounded-xl text-xs font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all" 
-                placeholder="Ex: 60" 
-                value={filters.gsm} 
-                onChange={e => setFilters({...filters, gsm: e.target.value})} 
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Size (in)</label>
-              <input 
-                type="number"
-                className="border border-gray-100 p-2.5 rounded-xl text-xs font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all" 
-                placeholder="Ex: 42" 
-                value={filters.width} 
-                onChange={e => setFilters({...filters, width: e.target.value})} 
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Color</label>
-              <input 
-                className="border border-gray-100 p-2.5 rounded-xl text-xs font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all" 
-                placeholder="Ex: White" 
-                value={filters.color} 
-                onChange={e => setFilters({...filters, color: e.target.value})} 
-              />
+
+            {/* GSM Search (Manual Type) */}
+            <input 
+              type="number"
+              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
+              placeholder="GSM" 
+              value={filters.gsm} 
+              onChange={e => setFilters({...filters, gsm: e.target.value})} 
+            />
+
+            {/* Size Search (Manual Type) */}
+            <input 
+              type="number"
+              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100" 
+              placeholder="Size" 
+              value={filters.width} 
+              onChange={e => setFilters({...filters, width: e.target.value})} 
+            />
+
+            {/* Color Dropdown */}
+            <div className="relative">
+              <select 
+                className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100"
+                value={filters.color}
+                onChange={e => setFilters({...filters, color: e.target.value})}
+              >
+                <option value="">Color</option>
+                {uniqueColors.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
           </div>
 
-          <div className="flex gap-2 mt-4 pt-4 border-t border-gray-50">
+          <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
             <button 
               onClick={() => setSort(sort === 'newest' ? 'oldest' : 'newest')} 
-              className="flex-1 py-2.5 border border-gray-100 rounded-xl bg-white text-xs font-black text-gray-600 flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm"
+              className="flex-1 py-1.5 border border-gray-100 rounded-lg bg-white text-[10px] font-black text-gray-600 flex items-center justify-center gap-1 active:scale-95 transition-all"
             >
-              {sort === 'newest' ? <><ArrowDown size={14} className="text-blue-500"/> Newest</> : <><ArrowUp size={14} className="text-blue-500"/> Oldest</>}
+              {sort === 'newest' ? <ArrowDown size={12} className="text-blue-500"/> : <ArrowUp size={12} className="text-blue-500"/>} Sort
             </button>
             <button 
               onClick={handleExport} 
-              className="flex-1 bg-green-600 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-green-100"
+              className="flex-1 bg-green-600 text-white rounded-lg font-black text-[10px] flex items-center justify-center gap-1 active:scale-95 transition-all shadow-md"
             >
-              <Download size={14}/> XLS Export
+              <Download size={12}/> XLS Export
             </button>
           </div>
         </div>
 
-        {/* SECTION 2: COMPACT BLACK SUMMATION BAR (UPDATED SIZE) */}
+        {/* SECTION 2: COMPACT BLACK SUMMATION BAR */}
         <div className="bg-gray-900 text-white p-3 md:p-4 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800 transition-all">
           <div className="flex flex-col">
             <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Stock Count</span>
@@ -171,7 +197,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
                 </div>
                 <div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div>
                 <div className="text-[10px] text-gray-400 uppercase font-black mt-1 flex flex-wrap gap-2">
-                  <span className="bg-slate-50 px-1.5 rounded">{r.quality}</span>
+                  <span className="bg-blue-50 text-blue-700 px-1.5 rounded">{r.quality}</span>
                   <span className="text-blue-500">{r.color}</span>
                   <span className="text-orange-600 bg-orange-50 px-1.5 rounded">{r.gsm} GSM</span>
                   <span className="text-green-600 bg-green-50 px-1.5 rounded">{r.width_inches}" Size</span>
