@@ -3,7 +3,7 @@ import { Search, Printer, Download, ArrowDown, ArrowUp, Clock, Filter, X } from 
 import * as XLSX from 'xlsx';
 
 const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
-  // 1. ADVANCED MULTI-PARAMETER SEARCH STATE
+  // 1. MULTI-PARAMETER SEARCH STATE
   const [filters, setFilters] = useState({
     customer: '',
     gsm: '',
@@ -12,7 +12,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
   });
   const [sort, setSort] = useState('newest');
 
-  // 2. HIGH-PERFORMANCE FILTERING LOGIC
+  // 2. FILTERING LOGIC
   const filtered = useMemo(() => {
     return rolls.filter(r => {
       const isStock = r.status === 'in_stock';
@@ -34,25 +34,21 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
     });
   }, [rolls, filters, sort]);
 
-  // 3. EXCEL EXPORT LOGIC
   const handleExport = () => {
     const data = filtered.map(r => ({
       "Roll ID": r.product_id,
-      "Buyer Name": r.customer_name || 'Stock',
+      "Buyer": r.customer_name || 'Stock',
       "Quality": r.quality,
       "Color": r.color,
       "GSM": r.gsm,
-      "Size (Inches)": r.width_inches,
-      "Net Weight (Kg)": r.net_weight,
-      "Gross Weight (Kg)": r.gross_weight,
-      "Production Date": new Date(r.created_at).toLocaleDateString(),
-      "Production Time": new Date(r.created_at).toLocaleTimeString()
+      "Size (in)": r.width_inches,
+      "Net Weight": r.net_weight,
+      "Production Date": new Date(r.created_at).toLocaleString()
     }));
-    
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Current_Stock");
-    XLSX.writeFile(wb, `KSF_Stock_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Stock");
+    XLSX.writeFile(wb, `KSF_Stock_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const clearFilters = () => setFilters({ customer: '', gsm: '', width: '', color: '' });
@@ -65,14 +61,14 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
         <div className="bg-white p-4 rounded-2xl shadow-md border border-gray-100">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-[10px] font-black uppercase text-blue-600 tracking-[0.2em] flex items-center gap-2">
-              <Filter size={14} /> Advanced Inventory Search
+              <Filter size={14} /> Advanced Filters
             </h3>
             {(filters.customer || filters.gsm || filters.width || filters.color) && (
               <button 
                 onClick={clearFilters} 
-                className="text-[10px] font-black text-red-500 flex items-center gap-1 bg-red-50 px-2 py-1 rounded-lg"
+                className="text-[10px] font-black text-red-500 flex items-center gap-1 bg-red-50 px-2 py-1 rounded-lg transition-colors"
               >
-                <X size={12} /> Reset
+                <X size={12} /> Reset Filters
               </button>
             )}
           </div>
@@ -121,15 +117,15 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
           <div className="flex gap-2 mt-4 pt-4 border-t border-gray-50">
             <button 
               onClick={() => setSort(sort === 'newest' ? 'oldest' : 'newest')} 
-              className="flex-1 py-2.5 border border-gray-100 rounded-xl bg-white text-xs font-black text-gray-600 flex items-center justify-center gap-2 active:scale-95 transition-all"
+              className="flex-1 py-2.5 border border-gray-100 rounded-xl bg-white text-xs font-black text-gray-600 flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm"
             >
-              {sort === 'newest' ? <><ArrowDown size={14} className="text-blue-500"/> Newest</> : <><ArrowUp size={14} className="text-blue-500"/> Oldest</>}
+              {sort === 'newest' ? <><ArrowDown size={14} className="text-blue-500"/> Newest First</> : <><ArrowUp size={14} className="text-blue-500"/> Oldest First</>}
             </button>
             <button 
               onClick={handleExport} 
               className="flex-1 bg-green-600 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg"
             >
-              <Download size={14}/> XLS
+              <Download size={14}/> Download XLS
             </button>
           </div>
         </div>
@@ -139,11 +135,11 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
           <div className="flex flex-col">
             <span className="text-[8px] md:text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mb-1">Stock Count</span>
             <span className="text-xl md:text-4xl font-black">
-              {filtered.length} <span className="text-[10px] md:text-xs font-normal opacity-40">Rolls</span>
+              {filtered.length} <span className="text-[10px] md:text-xs font-normal opacity-40 text-gray-400">Rolls</span>
             </span>
           </div>
           <div className="text-right flex flex-col">
-            <span className="text-[8px] md:text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mb-1">Total Weight</span>
+            <span className="text-[8px] md:text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mb-1">Total Weight</span>
             <span className="text-xl md:text-4xl font-black text-green-400">
               {filtered.reduce((s,r)=>s+(parseFloat(r.net_weight)||0),0).toFixed(1)} 
               <span className="text-[10px] md:text-xs font-normal text-white/50 ml-1">kg</span>
@@ -171,15 +167,15 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
               <div className="text-[10px] text-gray-400 uppercase font-black mt-1 flex flex-wrap gap-2">
                 <span className="bg-slate-50 px-1.5 rounded">{r.quality}</span>
                 <span className="text-blue-500">{r.color}</span>
-                <span className="text-orange-600 bg-orange-50 px-1.5 rounded">{r.gsm} GSM</span>
-                <span className="text-green-600 bg-green-50 px-1.5 rounded">{r.width_inches}" Size</span>
+                <span className="text-orange-600 bg-orange-50 px-1.5 rounded tracking-tighter">{r.gsm} GSM</span>
+                <span className="text-green-600 bg-green-50 px-1.5 rounded tracking-tighter">{r.width_inches}" Size</span>
               </div>
             </div>
             <div className="text-right flex flex-col items-end min-w-[100px]">
               <div className="font-black text-2xl text-gray-900 leading-none">{r.net_weight} <span className="text-[10px] font-normal text-gray-400">kg</span></div>
               <button 
                 onClick={(e) => { e.stopPropagation(); onPrint(r); }} 
-                className="text-blue-500 mt-3 p-2.5 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white rounded-xl transition-all"
+                className="text-blue-500 mt-3 p-2.5 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white rounded-xl transition-all shadow-sm"
               >
                 <Printer size={20}/>
               </button>

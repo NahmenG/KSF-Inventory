@@ -30,6 +30,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   return (
     <div className="space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
+      {/* SECTION 1: TODAY'S VELOCITY */}
       <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4 opacity-5 text-blue-600"><TrendingUp size={80} /></div>
         <h3 className="font-black text-gray-400 text-[10px] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
@@ -47,6 +48,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
+      {/* SECTION 2: RECENT ACTIVITY */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
           <h3 className="font-black text-gray-400 text-[10px] uppercase tracking-[0.2em] flex items-center gap-2">
@@ -55,7 +57,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
         <div className="divide-y divide-gray-50">
           {recentActivity.map((r, i) => (
-            <div key={i} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+            <div key={i} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${r.status === 'in_stock' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
                   <Package size={18} />
@@ -78,7 +80,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* FIXED: Removed the > symbol entirely */}
+      {/* SECTION 3: AGED STOCK - REMOVED > SYMBOL */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-red-50/30 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
@@ -98,18 +100,19 @@ const DashboardView = React.memo(({ rolls, materials }) => {
               ))}
             </div>
           ) : (
-            <div className="p-8 text-center text-gray-400 text-xs italic">Inventory is fresh.</div>
+            <div className="p-8 text-center text-gray-400 text-xs italic">All stock is fresh.</div>
           )}
         </div>
       </div>
 
+      {/* SECTION 4: TOTALS */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 text-center">
-          <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">In Stock</div>
+          <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Stock Count</div>
           <div className="text-3xl font-black text-blue-600">{inStock.length}</div>
         </div>
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 text-center">
-          <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Wt</div>
+          <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Stock Weight</div>
           <div className="text-3xl font-black text-green-600">{stockWeight.toFixed(1)} <span className="text-xs">kg</span></div>
         </div>
       </div>
