@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Package, Hash, User, Clock, RotateCcw, Loader, AlertTriangle } from 'lucide-react';
+import { Package, Hash, User, Clock, RotateCcw, Loader, AlertTriangle, ChevronDown } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
@@ -12,7 +12,6 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
   const suggestionRef = useRef(null);
 
   // BARCODE LOGIC (Manual Entry + Persistence)
-  // To get 0226N-1462: Prefix="0226N", Sequence="1462"
   const [rollPrefix, setRollPrefix] = useState(() => localStorage.getItem('ksf_roll_prefix') || '0226N');
   const [rollSeq, setRollSeq] = useState(() => localStorage.getItem('ksf_roll_sequence') || '1462');
 
@@ -45,7 +44,7 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // AUTO-CALCULATION
+  // AUTO-CALCULATION (Net Weight = Gross - (Width / 63))
   const handleValueChange = (field, value) => {
     const updatedData = { ...formData, [field]: value };
     if (field === 'width_inches' || field === 'gross_weight') {
@@ -111,14 +110,15 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-2xl mx-auto">
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-2xl mx-auto animate-in fade-in duration-500">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
           <Package className="text-blue-600" /> New Roll Entry
         </h2>
         <button 
+          type="button"
           onClick={() => { if(confirm("Clear form?")) setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); }}
-          className="text-xs font-bold text-red-500 border border-red-100 bg-red-50 px-3 py-2 rounded-lg"
+          className="text-xs font-bold text-red-500 border border-red-100 bg-red-50 px-3 py-2 rounded-lg active:scale-95 transition-all"
         >
           <RotateCcw size={14} className="inline mr-1"/> Clear
         </button>
@@ -136,23 +136,22 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
             Roll ID Setup (Prefix - Number)
           </label>
           <div className="flex gap-2">
-            {/* EQUAL WIDTHS (50% each) */}
             <input 
               type="text" 
-              className="w-1/2 border-2 border-blue-100 bg-blue-50 p-3 rounded-xl font-black text-blue-900 outline-none uppercase text-center focus:border-blue-500 transition-all" 
+              className="w-1/2 border-2 border-blue-100 bg-blue-50 p-3 rounded-xl font-black text-blue-900 outline-none uppercase text-center focus:border-blue-500 transition-all shadow-inner" 
               value={rollPrefix} 
               onChange={(e) => setRollPrefix(e.target.value)} 
             />
             <input 
               type="number" 
               required 
-              className="w-1/2 border-2 border-blue-100 bg-blue-50 p-3 rounded-xl font-black text-blue-900 outline-none focus:border-blue-500 text-center" 
+              className="w-1/2 border-2 border-blue-100 bg-blue-50 p-3 rounded-xl font-black text-blue-900 outline-none focus:border-blue-500 text-center shadow-inner" 
               value={rollSeq} 
               onChange={(e) => setRollSeq(e.target.value)} 
             />
           </div>
           <p className="text-[10px] text-gray-400 mt-2 text-center uppercase font-bold">
-            Barcode: <span className="text-blue-600">{rollPrefix}-{rollSeq}</span>
+            Generated ID: <span className="text-blue-600">{rollPrefix}-{rollSeq}</span>
           </p>
         </div>
 
@@ -182,21 +181,27 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
 
         <div>
           <label className="text-[11px] font-bold text-gray-400 uppercase mb-1 block">Quality</label>
-          <select required className="w-full border p-3 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100 font-semibold" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}>
-            <option value="">Select...</option>
-            {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
-          </select>
+          <div className="relative">
+            <select required className="w-full border p-3 rounded-xl bg-white outline-none appearance-none focus:ring-2 focus:ring-blue-100 font-semibold" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}>
+              <option value="">Select...</option>
+              {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
+            </select>
+            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
         </div>
 
         <div>
           <label className="text-[11px] font-bold text-gray-400 uppercase mb-1 block">Color</label>
-          <select required className="w-full border p-3 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100 font-semibold" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}>
-            <option value="">Select...</option>
-            {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <div className="relative">
+            <select required className="w-full border p-3 rounded-xl bg-white outline-none appearance-none focus:ring-2 focus:ring-blue-100 font-semibold" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}>
+              <option value="">Select...</option>
+              {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
         </div>
 
-        <div className="col-span-2 grid grid-cols-3 gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100">
+        <div className="col-span-2 grid grid-cols-3 gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100 shadow-inner">
           <div><label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">GSM</label><input type="number" className="w-full border p-2 rounded-lg outline-none font-bold" value={formData.gsm} onChange={e => handleValueChange('gsm', e.target.value)} /></div>
           <div><label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Size (in)</label><input type="number" className="w-full border p-2 rounded-lg outline-none font-bold" value={formData.width_inches} onChange={e => handleValueChange('width_inches', e.target.value)} /></div>
           <div><label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Length (m)</label><input type="number" className="w-full border p-2 rounded-lg outline-none font-bold" value={formData.length_meters} onChange={e => handleValueChange('length_meters', e.target.value)} /></div>
@@ -204,12 +209,12 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
 
         <div>
           <label className="text-[11px] font-bold text-gray-400 uppercase mb-1 block">Gross Weight (kg)</label>
-          <input type="number" step="0.01" className="w-full border p-4 rounded-xl outline-none font-black text-lg" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} />
+          <input type="number" step="0.01" className="w-full border p-4 rounded-xl outline-none font-black text-lg focus:ring-2 focus:ring-blue-100 transition-all shadow-inner" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} />
         </div>
 
         <div>
           <label className="text-[11px] font-bold text-blue-600 uppercase mb-1 block">Net Weight (kg)</label>
-          <input type="number" step="0.01" className="w-full border-2 border-blue-100 bg-blue-50/50 p-4 rounded-xl font-black text-blue-900 text-xl outline-none" value={formData.net_weight} onChange={e => handleValueChange('net_weight', e.target.value)} />
+          <input type="number" step="0.01" className="w-full border-2 border-blue-100 bg-blue-50/50 p-4 rounded-xl font-black text-blue-900 text-xl outline-none shadow-inner" value={formData.net_weight} readOnly />
         </div>
 
         <button 
