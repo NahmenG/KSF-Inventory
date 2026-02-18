@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Printer, Download, ArrowDown, ArrowUp, Clock, Filter, X, ChevronDown, Calendar, Tag } from 'lucide-react';
+import { Printer, Download, ArrowDown, ArrowUp, Clock, Filter, X, ChevronDown, History } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
-  // 1. COMPACT SEARCH STATE (Matches Stock Tab)
+  // 1. COMPACT SEARCH STATE
   const [filters, setFilters] = useState({
     customer: '',
     quality: '',
@@ -22,7 +22,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
     return [...new Set(rolls.map(r => r.color))].filter(Boolean).sort();
   }, [rolls]);
 
-  // 3. FILTERING LOGIC (Shows everything: in_stock and dispatched)
+  // 3. FILTERING LOGIC (Master History includes both Stock and Dispatched)
   const filtered = useMemo(() => {
     return rolls.filter(r => {
       const matchCustomer = !filters.customer || 
@@ -60,7 +60,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Master_History");
-    XLSX.writeFile(wb, `KSF_Master_History_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `KSF_History_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const clearFilters = () => setFilters({ customer: '', quality: '', gsm: '', width: '', color: '' });
@@ -68,7 +68,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* SECTION 1: STICKY SEARCH PANEL (Same as Stock Tab) */}
+      {/* SECTION 1: STICKY SEARCH PANEL */}
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
         <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100">
           <div className="flex justify-between items-center mb-2">
@@ -147,7 +147,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
           </div>
         </div>
 
-        {/* SECTION 2: COMPACT BLACK SUMMATION BAR (Same as Stock Tab) */}
+        {/* SECTION 2: COMPACT BLACK SUMMATION BAR */}
         <div className="bg-gray-900 text-white p-3 md:p-4 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800 transition-all">
           <div className="flex flex-col">
             <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Master Count</span>
@@ -165,43 +165,37 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
         </div>
       </div>
 
-      {/* SECTION 3: MASTER LOG LIST */}
-      <div className="space-y-2 mt-2 px-1">
-        {filtered.length === 0 ? (
-          <div className="text-center py-20 text-gray-400 bg-white rounded-2xl border-2 border-dashed border-gray-100 font-black italic">
-            No history found for these filters.
-          </div>
-        ) : (
-          filtered.map(r => (
-            <div 
-              key={r.id} 
-              onClick={() => onSelectRoll(r)} 
-              className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200 cursor-pointer group"
-            >
-              <div className="flex-1">
-                <div className="font-black text-blue-600 text-lg flex items-center gap-2">
-                  {r.product_id}
-                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                    {r.status === 'in_stock' ? 'In Stock' : 'Dispatched'}
-                  </span>
-                </div>
-                <div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div>
-                <div className="text-[10px] text-gray-400 uppercase font-black mt-1 flex flex-wrap gap-2">
-                  <span className="bg-slate-50 px-1.5 rounded text-gray-600">{r.quality}</span>
-                  <span className="text-blue-500">{r.color}</span>
-                  <span className="text-orange-600 bg-orange-50 px-1.5 rounded">{r.gsm} GSM</span>
-                  <span className="text-green-600 bg-green-50 px-1.5 rounded">{r.width_inches}"</span>
-                </div>
+      {/* SECTION 3: LIST */}
+      <div className="space-y-2 px-1">
+        {filtered.map(r => (
+          <div 
+            key={r.id} 
+            onClick={() => onSelectRoll(r)} 
+            className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200 cursor-pointer group"
+          >
+            <div className="flex-1">
+              <div className="font-black text-blue-600 text-lg flex items-center gap-2">
+                {r.product_id}
+                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                  {r.status === 'in_stock' ? 'In Stock' : 'Dispatched'}
+                </span>
               </div>
-              <div className="text-right flex flex-col items-end min-w-[100px]">
-                <div className="font-black text-2xl text-gray-900 leading-none">{r.net_weight} <span className="text-[10px] font-normal text-gray-400">kg</span></div>
-                <div className="text-[10px] font-bold text-gray-400 flex items-center gap-1 mt-2">
-                   <Clock size={10} /> {new Date(r.created_at).toLocaleDateString()}
-                </div>
+              <div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div>
+              <div className="text-[10px] text-gray-400 uppercase font-black mt-1 flex flex-wrap gap-2">
+                <span className="bg-slate-50 px-1.5 rounded text-gray-600">{r.quality}</span>
+                <span className="text-blue-500">{r.color}</span>
+                <span className="text-orange-600 bg-orange-50 px-1.5 rounded">{r.gsm} GSM</span>
+                <span className="text-green-600 bg-green-50 px-1.5 rounded">{r.width_inches}"</span>
               </div>
             </div>
-          ))
-        )}
+            <div className="text-right flex flex-col items-end min-w-[100px]">
+              <div className="font-black text-2xl text-gray-900 leading-none">{r.net_weight} <span className="text-[10px] font-normal text-gray-400">kg</span></div>
+              <div className="text-[10px] font-bold text-gray-400 flex items-center gap-1 mt-2">
+                 <Clock size={10} /> {new Date(r.created_at).toLocaleDateString()}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
