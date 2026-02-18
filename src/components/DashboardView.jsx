@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, RotateCcw } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 
 const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 const MAT_ORDER = { 'Polymers': 1, 'Filler': 2, 'Additives': 3, 'Colour': 4, 'Others': 5 };
@@ -26,7 +26,11 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   const todayDate = new Date();
   const todayStr = todayDate.toLocaleDateString();
   
-  // 1. MONTHLY PERFORMANCE: Start from 1st with Cumulative Legend
+  // 1. CALCULATIONS FOR TOTALS & TITLES
+  const stockWeightKg = inStock.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
+  const stockWeightTon = (stockWeightKg / 1000).toFixed(2);
+
+  // 2. MONTHLY PERFORMANCE LOGIC (Starts 1st of month, Cumulative Legend)
   const { timelineData, totalProdMonth, totalDispMonth } = useMemo(() => {
     const data = [];
     let prodSum = 0;
@@ -38,11 +42,8 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       const dayProduced = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === dateStr);
       const dayDispatched = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === dateStr);
       
-      const dayProdWt = dayProduced.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
-      const dayDispWt = dayDispatched.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
-      
-      prodSum += dayProdWt;
-      dispSum += dayDispWt;
+      prodSum += dayProduced.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
+      dispSum += dayDispatched.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
 
       data.push({
         date: d.getDate().toString(),
@@ -57,23 +58,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     };
   }, [rolls, todayDate]);
 
-  // 2. PIE CHART: Quality Weight in Tons
-  const qualityChartData = useMemo(() => {
-    const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
-    return Object.keys(c).map(k => ({ 
-      name: `${k} (${(c[k] / 1000).toFixed(2)} Ton)`, 
-      value: parseFloat(c[k].toFixed(1)) 
-    }));
-  }, [inStock]);
-
-  // 3. COLOR CHART: Abbreviations and logic to show all labels
-  const colorChartData = useMemo(() => {
-    const c = {}; inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
-    return Object.keys(c)
-      .map(k => ({ name: abbreviateColor(k), weight: parseFloat(c[k].toFixed(1)) }))
-      .sort((a, b) => b.weight - a.weight);
-  }, [inStock]);
-
+  // 3. RECENT LOG LOGIC (Detects Produced, Dispatched, Edited, Returned)
   const recentActivity = useMemo(() => {
     return [...rolls]
       .sort((a, b) => {
@@ -83,9 +68,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       })
       .slice(0, 5)
       .map(r => {
-        let activity = "Produced";
-        let time = r.created_at;
-        let icon = <PlusCircle size={14} className="text-green-500" />;
+        let activity = "Produced", time = r.created_at, icon = <PlusCircle size={14} className="text-green-500" />;
         if (r.status === 'dispatched') {
           activity = "Dispatched"; time = r.dispatched_at; icon = <Send size={14} className="text-blue-500" />;
         } else if (r.status === 'in_stock' && r.dispatched_at) {
@@ -97,9 +80,43 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       });
   }, [rolls]);
 
+  // 4. CHART DATA (Quality with Ton Legends & Color Horizontal)
+  const qualityChartData = useMemo(() => {
+    const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
+    return Object.keys(c).map(k => ({ 
+      name: `${k} (${(c[k] / 1000).toFixed(2)} Ton)`, 
+      value: parseFloat(c[k].toFixed(1)) 
+    }));
+  }, [inStock]);
+
+  const colorChartData = useMemo(() => {
+    const c = {}; inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
+    return Object.keys(c)
+      .map(k => ({ name: abbreviateColor(k), weight: parseFloat(c[k].toFixed(1)) }))
+      .sort((a, b) => b.weight - a.weight);
+  }, [inStock]);
+
+  // 5. AGED STOCK LOGIC
+  const agedResults = useMemo(() => {
+    const aged = inStock.filter(r => {
+      const diffDays = Math.ceil(Math.abs(todayDate - new Date(r.created_at)) / (1000 * 60 * 60 * 24));
+      return diffDays > 30;
+    });
+    const weights = {};
+    let totalAgedWt = 0;
+    aged.forEach(r => { 
+      const wt = parseFloat(r.net_weight) || 0;
+      weights[r.quality] = (weights[r.quality] || 0) + wt;
+      totalAgedWt += wt;
+    });
+    return {
+      list: Object.keys(weights).map(k => ({ quality: k, weight: weights[k].toFixed(1) })),
+      totalTon: (totalAgedWt / 1000).toFixed(2)
+    };
+  }, [inStock, todayDate]);
+
   const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === todayStr);
   const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === todayStr);
-  const stockWeight = inStock.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
 
   const sortedLowMaterials = useMemo(() => {
     return materials
@@ -107,20 +124,10 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       .sort((a, b) => (MAT_ORDER[a.category] || 99) - (MAT_ORDER[b.category] || 99));
   }, [materials]);
 
-  const agedData = useMemo(() => {
-    const aged = inStock.filter(r => {
-      const diffDays = Math.ceil(Math.abs(todayDate - new Date(r.created_at)) / (1000 * 60 * 60 * 24));
-      return diffDays > 30;
-    });
-    const weights = {};
-    aged.forEach(r => { weights[r.quality] = (weights[r.quality] || 0) + (parseFloat(r.net_weight) || 0); });
-    return Object.keys(weights).map(k => ({ quality: k, weight: weights[k].toFixed(1) }));
-  }, [inStock, todayDate]);
-
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* PLANT VELOCITY */}
+      {/* SECTION 1: PLANT VELOCITY (TODAY) */}
       <div className="bg-white rounded-2xl shadow-sm p-4 border-l-4 border-blue-600 border border-gray-100">
         <h3 className="font-black text-gray-400 text-[10px] uppercase tracking-widest mb-3 flex items-center gap-2">
           <TrendingUp size={14} className="text-blue-600" /> Plant Velocity (Today)
@@ -137,19 +144,19 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* STOCK TOTALS */}
+      {/* SECTION 2: STOCK TOTALS (CENTER ALIGNED) */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
           <div className="text-[9px] text-gray-400 font-black uppercase tracking-tight">In Stock</div>
           <div className="text-xl font-black text-blue-600">{inStock.length} <span className="text-xs font-normal text-gray-400">Rolls</span></div>
         </div>
-        <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
           <div className="text-[9px] text-gray-400 font-black uppercase tracking-tight">Total Weight</div>
-          <div className="text-xl font-black text-green-600">{stockWeight.toFixed(1)} <span className="text-xs font-normal text-gray-400">kg</span></div>
+          <div className="text-xl font-black text-green-600">{stockWeightKg.toFixed(1)} <span className="text-xs font-normal text-gray-400">kg</span></div>
         </div>
       </div>
 
-      {/* PRODUCTION VS DISPATCH TIMELINE */}
+      {/* SECTION 3: MONTHLY PERFORMANCE GRAPH */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2">
           <BarChart3 size={14} className="text-blue-600" /> Performance Log (1st to Today)
@@ -161,12 +168,8 @@ const DashboardView = React.memo(({ rolls, materials }) => {
               <XAxis dataKey="date" fontSize={9} tick={{fontWeight: 'bold'}} />
               <YAxis fontSize={9} />
               <Tooltip />
-              <Legend 
-                verticalAlign="top" 
-                align="right" 
-                wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }}
-                formatter={(value) => value === 'Produced' ? `Produced (${totalProdMonth} Ton)` : `Dispatched (${totalDispMonth} Ton)`}
-              />
+              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }}
+                formatter={(val) => val === 'Produced' ? `Produced (${totalProdMonth} Ton)` : `Dispatched (${totalDispMonth} Ton)`} />
               <Bar dataKey="Produced" fill="#22c55e" radius={[2, 2, 0, 0]} />
               <Bar dataKey="Dispatched" fill="#3b82f6" radius={[2, 2, 0, 0]} />
             </BarChart>
@@ -174,7 +177,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* RECENT LOG CARD */}
+      {/* SECTION 4: RECENT LOG (DETAILED MULTI-LINE) */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-3 bg-gray-50/50 border-b">
           <h3 className="font-black text-gray-400 text-[10px] uppercase flex items-center gap-2"><Clock size={14} /> Recent Log</h3>
@@ -201,9 +204,11 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* QUALITY BREAKDOWN PIE CHART */}
+      {/* SECTION 5: QUALITY PIE CHART (WITH TOTAL TON TITLE) */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2"><PieIcon size={14}/> Quality Breakdown</h3>
+        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2">
+          <PieIcon size={14}/> Quality Breakdown Chart ({stockWeightTon} Ton)
+        </h3>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -211,48 +216,40 @@ const DashboardView = React.memo(({ rolls, materials }) => {
                 {qualityChartData.map((e, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
               </Pie>
               <Tooltip />
-              <Legend 
-                layout="horizontal" 
-                verticalAlign="bottom" 
-                align="center" 
-                wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '20px' }} 
-              />
+              <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '20px' }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* COLOR ANALYSIS BAR CHART */}
+      {/* SECTION 6: COLOR BAR CHART (HORIZONTAL WITH LABELS) */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2"><BarChart3 size={14}/> Color Analysis (Kg)</h3>
         <div className="h-96">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={colorChartData} layout="vertical" margin={{ left: 10 }}>
+            <BarChart data={colorChartData} layout="vertical" margin={{ left: 10, right: 40 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-              <XAxis type="number" fontSize={9} />
-              <YAxis 
-                dataKey="name" 
-                type="category" 
-                width={80} 
-                fontSize={9} 
-                interval={0} 
-                tick={{fill: '#4b5563', fontWeight: 'bold'}} 
-              />
+              <XAxis type="number" fontSize={9} hide />
+              <YAxis dataKey="name" type="category" width={80} fontSize={9} interval={0} tick={{fill: '#4b5563', fontWeight: 'bold'}} />
               <Tooltip />
-              <Bar dataKey="weight" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="weight" fill="#3b82f6" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="weight" position="right" style={{ fontSize: '10px', fontWeight: 'bold', fill: '#4b5563' }} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* AGED STOCK */}
+      {/* SECTION 7: STOCK OVER 30 DAYS OLD (WITH TOTAL TON TITLE) */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-3 bg-red-50/30 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
-          <h3 className="font-black text-gray-400 text-[10px] uppercase">Stock Over 30 Days Old</h3>
+          <h3 className="font-black text-gray-400 text-[10px] uppercase">
+            Stock Over 30 Days Old ({agedResults.totalTon} Ton)
+          </h3>
         </div>
         <div className="p-3 grid grid-cols-2 gap-2">
-          {agedData.map((d, i) => (
+          {agedResults.list.map((d, i) => (
             <div key={i} className="bg-white border p-2 rounded-lg flex justify-between items-center">
               <span className="text-[10px] font-bold text-gray-500 uppercase">{d.quality}</span>
               <span className="text-sm font-black text-red-600">{d.weight} Kg</span>
@@ -261,7 +258,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* MATERIAL ALERT */}
+      {/* SECTION 8: ORDERED MATERIAL ALERT */}
       {sortedLowMaterials.length > 0 && (
         <div className="bg-white p-4 rounded-xl border-l-4 border-red-500 shadow-sm border border-gray-100">
           <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-[10px] uppercase tracking-widest">
