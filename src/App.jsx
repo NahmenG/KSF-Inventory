@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
 // Modular Components
@@ -30,10 +30,8 @@ export default function App() {
   const [materials, setMaterials] = useState([]);
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
-  
-  // ALWAYS START ON DASHBOARD
-  const [activeTab, setActiveTab] = useState('dashboard'); 
-  const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard'); // Force Dashboard on load
+  const [offlineCount, setOfflineCount] = useState(0);
 
   const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -49,7 +47,11 @@ export default function App() {
         if (data.length < step) break;
         from += step;
       }
-      setRolls(allRolls);
+      const offlineData = safeJSONParse('ksf_offline_rolls', []);
+      setOfflineCount(offlineData.length);
+      const serverIds = new Set(allRolls.map(r => r.product_id));
+      const taggedOffline = offlineData.filter(r => !serverIds.has(r.product_id)).map(r => ({ ...r, isOffline: true }));
+      setRolls([...taggedOffline, ...allRolls]);
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       setMaterials(mats || []);
     } catch (e) { console.error(e); } finally { if (!isBackground) setLoading(false); }
@@ -63,18 +65,9 @@ export default function App() {
       setUser(session?.user ?? null);
       if (session) fetchData();
     });
-    return () => subscription.unsubscribe();
-  }, [fetchData]);
-
-  const handleMaterialUpdate = async (id, qty, isAdd) => {
-    const mat = materials.find(m => m.id === id);
-    if (!mat) return;
-    const current = parseFloat(mat.stock_quantity) || 0;
-    const change = parseFloat(qty);
-    const newVal = isAdd ? current + change : current - change;
-    const { error } = await supabase.from('raw_materials').update({ stock_quantity: newVal }).eq('id', id);
-    if (!error) fetchData(true);
-  };
+    const interval = setInterval(() => { if (user || isGuest) fetchData(true); }, 30000);
+    return () => { subscription.unsubscribe(); clearInterval(interval); };
+  }, [fetchData, user, isGuest]);
 
   if (!user && !isGuest) {
     return (
@@ -90,14 +83,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 pt-16 pb-20">
-      <Header deviceName={deviceName} onLogout={() => supabase.auth.signOut().then(() => window.location.reload())} onEditDeviceName={() => {const n = prompt("Device:"); if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)}}} onLogoClick={() => setActiveTab('dashboard')} />
-      <main className="max-w-7xl mx-auto p-4 md:p-6 transition-all">
+      <Header deviceName={deviceName} offlineCount={offlineCount} onLogout={() => supabase.auth.signOut().then(() => window.location.reload())} onEditDeviceName={() => {const n = prompt("Device:"); if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)}}} onLogoClick={() => setActiveTab('dashboard')} />
+      <main className="max-w-7xl mx-auto p-4 md:p-6">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
         {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
         {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
         {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} />}
-        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={handleMaterialUpdate} onRefresh={() => fetchData(true)} />}
+        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => fetchData(true)} />}
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
       {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={() => { setEditRoll(null); fetchData(true); }} />}
