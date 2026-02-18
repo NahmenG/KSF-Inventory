@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Save, Printer, Plus, AlertCircle, CheckCircle2, Loader2, Scale, Package, Ruler } from 'lucide-react';
+import { Save, Plus, AlertCircle, CheckCircle2, Loader2, Scale, Package, Ruler, ChevronDown } from 'lucide-react';
 
 const NewProductView = ({ deviceName, onSaved, onPrint }) => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
 
   // 1. FULL FORM PERSISTENCE LOGIC
-  // Restores every field from localStorage so data isn't lost on refresh/crash
+  // This ensures that every keystroke is saved so refreshes don't lose data
   const [formData, setFormData] = useState(() => {
     const saved = localStorage.getItem('ksf_entry_form');
-    return saved ? JSON.parse(saved) : {
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error parsing form cache:", e);
+      }
+    }
+    return {
       customer_name: '',
       quality: 'Virgin Fresh',
       gsm: '',
@@ -21,19 +28,19 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
     };
   });
 
-  // Sync form data to local cache on every change
+  // Sync form data to localStorage on every change
   useEffect(() => {
     localStorage.setItem('ksf_entry_form', JSON.stringify(formData));
   }, [formData]);
 
-  // 2. FORM SUBMISSION LOGIC
+  // 2. SUBMISSION LOGIC
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setStatus({ type: '', message: '' });
 
     try {
-      // Generate a unique KSF ID based on current timestamp
+      // Create unique Roll ID
       const product_id = `KSF-${Date.now().toString().slice(-6)}`;
       
       const { data, error } = await supabase
@@ -53,16 +60,14 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
       setStatus({ type: 'success', message: `Roll ${product_id} registered successfully!` });
       onSaved();
       
-      // LOGIC: Clear weights for the next roll but KEEP customer/specs 
-      // This allows the operator to add multiple rolls for the same order quickly
+      // PRODUCTION EFFICIENCY: Clear weights for next roll, but KEEP buyer/specs
       setFormData(prev => ({ 
         ...prev, 
         net_weight: '', 
         gross_weight: '' 
       }));
       
-      // Direct prompt for thermal printing
-      if (window.confirm(`Roll ${product_id} Saved. Print label now?`)) {
+      if (window.confirm(`Roll ${product_id} saved. Print thermal label?`)) {
         onPrint(data[0]);
       }
     } catch (err) {
@@ -75,49 +80,46 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
-      {/* FORM CARD */}
+      {/* MAIN ENTRY CARD */}
       <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
         
         {/* HEADER SECTION */}
-        <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-6 text-white flex justify-between items-center">
+        <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-6 text-white flex justify-between items-center shadow-lg">
           <div>
             <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
-              <Package size={28} /> New Production Entry
+              <Package size={28} /> New Roll Entry
             </h2>
             <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mt-1 opacity-80">
-              Station ID: {deviceName}
+              Active Station: {deviceName}
             </p>
           </div>
-          <div className="bg-white/10 p-3 rounded-2xl backdrop-blur-sm">
+          <div className="bg-white/10 p-3 rounded-2xl backdrop-blur-md border border-white/20">
             <Plus className="text-white" size={32} />
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           
-          {/* PRIMARY INFO SECTION */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            {/* Buyer Name */}
+            {/* Buyer Name Input */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">Buyer Name / Stock</label>
-              <div className="relative">
-                <input 
-                  required 
-                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 transition-all outline-none placeholder:text-gray-300 shadow-inner" 
-                  value={formData.customer_name} 
-                  onChange={e => setFormData({...formData, customer_name: e.target.value})} 
-                  placeholder="e.g. Reliance / Stock" 
-                />
-              </div>
+              <input 
+                required 
+                className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 transition-all outline-none shadow-inner" 
+                value={formData.customer_name} 
+                onChange={e => setFormData({...formData, customer_name: e.target.value})} 
+                placeholder="Buyer Name..." 
+              />
             </div>
 
             {/* Quality Dropdown */}
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">Quality Category</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">Fabric Quality</label>
               <div className="relative">
                 <select 
-                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 outline-none appearance-none shadow-inner" 
+                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 outline-none appearance-none shadow-inner cursor-pointer" 
                   value={formData.quality} 
                   onChange={e => setFormData({...formData, quality: e.target.value})}
                 >
@@ -130,7 +132,7 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
               </div>
             </div>
 
-            {/* GSM Input */}
+            {/* GSM Filter */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">GSM Spec</label>
               <input 
@@ -143,7 +145,7 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
               />
             </div>
 
-            {/* Width Input */}
+            {/* Width Filter */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider flex items-center gap-1">
                 <Ruler size={10} /> Width (Inches)
@@ -158,7 +160,7 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
               />
             </div>
 
-            {/* Net Weight - HIGHLIGHTED */}
+            {/* Net Weight - PRIMARY HIGHLIGHTED FIELD */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-blue-600 uppercase ml-1 tracking-wider flex items-center gap-1">
                 <Scale size={10} /> Net Weight (kg)
@@ -167,7 +169,7 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
                 type="number" 
                 step="0.1" 
                 required 
-                className="w-full bg-blue-50/50 border-2 border-blue-100 rounded-2xl p-4 font-black text-blue-700 text-2xl focus:ring-4 focus:ring-blue-200 outline-none shadow-inner transition-all" 
+                className="w-full bg-blue-50 border-2 border-blue-100 rounded-2xl p-4 font-black text-blue-700 text-2xl focus:ring-4 focus:ring-blue-200 outline-none shadow-inner transition-all" 
                 value={formData.net_weight} 
                 onChange={e => setFormData({...formData, net_weight: e.target.value})} 
                 placeholder="00.0" 
@@ -189,9 +191,21 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
             </div>
           </div>
 
-          {/* STATUS NOTIFICATIONS */}
+          {/* COLOR SELECTOR */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">Fabric Color</label>
+            <input 
+              required 
+              className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 transition-all outline-none shadow-inner" 
+              value={formData.color} 
+              onChange={e => setFormData({...formData, color: e.target.value})} 
+              placeholder="e.g. Milky White" 
+            />
+          </div>
+
+          {/* STATUS MESSAGES */}
           {status.message && (
-            <div className={`p-4 rounded-2xl flex items-center gap-3 animate-pulse border-2 ${
+            <div className={`p-4 rounded-2xl flex items-center gap-3 animate-pulse border-2 shadow-sm ${
               status.type === 'success' 
                 ? 'bg-green-50 text-green-700 border-green-100' 
                 : 'bg-red-50 text-red-700 border-red-100'
@@ -205,21 +219,21 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
           <button 
             type="submit" 
             disabled={loading} 
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black text-xl shadow-xl shadow-blue-200 active:scale-[0.97] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed border-b-4 border-blue-800"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black text-xl shadow-xl shadow-blue-200 active:scale-[0.97] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-4 border-blue-800"
           >
             {loading ? (
               <Loader2 className="animate-spin" size={28} />
             ) : (
-              <><Save size={28} /> SAVE & ADD TO STOCK</>
+              <><Save size={28} /> REGISTER ROLL</>
             )}
           </button>
         </form>
       </div>
 
-      {/* QUICK HELP FOOTER */}
-      <div className="bg-slate-100 p-4 rounded-2xl border border-slate-200">
-        <p className="text-[10px] text-slate-500 font-bold text-center leading-relaxed">
-          TIP: Specs like Buyer, Quality, GSM, and Size are preserved after saving for faster entry of the next roll in the same batch.
+      {/* OPERATOR TIP */}
+      <div className="bg-slate-100 p-4 rounded-2xl border border-slate-200 text-center">
+        <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
+          TIP: Fabric specifications are saved between entries. Only weights clear after saving.
         </p>
       </div>
 
