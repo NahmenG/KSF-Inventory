@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 
 // Modular Components
@@ -30,8 +30,26 @@ export default function App() {
   const [materials, setMaterials] = useState([]);
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard'); 
   const [offlineCount, setOfflineCount] = useState(0);
+
+  // --- STARTUP LOGIC ---
+  const [activeTab, setActiveTab] = useState(() => {
+    const lastTab = localStorage.getItem('ksf_active_tab');
+    const lastVisit = localStorage.getItem('ksf_last_visit');
+    const now = Date.now();
+    
+    // If more than 30 minutes (1800000 ms) passed, reset to Dashboard
+    if (!lastVisit || (now - parseInt(lastVisit)) > 1800000) {
+      return 'dashboard';
+    }
+    return lastTab || 'dashboard';
+  });
+
+  // Update visit timestamp on every interaction/render
+  useEffect(() => {
+    localStorage.setItem('ksf_active_tab', activeTab);
+    localStorage.setItem('ksf_last_visit', Date.now().toString());
+  }, [activeTab]);
 
   const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -39,7 +57,6 @@ export default function App() {
       let allRolls = [];
       let from = 0;
       const step = 1000;
-      // Fetch all records loop
       while (true) {
         const { data, error } = await supabase.from('rolls').select('*').order('created_at', { ascending: false }).range(from, from + step - 1);
         if (error) throw error;
@@ -48,15 +65,10 @@ export default function App() {
         if (data.length < step) break;
         from += step;
       }
-      const offlineData = safeJSONParse('ksf_offline_rolls', []);
-      setOfflineCount(offlineData.length);
-      const serverIds = new Set(allRolls.map(r => r.product_id));
-      const uniqueOffline = offlineData.filter(r => !serverIds.has(r.product_id)).map(r => ({ ...r, isOffline: true }));
-      setRolls([...uniqueOffline, ...allRolls]);
-      
+      setRolls(allRolls);
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       setMaterials(mats || []);
-    } catch (e) { console.error("Fetch Error:", e); } finally { if (!isBackground) setLoading(false); }
+    } catch (e) { console.error(e); } finally { if (!isBackground) setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -67,16 +79,16 @@ export default function App() {
       setUser(session?.user ?? null);
       if (session) fetchData();
     });
-    const interval = setInterval(() => { if (user || isGuest) fetchData(true); }, 30000);
-    return () => { subscription.unsubscribe(); clearInterval(interval); };
-  }, [fetchData, user, isGuest]);
+    return () => subscription.unsubscribe();
+  }, [fetchData]);
 
   const handleMaterialUpdate = async (id, qty, isAdd) => {
     const mat = materials.find(m => m.id === id);
-    if (!mat || !qty) return;
+    if (!mat) return;
     const current = parseFloat(mat.stock_quantity) || 0;
-    const newVal = isAdd ? current + parseFloat(qty) : current - parseFloat(qty);
-    const { error } = await supabase.from('raw_materials').update({ stock_quantity: newVal, last_updated_by: deviceName }).eq('id', id);
+    const change = parseFloat(qty);
+    const newVal = isAdd ? current + change : current - change;
+    const { error } = await supabase.from('raw_materials').update({ stock_quantity: newVal }).eq('id', id);
     if (!error) fetchData(true);
   };
 
@@ -94,7 +106,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 pt-16 pb-20">
-      <Header deviceName={deviceName} offlineCount={offlineCount} onLogout={() => supabase.auth.signOut().then(() => window.location.reload())} onEditDeviceName={() => {const n = prompt("Device:"); if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)}}} onLogoClick={() => setActiveTab('dashboard')} />
+      <Header deviceName={deviceName} offlineCount={offlineCount} onLogout={() => {localStorage.clear(); window.location.reload();}} onEditDeviceName={() => {const n = prompt("Device:"); if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)}}} onLogoClick={() => setActiveTab('dashboard')} />
       <main className="max-w-7xl mx-auto p-4 md:p-6">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
