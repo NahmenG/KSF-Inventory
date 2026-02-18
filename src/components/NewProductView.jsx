@@ -7,7 +7,7 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
   const [status, setStatus] = useState({ type: '', message: '' });
 
   // 1. FULL FORM PERSISTENCE LOGIC
-  // This ensures that every keystroke is saved so refreshes don't lose data
+  // This restores every field from localStorage so data isn't lost on refresh or crash
   const [formData, setFormData] = useState(() => {
     const saved = localStorage.getItem('ksf_entry_form');
     if (saved) {
@@ -28,19 +28,19 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
     };
   });
 
-  // Sync form data to localStorage on every change
+  // Sync form data to local cache on every single change
   useEffect(() => {
     localStorage.setItem('ksf_entry_form', JSON.stringify(formData));
   }, [formData]);
 
-  // 2. SUBMISSION LOGIC
+  // 2. FORM SUBMISSION LOGIC
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setStatus({ type: '', message: '' });
 
     try {
-      // Create unique Roll ID
+      // Generate a unique KSF ID based on current timestamp
       const product_id = `KSF-${Date.now().toString().slice(-6)}`;
       
       const { data, error } = await supabase
@@ -60,14 +60,16 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
       setStatus({ type: 'success', message: `Roll ${product_id} registered successfully!` });
       onSaved();
       
-      // PRODUCTION EFFICIENCY: Clear weights for next roll, but KEEP buyer/specs
+      // LOGIC: Clear weights for the next roll but KEEP customer/specs 
+      // This allows the operator to add multiple rolls for the same order quickly
       setFormData(prev => ({ 
         ...prev, 
         net_weight: '', 
         gross_weight: '' 
       }));
       
-      if (window.confirm(`Roll ${product_id} saved. Print thermal label?`)) {
+      // Direct prompt for thermal printing
+      if (window.confirm(`Roll ${product_id} Saved. Print label now?`)) {
         onPrint(data[0]);
       }
     } catch (err) {
@@ -87,7 +89,7 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
         <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-6 text-white flex justify-between items-center shadow-lg">
           <div>
             <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
-              <Package size={28} /> New Roll Entry
+              <Package size={28} /> New Production Entry
             </h2>
             <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mt-1 opacity-80">
               Active Station: {deviceName}
@@ -110,7 +112,7 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
                 className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 transition-all outline-none shadow-inner" 
                 value={formData.customer_name} 
                 onChange={e => setFormData({...formData, customer_name: e.target.value})} 
-                placeholder="Buyer Name..." 
+                placeholder="Customer or Stock Name..." 
               />
             </div>
 
@@ -132,7 +134,7 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
               </div>
             </div>
 
-            {/* GSM Filter */}
+            {/* GSM Input */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">GSM Spec</label>
               <input 
@@ -145,7 +147,7 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
               />
             </div>
 
-            {/* Width Filter */}
+            {/* Width Input */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider flex items-center gap-1">
                 <Ruler size={10} /> Width (Inches)
@@ -230,10 +232,10 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
         </form>
       </div>
 
-      {/* OPERATOR TIP */}
+      {/* OPERATOR TIP FOOTER */}
       <div className="bg-slate-100 p-4 rounded-2xl border border-slate-200 text-center">
         <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
-          TIP: Fabric specifications are saved between entries. Only weights clear after saving.
+          TIP: Common specs are saved between entries. Only Net and Gross weights clear after saving.
         </p>
       </div>
 
