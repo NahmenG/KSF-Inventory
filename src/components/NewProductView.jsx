@@ -69,16 +69,62 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSaving) return;
-    setIsSaving(true);
+    
+    // Simple Validation
+    if (!formData.customer_name || !formData.net_weight) {
+      alert("Please fill in Customer and Weight before saving.");
+      return;
+    }
 
+    setIsSaving(true);
     const fullId = `${rollPrefix}-${rollSeq}`;
     const newRoll = { 
       ...formData, 
       product_id: fullId, 
       status: 'in_stock', 
-      device_name: deviceName,
+      device_name: deviceName || 'Unknown Device',
       created_at: new Date().toISOString() 
     };
+
+    try {
+      // 1. Check if online first
+      if (!navigator.onLine) {
+        throw new Error("You are offline. Please check your internet connection.");
+      }
+
+      const { data, error } = await supabase.from('rolls').insert([newRoll]);
+      
+      if (error) {
+        if (error.message.includes('duplicate key')) {
+          alert(`DUPLICATE ID: Roll ${fullId} already exists in the database!`);
+          setIsSaving(false);
+          return;
+        }
+        throw error;
+      }
+
+      // SUCCESS Logic
+      const nextSeq = String(Number(rollSeq) + 1);
+      setRollSeq(nextSeq);
+      localStorage.setItem('ksf_roll_sequence', nextSeq);
+      
+      onPrint(newRoll);
+      onSaved();
+      
+      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+
+    } catch (err) {
+      console.error("Save Error:", err);
+      // Detailed error handling for factory staff
+      if (err.message === 'Failed to fetch') {
+        alert("NETWORK ERROR: Cannot connect to Supabase. Please check your internet or VPN and try again.");
+      } else {
+        alert("DATABASE ERROR: " + err.message);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
     try {
       const { error } = await supabase.from('rolls').insert([newRoll]);
