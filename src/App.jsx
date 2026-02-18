@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
+
+// Modular Components
 import Header from './components/Header.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import DashboardView from './components/DashboardView.jsx';
@@ -19,7 +21,7 @@ const safeJSONParse = (key, fallback) => {
   } catch (e) { return fallback; }
 };
 
-function App() {
+export default function App() {
   const [user, setUser] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || '');
@@ -28,46 +30,33 @@ function App() {
   const [materials, setMaterials] = useState([]);
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ksf_active_tab') || 'dashboard');
+  const [activeTab, setActiveTab] = useState('dashboard'); 
   const [offlineCount, setOfflineCount] = useState(0);
 
- const fetchData = useCallback(async (isBackground = false) => {
+  const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     try {
       let allRolls = [];
       let from = 0;
       const step = 1000;
-      
-      // Loop to bypass Supabase 1000 record limit
+      // Fetch all records loop
       while (true) {
-        const { data, error } = await supabase
-          .from('rolls')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .range(from, from + step - 1);
-        
+        const { data, error } = await supabase.from('rolls').select('*').order('created_at', { ascending: false }).range(from, from + step - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;
-        
         allRolls = [...allRolls, ...data];
         if (data.length < step) break;
         from += step;
       }
-
       const offlineData = safeJSONParse('ksf_offline_rolls', []);
       setOfflineCount(offlineData.length);
       const serverIds = new Set(allRolls.map(r => r.product_id));
       const uniqueOffline = offlineData.filter(r => !serverIds.has(r.product_id)).map(r => ({ ...r, isOffline: true }));
-      
       setRolls([...uniqueOffline, ...allRolls]);
       
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       setMaterials(mats || []);
-    } catch (e) { 
-      console.error("Data Fetch Error:", e); 
-    } finally { 
-      if (!isBackground) setLoading(false); 
-    }
+    } catch (e) { console.error("Fetch Error:", e); } finally { if (!isBackground) setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -78,16 +67,16 @@ function App() {
       setUser(session?.user ?? null);
       if (session) fetchData();
     });
-    return () => subscription.unsubscribe();
-  }, [fetchData]);
+    const interval = setInterval(() => { if (user || isGuest) fetchData(true); }, 30000);
+    return () => { subscription.unsubscribe(); clearInterval(interval); };
+  }, [fetchData, user, isGuest]);
 
   const handleMaterialUpdate = async (id, qty, isAdd) => {
     const mat = materials.find(m => m.id === id);
-    if (!mat) return;
+    if (!mat || !qty) return;
     const current = parseFloat(mat.stock_quantity) || 0;
-    const change = parseFloat(qty);
-    const newVal = isAdd ? current + change : current - change;
-    const { error } = await supabase.from('raw_materials').update({ stock_quantity: newVal }).eq('id', id);
+    const newVal = isAdd ? current + parseFloat(qty) : current - parseFloat(qty);
+    const { error } = await supabase.from('raw_materials').update({ stock_quantity: newVal, last_updated_by: deviceName }).eq('id', id);
     if (!error) fetchData(true);
   };
 
@@ -105,42 +94,18 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 pt-16 pb-20">
-      <Header 
-        deviceName={deviceName} 
-        offlineCount={offlineCount} 
-        onLogout={() => supabase.auth.signOut().then(() => window.location.reload())}
-        onEditDeviceName={() => {const n = prompt("Device:"); if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)}}}
-        onLogoClick={() => setActiveTab('dashboard')}
-      />
-      
+      <Header deviceName={deviceName} offlineCount={offlineCount} onLogout={() => supabase.auth.signOut().then(() => window.location.reload())} onEditDeviceName={() => {const n = prompt("Device:"); if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)}}} onLogoClick={() => setActiveTab('dashboard')} />
       <main className="max-w-7xl mx-auto p-4 md:p-6">
-        {loading && activeTab !== 'dashboard' ? (
-          <div className="flex justify-center p-12 text-gray-400 italic">Connecting to factory...</div>
-        ) : (
-          <>
-            {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
-            {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
-            {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll(r)} />}
-            {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
-            {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll(r)} />}
-            {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={handleMaterialUpdate} />}
-          </>
-        )}
+        {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
+        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
+        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
+        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
+        {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} />}
+        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={handleMaterialUpdate} />}
       </main>
-
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
-
-      {editRoll && (
-        <EditModal 
-          roll={editRoll} 
-          onClose={() => setEditRoll(null)} 
-          onSave={() => { setEditRoll(null); fetchData(true); }} 
-        />
-      )}
-
+      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={() => { setEditRoll(null); fetchData(true); }} />}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
     </div>
   );
 }
-
-export default App; // THIS WAS MISSING
