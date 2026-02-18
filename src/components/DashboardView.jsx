@@ -6,18 +6,15 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   const todayDate = new Date();
   const todayStr = todayDate.toLocaleDateString();
   
-  // 1. Velocity Logic
   const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === todayStr);
   const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === todayStr);
 
-  // 2. Recent Activity (5 most recent entries)
   const recentActivity = useMemo(() => {
     return [...rolls]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, 5);
   }, [rolls]);
 
-  // 3. Aged Stock (In stock > 30 Days)
   const agedStock = useMemo(() => {
     return inStock.filter(r => {
       const createdDate = new Date(r.created_at);
@@ -33,7 +30,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   return (
     <div className="space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
-      {/* SECTION 1: TODAY'S VELOCITY */}
       <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4 opacity-5 text-blue-600"><TrendingUp size={80} /></div>
         <h3 className="font-black text-gray-400 text-[10px] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
@@ -51,7 +47,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 2: RECENT ACTIVITY */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
           <h3 className="font-black text-gray-400 text-[10px] uppercase tracking-[0.2em] flex items-center gap-2">
@@ -83,12 +78,11 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 3: AGED STOCK ALERT - FIXED BUILD ERROR HERE */}
+      {/* FIXED: Removed the > symbol entirely */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-red-50/30 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
-          {/* Note: using &gt; instead of > to prevent Vite build errors */}
-          <h3 className="font-black text-gray-400 text-[10px] uppercase tracking-[0.2em]">Aged Stock (&gt; 30 Days)</h3>
+          <h3 className="font-black text-gray-400 text-[10px] uppercase tracking-[0.2em]">Aged Stock (Over 30 Days)</h3>
         </div>
         <div className="p-2">
           {agedStock.length > 0 ? (
@@ -109,7 +103,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 4: TOTALS */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 text-center">
           <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">In Stock</div>
