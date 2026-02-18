@@ -26,22 +26,53 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   const todayDate = new Date();
   const todayStr = todayDate.toLocaleDateString();
   
-  // 1. TIMELINE LOGIC: Start from 1st of the month to Today
-  const timelineData = useMemo(() => {
+  // 1. MONTHLY PERFORMANCE: Start from 1st with Cumulative Legend
+  const { timelineData, totalProdMonth, totalDispMonth } = useMemo(() => {
     const data = [];
+    let prodSum = 0;
+    let dispSum = 0;
     const startOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
     
     for (let d = new Date(startOfMonth); d <= todayDate; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toLocaleDateString();
+      const dayProduced = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === dateStr);
+      const dayDispatched = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === dateStr);
+      
+      const dayProdWt = dayProduced.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
+      const dayDispWt = dayDispatched.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
+      
+      prodSum += dayProdWt;
+      dispSum += dayDispWt;
+
       data.push({
-        date: d.getDate().toString(), // Show just the day number to save space as it condenses
-        fullDate: dateStr,
-        Produced: rolls.filter(r => new Date(r.created_at).toLocaleDateString() === dateStr).length,
-        Dispatched: rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === dateStr).length
+        date: d.getDate().toString(),
+        Produced: dayProduced.length,
+        Dispatched: dayDispatched.length
       });
     }
-    return data;
+    return { 
+      timelineData: data, 
+      totalProdMonth: (prodSum / 1000).toFixed(2), 
+      totalDispMonth: (dispSum / 1000).toFixed(2) 
+    };
   }, [rolls, todayDate]);
+
+  // 2. PIE CHART: Quality Weight in Tons
+  const qualityChartData = useMemo(() => {
+    const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
+    return Object.keys(c).map(k => ({ 
+      name: `${k} (${(c[k] / 1000).toFixed(2)} Ton)`, 
+      value: parseFloat(c[k].toFixed(1)) 
+    }));
+  }, [inStock]);
+
+  // 3. COLOR CHART: Abbreviations and logic to show all labels
+  const colorChartData = useMemo(() => {
+    const c = {}; inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
+    return Object.keys(c)
+      .map(k => ({ name: abbreviateColor(k), weight: parseFloat(c[k].toFixed(1)) }))
+      .sort((a, b) => b.weight - a.weight);
+  }, [inStock]);
 
   const recentActivity = useMemo(() => {
     return [...rolls]
@@ -55,41 +86,16 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         let activity = "Produced";
         let time = r.created_at;
         let icon = <PlusCircle size={14} className="text-green-500" />;
-
         if (r.status === 'dispatched') {
-          activity = "Dispatched";
-          time = r.dispatched_at;
-          icon = <Send size={14} className="text-blue-500" />;
+          activity = "Dispatched"; time = r.dispatched_at; icon = <Send size={14} className="text-blue-500" />;
         } else if (r.status === 'in_stock' && r.dispatched_at) {
-          activity = "Returned";
-          time = r.updated_at;
-          icon = <RotateCcw size={14} className="text-purple-500" />;
+          activity = "Returned"; time = r.updated_at; icon = <RotateCcw size={14} className="text-purple-500" />;
         } else if (r.updated_at && r.updated_at !== r.created_at) {
-          activity = "Edited";
-          time = r.updated_at;
-          icon = <Edit3 size={14} className="text-orange-500" />;
+          activity = "Edited"; time = r.updated_at; icon = <Edit3 size={14} className="text-orange-500" />;
         }
-
         return { ...r, activityType: activity, activityTime: time || r.created_at, activityIcon: icon };
       });
   }, [rolls]);
-
-  const qualityChartData = useMemo(() => {
-    const c = {}; 
-    inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
-    return Object.keys(c).map(k => ({ 
-      name: `${k} (${(c[k] / 1000).toFixed(2)} Ton)`, 
-      value: parseFloat(c[k].toFixed(1)) 
-    }));
-  }, [inStock]);
-
-  const colorChartData = useMemo(() => {
-    const c = {}; 
-    inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
-    return Object.keys(c)
-      .map(k => ({ name: abbreviateColor(k), weight: parseFloat(c[k].toFixed(1)) }))
-      .sort((a, b) => b.weight - a.weight);
-  }, [inStock]);
 
   const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === todayStr);
   const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === todayStr);
@@ -143,10 +149,10 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* PRODUCTION VS DISPATCH TIMELINE (RESTORED & DYNAMIC) */}
+      {/* PRODUCTION VS DISPATCH TIMELINE */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2">
-          <BarChart3 size={14} className="text-blue-600" /> Monthly Performance (1st to Today)
+          <BarChart3 size={14} className="text-blue-600" /> Performance Log (1st to Today)
         </h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -154,8 +160,13 @@ const DashboardView = React.memo(({ rolls, materials }) => {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="date" fontSize={9} tick={{fontWeight: 'bold'}} />
               <YAxis fontSize={9} />
-              <Tooltip labelFormatter={(value, name) => `Day ${value}`} />
-              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
+              <Tooltip />
+              <Legend 
+                verticalAlign="top" 
+                align="right" 
+                wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }}
+                formatter={(value) => value === 'Produced' ? `Produced (${totalProdMonth} Ton)` : `Dispatched (${totalDispMonth} Ton)`}
+              />
               <Bar dataKey="Produced" fill="#22c55e" radius={[2, 2, 0, 0]} />
               <Bar dataKey="Dispatched" fill="#3b82f6" radius={[2, 2, 0, 0]} />
             </BarChart>
@@ -179,18 +190,58 @@ const DashboardView = React.memo(({ rolls, materials }) => {
                     <span className="text-[9px] font-black uppercase text-gray-600">{r.activityType}</span>
                   </div>
                 </div>
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
-                  Device: {r.device_name || 'System'}
-                </div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Device: {r.device_name || 'System'}</div>
               </div>
               <div className="text-right">
                 <div className="font-black text-gray-900 text-sm mb-1">{r.net_weight} kg</div>
-                <div className="text-[10px] font-bold text-blue-500">
-                  {new Date(r.activityTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
+                <div className="text-[10px] font-bold text-blue-500">{new Date(r.activityTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* QUALITY BREAKDOWN PIE CHART */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2"><PieIcon size={14}/> Quality Breakdown</h3>
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={qualityChartData} cx="50%" cy="40%" innerRadius={50} outerRadius={75} paddingAngle={5} dataKey="value">
+                {qualityChartData.map((e, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              </Pie>
+              <Tooltip />
+              <Legend 
+                layout="horizontal" 
+                verticalAlign="bottom" 
+                align="center" 
+                wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '20px' }} 
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* COLOR ANALYSIS BAR CHART */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2"><BarChart3 size={14}/> Color Analysis (Kg)</h3>
+        <div className="h-96">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={colorChartData} layout="vertical" margin={{ left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+              <XAxis type="number" fontSize={9} />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                width={80} 
+                fontSize={9} 
+                interval={0} 
+                tick={{fill: '#4b5563', fontWeight: 'bold'}} 
+              />
+              <Tooltip />
+              <Bar dataKey="weight" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -210,42 +261,11 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* CHARTS */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2"><PieIcon size={14}/> Quality Breakdown</h3>
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={qualityChartData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={5} dataKey="value">
-                {qualityChartData.map((e, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-              </Pie>
-              <Tooltip />
-              <Legend verticalAlign="bottom" align="center" layout="vertical" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold', paddingTop: '10px' }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2"><BarChart3 size={14}/> Color Analysis (Kg)</h3>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={colorChartData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-              <XAxis type="number" fontSize={9} />
-              <YAxis dataKey="name" type="category" width={70} fontSize={9} tick={{fill: '#4b5563', fontWeight: 'bold'}} />
-              <Tooltip />
-              <Bar dataKey="weight" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
       {/* MATERIAL ALERT */}
       {sortedLowMaterials.length > 0 && (
         <div className="bg-white p-4 rounded-xl border-l-4 border-red-500 shadow-sm border border-gray-100">
           <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-[10px] uppercase tracking-widest">
-            <AlertCircle size={16} /> Low Material Alert
+            <AlertCircle size={16} /> Material Alert
           </h3>
           <div className="space-y-2">
             {sortedLowMaterials.map(m => (
