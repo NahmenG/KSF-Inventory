@@ -81,7 +81,6 @@ class ErrorBoundary extends React.Component {
       return (
         <div className="p-6 bg-red-50 text-red-900 min-h-screen flex flex-col items-center justify-center text-center">
           <h1 className="text-2xl font-bold mb-2">⚠️ System Reset Required</h1>
-          <p className="mb-6">Factory logic conflict detected. Resetting will clear temporary cache.</p>
           <button
             onClick={() => {
               localStorage.clear();
@@ -120,7 +119,7 @@ const COLORS = [
   'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'
 ];
 
-// REORDERED CATEGORIES AS REQUESTED
+// REORDERED CATEGORIES
 const MAT_CATEGORIES = ['Polymers', 'Filler', 'Additives', 'Colour', 'Others'];
 
 const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -251,20 +250,36 @@ const generateChallanExcel = (rolls, details) => {
 
 const Header = React.memo(({ isGuest, deviceName, onLogout, onEditDeviceName, onOpenSettings, onManualSync, isSyncing, offlineCount, onLogoClick }) => (
   <header className="bg-white border-b border-gray-200 fixed top-0 w-full z-50 h-16 shadow-sm px-4 flex justify-between items-center print:hidden">
-    <div onClick={onLogoClick} className="flex items-center pl-1 cursor-pointer hover:opacity-80 transition-opacity active:scale-95">
+    <div
+      onClick={onLogoClick}
+      className="flex items-center pl-1 cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
+    >
       <img src="/logo.png" alt="KSF" className="h-10 w-auto object-contain" />
     </div>
     <div className="flex items-center gap-2 text-sm">
       {!isGuest && (
         <>
-          <button onClick={onManualSync} disabled={isSyncing} className={`p-2 rounded-full relative ${isSyncing ? 'text-blue-500 bg-blue-50' : (offlineCount > 0 ? 'text-red-500 bg-red-50 animate-pulse' : 'text-gray-500 hover:bg-gray-100')}`}>
+          <button
+            onClick={onManualSync}
+            disabled={isSyncing}
+            className={`p-2 rounded-full relative ${isSyncing ? 'text-blue-500 bg-blue-50' : (offlineCount > 0 ? 'text-red-500 bg-red-50 animate-pulse' : 'text-gray-500 hover:bg-gray-100')}`}
+          >
             <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
-            {offlineCount > 0 && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{offlineCount}</span>}
+            {offlineCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                {offlineCount}
+              </span>
+            )}
           </button>
-          <div onClick={onEditDeviceName} className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm">
+          <div
+            onClick={onEditDeviceName}
+            className="font-bold cursor-pointer bg-gray-100 px-3 py-1 rounded-full text-xs md:text-sm"
+          >
             {deviceName || 'Device'} ✎
           </div>
-          <button onClick={onOpenSettings} className="text-gray-600 hover:bg-gray-100 p-2 rounded-full"><Settings size={20} /></button>
+          <button onClick={onOpenSettings} className="text-gray-600 hover:bg-gray-100 p-2 rounded-full">
+            <Settings size={20} />
+          </button>
         </>
       )}
       <button onClick={onLogout} className="text-red-600 font-bold hover:bg-red-50 px-2 py-1 rounded">
@@ -286,7 +301,11 @@ const BottomNav = React.memo(({ activeTab, setTab, isGuest }) => {
   return (
     <nav className="bg-white border-t border-gray-200 fixed bottom-0 w-full z-50 h-16 flex justify-around items-center pb-1 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] print:hidden">
       {tabs.map(tab => (
-        <button key={tab.id} onClick={() => setTab(tab.id)} className={`flex flex-col items-center justify-center w-full h-full gap-1 ${activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}`}>
+        <button
+          key={tab.id}
+          onClick={() => setTab(tab.id)}
+          className={`flex flex-col items-center justify-center w-full h-full gap-1 ${activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}`}
+        >
           <tab.icon size={22} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
           <span className="text-[10px] font-bold">{tab.label}</span>
         </button>
@@ -538,9 +557,19 @@ const LabelPrint = ({ data, onClose }) => {
 
 const DashboardView = React.memo(({ rolls, materials }) => {
   const inStock = rolls.filter(r => r.status === 'in_stock');
+  const totalWeight = inStock.reduce((acc, r) => acc + (parseFloat(r.net_weight) || 0), 0);
   const today = new Date().toLocaleDateString();
   const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === today).length;
   const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === today).length;
+
+  const agedStockBreakdown = useMemo(() => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const aged = inStock.filter(r => new Date(r.created_at) < thirtyDaysAgo);
+    const breakdown = {};
+    aged.forEach(r => breakdown[r.quality] = (breakdown[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
+    return Object.keys(breakdown).map(k => ({ quality: k, weight: breakdown[k].toFixed(1) }));
+  }, [inStock]);
 
   const qualityData = useMemo(() => {
     const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
@@ -576,13 +605,13 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-xl shadow border border-gray-100 flex flex-col justify-center">
+        <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
           <div className="text-gray-500 text-xs font-bold uppercase">Stock Count</div>
           <div className="text-3xl font-bold text-blue-600">{inStock.length}</div>
         </div>
-        <div className="bg-white p-4 rounded-xl shadow border border-gray-100 flex flex-col justify-center">
+        <div className="bg-white p-4 rounded-xl shadow border border-gray-100">
           <div className="text-gray-500 text-xs font-bold uppercase">Stock Weight</div>
-          <div className="text-2xl font-bold text-green-600">{formatCurrency(inStock.reduce((s,r) => s + (parseFloat(r.net_weight) || 0), 0))} <span className="text-sm text-gray-400 font-normal">kg</span></div>
+          <div className="text-2xl font-bold text-green-600">{formatCurrency(totalWeight)} <span className="text-sm text-gray-400 font-normal">kg</span></div>
         </div>
       </div>
 
@@ -618,6 +647,23 @@ const DashboardView = React.memo(({ rolls, materials }) => {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* AGED STOCK ALERT (TOP) */}
+      {agedStockBreakdown.length > 0 && (
+        <div className="bg-orange-50 p-4 rounded-xl border-l-4 border-orange-500 shadow-sm border border-orange-100">
+          <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2">
+            <Clock size={20} /> Aged Stock Alert ({" > "} 30 Days)
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {agedStockBreakdown.map((item, i) => (
+              <div key={i} className="bg-white p-2 rounded border border-orange-100 text-xs shadow-sm">
+                <div className="text-gray-400 font-bold uppercase">{item.quality}</div>
+                <div className="text-lg font-black text-orange-700">{item.weight} kg</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {lowStockMaterials.length > 0 && (
         <div className="bg-red-50 p-4 rounded-xl border-l-4 border-red-500 shadow-sm border border-red-100">
@@ -686,16 +732,16 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, 
     <div className="bg-white p-6 rounded-lg shadow border mt-2 pb-24 border-gray-100">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-lg font-bold flex items-center gap-2"><Package className="text-blue-600" /> New Roll Entry</h2>
-        <button onClick={() => setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' })} className="text-xs font-bold text-red-500 border border-red-100 bg-red-50 px-2 py-1 rounded transition-colors hover:bg-red-100">Clear Form</button>
+        <button onClick={() => setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' })} className="text-xs font-bold text-red-500 border border-red-100 bg-red-50 px-2 py-1 rounded">Clear Form</button>
       </div>
       <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <label className="text-xs font-bold text-blue-600 uppercase mb-1 flex items-center gap-1"><Hash size={12} /> Roll ID</label>
+          <label className="text-xs font-bold text-blue-600 uppercase mb-1"><Hash size={12} /> Roll ID</label>
           <div className="flex gap-2 w-full">
-            <input type="text" className="w-[35%] border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 focus:outline-none uppercase" value={rollPrefix} onChange={(e) => setRollPrefix(e.target.value.toUpperCase())} />
+            <input type="text" className="w-[35%] border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 outline-none uppercase" value={rollPrefix} onChange={(e) => setRollPrefix(e.target.value.toUpperCase())} />
             <div className="flex-1 flex items-center gap-2">
               <span className="text-xl font-bold text-gray-400">-</span>
-              <input type="number" required className="w-full border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 focus:outline-none" value={rollSeq} onChange={(e) => setRollSeq(e.target.value)} />
+              <input type="number" required className="w-full border-2 border-blue-100 bg-blue-50 p-3 rounded text-lg font-bold text-blue-900 outline-none" value={rollSeq} onChange={(e) => setRollSeq(e.target.value)} />
             </div>
           </div>
         </div>
@@ -706,7 +752,7 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, 
             <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-b-lg shadow-2xl max-h-48 overflow-y-auto mt-1 border-t-0">
               {filteredSuggestions.map((name, i) => (
                 <div key={i} onClick={() => { setFormData({ ...formData, customer_name: name }); setShowSuggestions(false); }} className="p-3 border-b hover:bg-blue-50 cursor-pointer text-sm font-semibold text-gray-700 transition-colors flex items-center gap-2">
-                  <Clock size={14} className="text-gray-300" /> {name}
+                  <Clock size={14} className="text-gray-400" /> {name}
                 </div>
               ))}
             </div>
@@ -729,7 +775,7 @@ const NewProductView = React.memo(({ formData, setFormData, onSubmit, isSaving, 
   );
 });
 
-// --- STOCK VIEW (FULL LOGIC) ---
+// --- STOCK VIEW ---
 const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [textSearch, setTextSearch] = useState(() => localStorage.getItem('ksf_filter_text') || '');
@@ -827,7 +873,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
               <div className="font-semibold text-gray-800">{r.customer_name}</div>
               <div className="text-xs text-gray-500 mt-1 inline-flex gap-2 flex-wrap"><span className="bg-gray-100 px-2 py-0.5 rounded font-medium">{r.quality}</span><span className="bg-gray-100 px-2 py-0.5 rounded font-medium">{r.color}</span><span className="bg-gray-100 px-2 py-0.5 rounded font-medium">{r.gsm} GSM</span></div>
             </div>
-            <div className="text-right flex flex-col items-end">
+            <div className="text-right">
               <div className="font-bold text-xl text-gray-900">{r.net_weight} kg</div>
               <button onClick={(e) => { e.stopPropagation(); onPrint(r); }} className="mt-2 bg-blue-50 text-blue-600 p-2 rounded-full hover:bg-blue-100 active:scale-90 transition-all"><Printer size={16} /></button>
             </div>
@@ -838,7 +884,7 @@ const StockView = React.memo(({ rolls = [], onPrint, onSelectRoll }) => {
   );
 });
 
-// --- DISPATCH VIEW (VERIFICATION POPUP RESTORED) ---
+// --- DISPATCH VIEW (VERIFICATION MODAL Logic RESTORED) ---
 const DispatchView = React.memo(({ rolls, deviceName, onDispatch, onUndoDispatch }) => {
   const [scanId, setScanId] = useState('');
   const [reviewData, setReviewData] = useState(null);
@@ -858,7 +904,7 @@ const DispatchView = React.memo(({ rolls, deviceName, onDispatch, onUndoDispatch
     const roll = (rolls || []).find(r => r.product_id === query && r.status === 'in_stock');
     if (roll) {
       if (sessionList.some(r => r.id === roll.id)) { alert("Already in list!"); setScanId(''); return; }
-      setReviewData({ ...roll }); // Triggers the Edit Popup
+      setReviewData({ ...roll }); // Triggers the verification popup
     } else { alert('Roll not found or already dispatched.'); }
     setScanId('');
   };
@@ -945,10 +991,10 @@ const HistoryView = React.memo(({ rolls, onExport, onSelectRoll, onOpenReports }
       <div className="flex justify-between items-center mb-4"><h2 className="font-bold text-xl">History</h2><div className="flex gap-2"><button onClick={onOpenReports} className="bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow hover:bg-blue-700 transition-colors"><FileText size={16} /> Reports</button><button onClick={() => onExport(history)} className="bg-green-100 text-green-700 px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-1 hover:bg-green-200 transition-colors shadow-sm"><Download size={16} /> List</button></div></div>
       <div className="sticky top-16 z-20 bg-slate-50 pt-1 pb-2">
         <div className="bg-white p-4 rounded-xl shadow-sm mb-4 space-y-3 border border-gray-100">
-          <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center focus-within:ring-2 focus-within:ring-blue-100 transition-all"><Search className="text-gray-400" size={20} /><input className="w-full outline-none bg-transparent text-sm" placeholder="Search customer or ID..." value={searchText} onChange={e => setSearchText(e.target.value)} />{searchText && <button onClick={() => setSearchText('')}><X size={16} className="text-gray-400" /></button>}</div>
+          <div className="flex gap-2 border p-2 rounded-lg bg-gray-50 items-center focus-within:ring-2 focus-within:ring-blue-100 transition-all"><Search className="text-gray-400" size={20} /><input className="w-full outline-none bg-transparent text-sm" placeholder="Search customer or Roll ID..." value={searchText} onChange={e => setSearchText(e.target.value)} />{searchText && <button onClick={() => setSearchText('')}><X size={16} className="text-gray-400" /></button>}</div>
           <div className="grid grid-cols-2 gap-2">
-            <div><label className="text-[10px] font-bold text-gray-400 uppercase">From</label><input type="date" className="w-full border p-2 rounded-lg text-sm outline-none" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
-            <div><label className="text-[10px] font-bold text-gray-400 uppercase">To</label><input type="date" className="w-full border p-2 rounded-lg text-sm outline-none" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
+            <div><label className="text-[10px] font-bold text-gray-400 uppercase">From</label><input type="date" className="w-full border p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
+            <div><label className="text-[10px] font-bold text-gray-400 uppercase">To</label><input type="date" className="w-full border p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
           </div>
         </div>
         <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center mb-3 text-sm border border-gray-200 shadow-inner">
@@ -982,15 +1028,16 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit,
 
   return (
     <div className="pb-24 flex flex-col h-full px-1">
-      <div className="bg-white p-2 mb-2 rounded-xl shadow-sm flex items-center gap-2 border border-gray-100 focus-within:ring-2 focus-within:ring-blue-100 transition-all"><Search size={18} className="text-gray-400" /><input className="w-full outline-none text-sm bg-transparent" placeholder="Search materials..." value={textSearch} onChange={e => setTextSearch(e.target.value)} /></div>
+      <div className="bg-white p-2 mb-2 rounded-xl shadow-sm flex items-center gap-2 border border-gray-100 focus-within:ring-2 focus-within:ring-blue-100 transition-all"><Search size={18} className="text-gray-400" /><input className="w-full outline-none text-sm bg-transparent" placeholder="Search material stocks..." value={textSearch} onChange={e => setTextSearch(e.target.value)} /></div>
       <div className="flex overflow-x-auto gap-2 pb-4 mb-2 hide-scrollbar">{orderedCategories.map(cat => (<button key={cat} onClick={() => setActiveCat(cat)} className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold transition-all border ${activeCat === cat ? 'bg-blue-600 text-white border-blue-600 shadow-md active:scale-95' : 'bg-white text-gray-500 border-gray-100 hover:bg-gray-50'}`}>{cat}</button>))}</div>
       <div className="flex-1 overflow-y-auto space-y-3">
-        {filtered.length === 0 ? <div className="text-center text-gray-400 mt-10 italic">No materials found...</div> : filtered.map(m => {
+        {filtered.length === 0 ? <div className="text-center text-gray-400 mt-10 italic">No inventory matching category...</div> : filtered.map(m => {
           const isLow = m.min_level > 0 && m.stock_quantity < m.min_level;
           return (
             <div key={m.id} className={`bg-white p-4 rounded-xl shadow-sm border flex justify-between items-center transition-all ${isLow ? 'border-l-4 border-l-red-500' : 'border-gray-100 hover:border-blue-200'}`}>
               <div><div className="font-bold text-lg text-gray-800 flex items-center gap-2">{m.name}{isLow && <AlertCircle size={16} className="text-red-500 animate-pulse" />}</div><div className="text-[10px] text-gray-400 uppercase font-bold tracking-tight">{m.category || 'Others'}{m.min_level > 0 && ` • Alert: < ${m.min_level} kg`}</div></div>
               <div className="flex items-center gap-3">
+                {/* SMALL FONT QUANTITY */}
                 <span className={`text-lg font-black ${isLow ? 'text-red-600' : 'text-blue-600'}`}>{m.stock_quantity} kg</span>
                 {!isGuest && (
                   <div className="flex flex-col gap-1 items-end">
@@ -998,7 +1045,7 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit,
                       <button onClick={() => handleUpdate(m.id, 'add')} className="bg-green-100 text-green-700 w-8 h-8 rounded-lg flex items-center justify-center font-bold hover:bg-green-200 transition-colors">+</button>
                       <button onClick={() => handleUpdate(m.id, 'remove')} className="bg-red-100 text-red-700 w-8 h-8 rounded-lg flex items-center justify-center font-bold hover:bg-red-200 transition-colors">-</button>
                     </div>
-                    <div className="flex gap-3 mt-1 px-1"><button onClick={() => setEditingMaterial(m)} className="text-gray-300 hover:text-blue-500 transition-colors"><Edit3 size={14} /></button><button onClick={() => { if(confirm("Delete this?")) supabase.from('raw_materials').delete().eq('id', m.id); }} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14} /></button></div>
+                    <div className="flex gap-3 mt-1 px-1"><button onClick={() => setEditingMaterial(m)} className="text-gray-300 hover:text-blue-500 transition-colors"><Edit3 size={14} /></button><button onClick={() => { if(confirm("Delete this material?")) supabase.from('raw_materials').delete().eq('id', m.id); }} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14} /></button></div>
                   </div>
                 )}
               </div>
@@ -1013,7 +1060,7 @@ const MaterialsView = React.memo(({ materials, isGuest, onUpdate, onAdd, onEdit,
   );
 });
 
-// --- MAIN APP ---
+// --- MAIN CONTAINER ---
 const MainApp = () => {
   const [user, setUser] = useState(null); const [isGuest, setIsGuest] = useState(false); const [deviceName, setDeviceName] = useState(localStorage.getItem('ksf_device_name') || ''); const [loading, setLoading] = useState(false); const [rolls, setRolls] = useState([]); const [materials, setMaterials] = useState([]); const [printData, setPrintData] = useState(null); const [editRoll, setEditRoll] = useState(null); const [isDeviceModalOpen, setDeviceModalOpen] = useState(false); const [isSettingsOpen, setSettingsOpen] = useState(false); const [isReportsOpen, setReportsOpen] = useState(false); const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ksf_active_tab') || 'dashboard'); const [formData, setFormData] = useState(() => safeJSONParse('ksf_form_data', { customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' })); const [isSaving, setIsSaving] = useState(false); const [isSyncing, setIsSyncing] = useState(false); const [offlineCount, setOfflineCount] = useState(0);
 
@@ -1079,7 +1126,7 @@ const MainApp = () => {
 
   if (!user && !isGuest) {
     return (
-      <div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6 tracking-tighter">
+      <div className="h-[100dvh] flex items-center justify-center bg-slate-50 p-6">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center border border-gray-100">
           <img src="/logo.png" className="h-24 w-auto mx-auto mb-8 object-contain" alt="KSF" />
           <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold mb-3 shadow-lg active:scale-95 transition-all">Login with Google</button>
@@ -1094,7 +1141,7 @@ const MainApp = () => {
       <Header isGuest={isGuest} deviceName={deviceName} onLogout={() => supabase.auth.signOut().then(() => window.location.reload())} onEditDeviceName={() => setDeviceModalOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManualSync={syncOffline} isSyncing={isSyncing} offlineCount={offlineCount} onLogoClick={() => setActiveTab('dashboard')} />
       <main className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
         {loading && activeTab !== 'dashboard' ? (
-          <div className="flex justify-center p-12 text-gray-400 italic">Accessing data warehouse...</div>
+          <div className="flex justify-center p-12 text-gray-400 italic">Accessing database...</div>
         ) : (
           <>
             {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
@@ -1102,7 +1149,7 @@ const MainApp = () => {
             {activeTab === 'stock' && <StockView rolls={rolls || []} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
             {activeTab === 'dispatch' && <DispatchView rolls={rolls || []} deviceName={deviceName} onDispatch={d => DataService.updateRoll(d.id, { ...d, status: 'dispatched', dispatched_at: new Date() }, deviceName).then(() => fetchData(true))} onUndoDispatch={id => DataService.updateRoll(id, { status: 'in_stock', dispatched_at: null }, deviceName).then(() => fetchData(true))} />}
             {activeTab === 'history' && <HistoryView rolls={rolls || []} onSelectRoll={setEditRoll} onExport={d => { const ws = XLSX.utils.json_to_sheet(d); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "History"); XLSX.writeFile(wb, "History.xlsx"); }} onOpenReports={() => setReportsOpen(true)} />}
-            {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={(id, qty, isAdd) => DataService.updateRawMaterial(id, qty, isAdd, deviceName).then(() => fetchData())} onAdd={(n, c, l) => supabase.from('raw_materials').insert([{ name: n, category: c, min_level: l, stock_quantity: 0 }]).then(() => fetchData())} onEdit={(id, u) => supabase.from('raw_materials').update(u).eq('id', id).then(() => fetchData())} onDelete={id => supabase.from('raw_materials').delete().eq('id', id).then(() => fetchData())} />}
+            {activeTab === 'materials' && <MaterialsView materials={materials || []} isGuest={isGuest} onUpdate={(id, q, a) => DataService.updateRawMaterial(id, q, a, deviceName).then(() => fetchData())} onAdd={(n, c, l) => supabase.from('raw_materials').insert([{ name: n, category: c, min_level: l, stock_quantity: 0 }]).then(() => fetchData())} onEdit={(id, u) => supabase.from('raw_materials').update(u).eq('id', id).then(() => fetchData())} onDelete={id => supabase.from('raw_materials').delete().eq('id', id).then(() => fetchData())} />}
           </>
         )}
       </main>
