@@ -7,7 +7,6 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
   const [status, setStatus] = useState({ type: '', message: '' });
 
   // 1. FULL FORM PERSISTENCE LOGIC
-  // This restores every field from localStorage so data isn't lost on refresh or crash
   const [formData, setFormData] = useState(() => {
     const saved = localStorage.getItem('ksf_entry_form');
     if (saved) {
@@ -28,7 +27,6 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
     };
   });
 
-  // Sync form data to local cache on every single change
   useEffect(() => {
     localStorage.setItem('ksf_entry_form', JSON.stringify(formData));
   }, [formData]);
@@ -40,7 +38,6 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
     setStatus({ type: '', message: '' });
 
     try {
-      // Generate a unique KSF ID based on current timestamp
       const product_id = `KSF-${Date.now().toString().slice(-6)}`;
       
       const { data, error } = await supabase
@@ -57,19 +54,17 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
 
       if (error) throw error;
 
-      setStatus({ type: 'success', message: `Roll ${product_id} registered successfully!` });
+      setStatus({ type: 'success', message: `Roll ${product_id} added successfully!` });
       onSaved();
       
-      // LOGIC: Clear weights for the next roll but KEEP customer/specs 
-      // This allows the operator to add multiple rolls for the same order quickly
+      // Speed entry logic: Keep specs, clear weights
       setFormData(prev => ({ 
         ...prev, 
         net_weight: '', 
         gross_weight: '' 
       }));
       
-      // Direct prompt for thermal printing
-      if (window.confirm(`Roll ${product_id} Saved. Print label now?`)) {
+      if (window.confirm("Print Label for this roll?")) {
         onPrint(data[0]);
       }
     } catch (err) {
@@ -81,47 +76,36 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      
-      {/* MAIN ENTRY CARD */}
-      <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
         
-        {/* HEADER SECTION */}
-        <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-6 text-white flex justify-between items-center shadow-lg">
+        {/* ORIGINAL COMPACT HEADER */}
+        <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
-              <Package size={28} /> New Production Entry
-            </h2>
-            <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mt-1 opacity-80">
-              Active Station: {deviceName}
-            </p>
+            <h2 className="text-2xl font-black tracking-tight">New Production Entry</h2>
+            <p className="text-blue-100 text-xs font-bold uppercase tracking-widest mt-1">Device: {deviceName}</p>
           </div>
-          <div className="bg-white/10 p-3 rounded-2xl backdrop-blur-md border border-white/20">
-            <Plus className="text-white" size={32} />
-          </div>
+          <Plus className="opacity-20" size={40} />
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             
-            {/* Buyer Name Input */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">Buyer Name / Stock</label>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Buyer Name / Stock</label>
               <input 
                 required 
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 transition-all outline-none shadow-inner" 
+                className="w-full bg-gray-50 border-gray-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-blue-100 transition-all outline-none" 
                 value={formData.customer_name} 
                 onChange={e => setFormData({...formData, customer_name: e.target.value})} 
-                placeholder="Customer or Stock Name..." 
+                placeholder="e.g. Reliance Industries" 
               />
             </div>
 
-            {/* Quality Dropdown */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">Fabric Quality</label>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Quality Type</label>
               <div className="relative">
                 <select 
-                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 outline-none appearance-none shadow-inner cursor-pointer" 
+                  className="w-full bg-gray-50 border-gray-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-blue-100 outline-none appearance-none" 
                   value={formData.quality} 
                   onChange={e => setFormData({...formData, quality: e.target.value})}
                 >
@@ -134,58 +118,50 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
               </div>
             </div>
 
-            {/* GSM Input */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">GSM Spec</label>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-1">GSM</label>
               <input 
                 type="number" 
                 required 
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 outline-none shadow-inner" 
+                className="w-full bg-gray-50 border-gray-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-blue-100 outline-none" 
                 value={formData.gsm} 
                 onChange={e => setFormData({...formData, gsm: e.target.value})} 
                 placeholder="e.g. 60" 
               />
             </div>
 
-            {/* Width Input */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider flex items-center gap-1">
-                <Ruler size={10} /> Width (Inches)
-              </label>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Width (Inches)</label>
               <input 
                 type="number" 
                 required 
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 outline-none shadow-inner" 
+                className="w-full bg-gray-50 border-gray-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-blue-100 outline-none" 
                 value={formData.width_inches} 
                 onChange={e => setFormData({...formData, width_inches: e.target.value})} 
                 placeholder="e.g. 42" 
               />
             </div>
 
-            {/* Net Weight - PRIMARY HIGHLIGHTED FIELD */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-blue-600 uppercase ml-1 tracking-wider flex items-center gap-1">
-                <Scale size={10} /> Net Weight (kg)
-              </label>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Net Weight (kg)</label>
               <input 
                 type="number" 
                 step="0.1" 
                 required 
-                className="w-full bg-blue-50 border-2 border-blue-100 rounded-2xl p-4 font-black text-blue-700 text-2xl focus:ring-4 focus:ring-blue-200 outline-none shadow-inner transition-all" 
+                className="w-full bg-gray-50 border-gray-100 rounded-2xl p-4 font-bold text-green-600 text-xl focus:ring-4 focus:ring-green-100 outline-none" 
                 value={formData.net_weight} 
                 onChange={e => setFormData({...formData, net_weight: e.target.value})} 
                 placeholder="00.0" 
               />
             </div>
 
-            {/* Gross Weight */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">Gross Weight (kg)</label>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Gross Weight (kg)</label>
               <input 
                 type="number" 
                 step="0.1" 
                 required 
-                className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 outline-none shadow-inner" 
+                className="w-full bg-gray-50 border-gray-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-blue-100 outline-none" 
                 value={formData.gross_weight} 
                 onChange={e => setFormData({...formData, gross_weight: e.target.value})} 
                 placeholder="00.0" 
@@ -193,52 +169,33 @@ const NewProductView = ({ deviceName, onSaved, onPrint }) => {
             </div>
           </div>
 
-          {/* COLOR SELECTOR */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase ml-1 tracking-wider">Fabric Color</label>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Fabric Color</label>
             <input 
               required 
-              className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100 transition-all outline-none shadow-inner" 
+              className="w-full bg-gray-50 border-gray-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-blue-100 outline-none" 
               value={formData.color} 
               onChange={e => setFormData({...formData, color: e.target.value})} 
               placeholder="e.g. Milky White" 
             />
           </div>
 
-          {/* STATUS MESSAGES */}
           {status.message && (
-            <div className={`p-4 rounded-2xl flex items-center gap-3 animate-pulse border-2 shadow-sm ${
-              status.type === 'success' 
-                ? 'bg-green-50 text-green-700 border-green-100' 
-                : 'bg-red-50 text-red-700 border-red-100'
-            }`}>
-              {status.type === 'success' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
-              <p className="font-black text-sm uppercase tracking-tight">{status.message}</p>
+            <div className={`p-4 rounded-2xl flex items-center gap-3 animate-bounce ${status.type === 'success' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
+              {status.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+              <p className="font-bold text-sm">{status.message}</p>
             </div>
           )}
 
-          {/* SUBMIT BUTTON */}
           <button 
             type="submit" 
             disabled={loading} 
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black text-xl shadow-xl shadow-blue-200 active:scale-[0.97] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-4 border-blue-800"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black text-lg shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
           >
-            {loading ? (
-              <Loader2 className="animate-spin" size={28} />
-            ) : (
-              <><Save size={28} /> REGISTER ROLL</>
-            )}
+            {loading ? <Loader2 className="animate-spin" /> : <><Save size={24} /> SAVE & ADD ROLL</>}
           </button>
         </form>
       </div>
-
-      {/* OPERATOR TIP FOOTER */}
-      <div className="bg-slate-100 p-4 rounded-2xl border border-slate-200 text-center">
-        <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
-          TIP: Common specs are saved between entries. Only Net and Gross weights clear after saving.
-        </p>
-      </div>
-
     </div>
   );
 };
