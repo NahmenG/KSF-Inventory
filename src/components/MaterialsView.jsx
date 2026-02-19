@@ -1,218 +1,198 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
-  Package, 
-  AlertCircle, 
-  Save, 
-  Edit2, 
-  X, 
-  Plus, 
-  Trash2, 
-  ArrowDown, 
-  ArrowUp, 
-  Loader2, 
-  History,
-  TrendingDown,
-  ChevronRight
+  Package, Edit2, Check, X, Loader2, AlertTriangle, 
+  Trash2, Bell, Save, Layers, Droplets, Box, Zap, MoreHorizontal 
 } from 'lucide-react';
 
-/**
- * MaterialsView Component
- * Manages factory raw materials with specific focus on high-volume 
- * inventory like Polypropylene. Supports inline deduction and 
- * automatic shortage alerts.
- */
 const MaterialsView = React.memo(({ materials, onUpdate }) => {
+  const [activeTab, setActiveTab] = useState('Polymers');
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [editMinLevel, setEditMinLevel] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  // CATEGORY DEFINITIONS FOR KSF FACTORY
-  const categories = ['Polymers', 'Filler', 'Additives', 'Colour', 'Others'];
+  const CATEGORIES = [
+    { name: 'Polymers', icon: <Layers size={16} /> },
+    { name: 'Filler', icon: <Box size={16} /> },
+    { name: 'Colour', icon: <Droplets size={16} /> },
+    { name: 'Additives', icon: <Zap size={16} /> },
+    { name: 'Others', icon: <MoreHorizontal size={16} /> }
+  ];
 
-  // 1. DATA GROUPING LOGIC
-  // Organizes materials by category for better scannability on the factory floor
-  const grouped = useMemo(() => {
-    const groups = {};
-    categories.forEach(cat => {
-      groups[cat] = materials.filter(m => m.category === cat);
-    });
-    return groups;
-  }, [materials]);
-
-  // 2. UPDATE HANDLER
-  // Handles the logic for deducting or adding stock (e.g., 38,000 to 36,000)
-  const handleUpdateStock = async (id) => {
-    if (loading) return;
-    setLoading(true);
-    setError(null);
-
+  // 1. SAVE LOGIC (Handles Stock Deduction & Alert Setting)
+  const handleSave = async (id) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    
     try {
-      const newValue = parseFloat(editValue);
-      if (isNaN(newValue)) throw new Error("Please enter a valid numeric value");
+      const numValue = parseFloat(editValue);
+      const minLevelValue = parseFloat(editMinLevel);
+      
+      if (isNaN(numValue) || isNaN(minLevelValue)) throw new Error("Invalid Numbers");
 
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from('raw_materials')
         .update({ 
-          stock_quantity: newValue,
-          updated_at: new Date().toISOString()
+          stock_quantity: numValue,
+          min_level: minLevelValue,
+          updated_at: new Date().toISOString() 
         })
         .eq('id', id);
 
-      if (updateError) throw updateError;
+      if (error) throw error;
 
-      // Close edit mode and refresh parent data
       setEditingId(null);
-      setEditValue('');
       onUpdate(); 
-      
     } catch (err) {
-      setError(err.message);
-      console.error("Material update failed:", err);
+      alert("Update failed: " + err.message);
     } finally {
-      setLoading(false);
+      setIsSaving(false);
     }
   };
+
+  // 2. DELETE LOGIC
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete ${name}? This cannot be undone.`)) return;
+    
+    try {
+      const { error } = await supabase
+        .from('raw_materials')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      onUpdate();
+    } catch (err) {
+      alert("Delete failed: " + err.message);
+    }
+  };
+
+  const currentItems = useMemo(() => 
+    materials.filter(m => m.category === activeTab), 
+    [materials, activeTab]
+  );
 
   return (
     <div className="space-y-6 pb-24 animate-in fade-in duration-500">
       
-      {/* SECTION 1: HEADER & OVERVIEW */}
-      <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2">
-            <Package className="text-blue-600" /> Raw Materials
-          </h2>
-          <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">
-            Real-time Inventory & Polymer Levels
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <div className="bg-blue-50 text-blue-600 px-4 py-2 rounded-2xl font-black text-xs flex items-center gap-2 border border-blue-100">
-            <History size={14} /> Log
-          </div>
-        </div>
+      {/* SECTION 1: CATEGORY TABS */}
+      <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto no-scrollbar gap-1">
+        {CATEGORIES.map(cat => (
+          <button
+            key={cat.name}
+            onClick={() => setActiveTab(cat.name)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all whitespace-nowrap ${
+              activeTab === cat.name 
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
+                : 'text-gray-400 hover:bg-gray-50'
+            }`}
+          >
+            {cat.icon} {cat.name}
+          </button>
+        ))}
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3 text-red-700 font-bold text-sm animate-bounce">
-          <AlertCircle size={20} /> {error}
-        </div>
-      )}
-
-      {/* SECTION 2: CATEGORY SECTIONS */}
-      {categories.map(category => {
-        const items = grouped[category];
-        if (!items || items.length === 0) return null;
-
-        return (
-          <div key={category} className="space-y-3">
-            <div className="flex items-center gap-2 ml-2">
-              <ChevronRight size={14} className="text-blue-500" />
-              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                {category}
-              </h3>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map(m => {
-                const isLow = m.stock_quantity <= m.min_level;
-                const isEditing = editingId === m.id;
-
-                return (
-                  <div 
-                    key={m.id} 
-                    className={`bg-white p-5 rounded-[2rem] border transition-all shadow-sm relative overflow-hidden ${
-                      isLow ? 'border-red-200 bg-red-50/10' : 'border-gray-50'
-                    }`}
-                  >
-                    {/* Background indicator for low stock */}
-                    {isLow && <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 rounded-full -mr-12 -mt-12" />}
-
-                    <div className="flex justify-between items-start mb-4 relative z-10">
-                      <div>
-                        <div className="font-black text-gray-900 text-lg tracking-tight">{m.name}</div>
-                        <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                          <TrendingDown size={10} /> Threshold: {m.min_level.toLocaleString()} kg
-                        </div>
-                      </div>
-                      {isLow && (
-                        <div className="bg-red-500 text-white p-2 rounded-xl shadow-lg shadow-red-100 animate-pulse">
-                          <AlertCircle size={16} />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 relative z-10">
-                      {isEditing ? (
-                        <div className="flex-1 flex gap-2">
-                          <input 
-                            autoFocus
-                            type="number" 
-                            className="flex-1 bg-blue-50 border-2 border-blue-200 rounded-2xl px-4 py-2 font-black text-blue-700 outline-none shadow-inner text-xl"
-                            value={editValue}
-                            onChange={e => setEditValue(e.target.value)}
-                            placeholder="New Stock"
-                          />
-                          <button 
-                            disabled={loading}
-                            onClick={() => handleUpdateStock(m.id)}
-                            className="bg-green-600 text-white p-3 rounded-2xl shadow-lg shadow-green-100 active:scale-90 transition-all"
-                          >
-                            {loading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                          </button>
-                          <button 
-                            onClick={() => {setEditingId(null); setEditValue('');}}
-                            className="bg-gray-100 text-gray-400 p-3 rounded-2xl active:scale-90 transition-all"
-                          >
-                            <X size={18} />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex flex-col">
-                            <span className="text-[9px] font-black text-gray-400 uppercase">On Hand</span>
-                            <span className={`text-3xl font-black tracking-tighter ${isLow ? 'text-red-600' : 'text-gray-900'}`}>
-                              {m.stock_quantity.toLocaleString()} <span className="text-xs font-normal opacity-30 text-gray-500">kg</span>
-                            </span>
-                          </div>
-                          <button 
-                            onClick={() => {
-                              setEditingId(m.id);
-                              setEditValue(m.stock_quantity);
-                            }}
-                            className="p-4 bg-gray-50 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-[1.5rem] transition-all border border-gray-100 active:scale-95"
-                          >
-                            <Edit2 size={20} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Low Stock Warning Text */}
-                    {isLow && (
-                      <div className="mt-4 text-[9px] font-black text-red-500 uppercase flex items-center gap-1">
-                        <AlertCircle size={10} /> Critical Shortage: Replenish Immediately
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+      {/* SECTION 2: MATERIAL CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {currentItems.length === 0 ? (
+          <div className="col-span-full py-20 text-center bg-white rounded-3xl border-2 border-dashed border-gray-100">
+            <Package className="mx-auto text-gray-200 mb-2" size={40} />
+            <p className="text-gray-400 font-bold text-sm">No items in {activeTab}</p>
           </div>
-        );
-      })}
+        ) : (
+          currentItems.map(m => (
+            <div key={m.id} className={`bg-white p-5 rounded-3xl shadow-sm border transition-all ${
+              m.stock_quantity <= m.min_level ? 'border-red-200 bg-red-50/10' : 'border-gray-50'
+            }`}>
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <div className="font-black text-gray-900 text-xl tracking-tight">{m.name}</div>
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase mt-1">
+                    <Bell size={10} className={m.stock_quantity <= m.min_level ? 'text-red-500' : ''} />
+                    Alert Level: {m.min_level.toLocaleString()} kg
+                  </div>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      setEditingId(m.id);
+                      setEditValue(m.stock_quantity);
+                      setEditMinLevel(m.min_level);
+                    }}
+                    className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-xl transition-colors"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(m.id, m.name)}
+                    className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl transition-colors"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
 
-      {/* SECTION 3: EMPTY STATE */}
-      {materials.length === 0 && (
-        <div className="text-center py-24 bg-white rounded-[3rem] border-2 border-dashed border-gray-100">
-          <Package size={48} className="mx-auto text-gray-100 mb-4" />
-          <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">
-            Database empty: No raw materials found
-          </p>
-        </div>
-      )}
+              {editingId === m.id ? (
+                <div className="space-y-4 bg-blue-50/50 p-4 rounded-2xl border border-blue-100 animate-in zoom-in-95 duration-200">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[9px] font-black text-blue-600 uppercase mb-1 block">Update Stock (kg)</label>
+                      <input 
+                        type="number" 
+                        className="w-full bg-white border-2 border-blue-100 px-3 py-2 rounded-xl font-black text-blue-700 outline-none focus:border-blue-500 shadow-inner"
+                        value={editValue}
+                        onChange={e => setEditValue(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-gray-500 uppercase mb-1 block">Set Alert (kg)</label>
+                      <input 
+                        type="number" 
+                        className="w-full bg-white border-2 border-gray-100 px-3 py-2 rounded-xl font-black text-gray-700 outline-none focus:border-blue-500 shadow-inner"
+                        value={editMinLevel}
+                        onChange={e => setEditMinLevel(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleSave(m.id)}
+                      disabled={isSaving}
+                      className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all"
+                    >
+                      {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Changes
+                    </button>
+                    <button 
+                      onClick={() => setEditingId(null)}
+                      className="px-4 bg-white text-gray-400 py-2.5 rounded-xl font-black text-xs uppercase border border-gray-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-end justify-between">
+                  <div>
+                    <span className="text-[10px] font-black text-gray-400 uppercase block mb-0.5">Available Quantity</span>
+                    <span className={`text-3xl font-black tracking-tighter ${m.stock_quantity <= m.min_level ? 'text-red-600' : 'text-gray-900'}`}>
+                      {m.stock_quantity.toLocaleString()} <span className="text-sm font-normal opacity-30">kg</span>
+                    </span>
+                  </div>
+                  {m.stock_quantity <= m.min_level && (
+                    <div className="bg-red-50 text-red-500 px-3 py-1 rounded-full text-[9px] font-black uppercase flex items-center gap-1 border border-red-100">
+                      <AlertTriangle size={12} /> Low Stock
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
     </div>
   );
 });
