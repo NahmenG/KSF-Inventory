@@ -1,172 +1,66 @@
 import React, { useState } from 'react';
-import { X, Save, Package, User, Hash, Ruler, Scale } from 'lucide-react';
+import { X, Trash2, CheckCircle, Package } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
-const EditModal = ({ roll, onClose, onSave }) => {
-  const [formData, setFormData] = useState({ ...roll });
-  const [isSaving, setIsSaving] = useState(false);
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
+const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    try {
-      const { error } = await supabase
-        .from('rolls')
-        .update({
-          customer_name: formData.customer_name,
-          quality: formData.quality,
-          gsm: parseFloat(formData.gsm),
-          color: formData.color,
-          width_inches: parseFloat(formData.width_inches),
-          net_weight: parseFloat(formData.net_weight),
-          gross_weight: parseFloat(formData.gross_weight),
-          length_meters: parseFloat(formData.length_meters),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', roll.id);
+export default function EditModal({ roll, onClose, onSave }) {
+  const [data, setData] = useState({ ...roll });
 
-      if (error) throw error;
-      onSave();
-    } catch (err) {
-      alert("Error updating roll: " + err.message);
-    } finally {
-      setIsSaving(false);
-    }
+  const handleUpdate = async () => {
+    const { error } = await supabase.from('rolls').update({
+      customer_name: data.customer_name,
+      quality: data.quality,
+      color: data.color,
+      gsm: data.gsm,
+      width_inches: data.width_inches,
+      net_weight: data.net_weight,
+      gross_weight: data.gross_weight,
+      status: data.status,
+      dispatched_at: data.status === 'in_stock' ? null : data.dispatched_at
+    }).eq('id', roll.id);
+
+    if (!error) onSave();
+    else alert("Error: " + error.message);
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end md:items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-lg rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 duration-500">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white p-6 rounded-2xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh] border border-gray-100">
+        <div className="flex justify-between items-center mb-6 border-b pb-3">
+          <h2 className="font-bold text-lg flex items-center gap-2 text-gray-800"><Package size={20} className="text-blue-600" /> Edit Roll Data</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button>
+        </div>
         
-        {/* HEADER */}
-        <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
-          <div>
-            <h3 className="text-xl font-black text-gray-800 flex items-center gap-2">
-              <Package className="text-blue-600" size={20} /> Edit Roll Data
-            </h3>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">
-              ID: {roll.product_id}
-            </p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors text-gray-400 hover:text-red-500">
-            <X size={24} />
-          </button>
+        <div className="bg-blue-50 p-4 rounded-xl mb-6 border border-blue-100 flex justify-between items-center">
+            <div><label className="text-[10px] font-bold text-blue-400 block uppercase">Roll ID</label><div className="text-xl font-black text-blue-800">{roll.product_id}</div></div>
+            <div className="text-right"><label className="text-[10px] font-bold text-blue-400 block uppercase">Status</label><div className={`text-xs font-bold uppercase px-2 py-1 rounded inline-block ${data.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{data.status.replace('_', ' ')}</div></div>
         </div>
 
-        {/* FORM */}
-        <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto no-scrollbar">
+        <div className="grid grid-cols-2 gap-4 mb-8">
+           <div className="col-span-2"><label className="text-[10px] font-bold text-gray-400 uppercase">Customer / Buyer</label><input className="w-full border p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-100" value={data.customer_name || ''} onChange={e => setData({...data, customer_name: e.target.value})} /></div>
+           <div><label className="text-[10px] font-bold text-gray-400 uppercase">Quality</label><select className="w-full border p-3 rounded-lg bg-white" value={data.quality} onChange={e => setData({...data, quality: e.target.value})}>{QUALITIES.map(q => <option key={q}>{q}</option>)}</select></div>
+           <div><label className="text-[10px] font-bold text-gray-400 uppercase">Color</label><select className="w-full border p-3 rounded-lg bg-white" value={data.color} onChange={e => setData({...data, color: e.target.value})}>{COLORS.map(c => <option key={c}>{c}</option>)}</select></div>
+           <div><label className="text-[10px] font-bold text-gray-400 uppercase">GSM</label><input type="number" className="w-full border p-3 rounded-lg" value={data.gsm} onChange={e => setData({...data, gsm: e.target.value})} /></div>
+           <div><label className="text-[10px] font-bold text-gray-400 uppercase">Size (Inches)</label><input type="number" className="w-full border p-3 rounded-lg" value={data.width_inches} onChange={e => setData({...data, width_inches: e.target.value})} /></div>
+           <div className="col-span-2 pt-2 border-t mt-2"></div>
+           <div><label className="text-[10px] font-bold text-blue-600 uppercase">Net Weight</label><input type="number" className="w-full border-2 border-blue-500 p-3 rounded-lg font-black text-xl text-blue-900" value={data.net_weight} onChange={e => setData({...data, net_weight: e.target.value})} /></div>
+           <div><label className="text-[10px] font-bold text-gray-400 uppercase">Gross Weight</label><input type="number" className="w-full border p-3 rounded-lg" value={data.gross_weight} onChange={e => setData({...data, gross_weight: e.target.value})} /></div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {data.status === 'dispatched' && <button onClick={() => setData({...data, status: 'in_stock'})} className="w-full bg-orange-50 text-orange-600 py-3 rounded-xl font-bold border border-orange-100">Move Back to In Stock</button>}
+          <button onClick={handleUpdate} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"><CheckCircle size={20}/> Save All Changes</button>
           
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-400 uppercase ml-2 flex items-center gap-1">
-              <User size={10} /> Buyer Name
-            </label>
-            <input 
-              className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-100 transition-all"
-              value={formData.customer_name || ''}
-              onChange={e => setFormData({...formData, customer_name: e.target.value})}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Quality</label>
-              <input 
-                className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl font-bold text-gray-800 outline-none"
-                value={formData.quality || ''}
-                onChange={e => setFormData({...formData, quality: e.target.value})}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Color</label>
-              <input 
-                className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl font-bold text-gray-800 outline-none"
-                value={formData.color || ''}
-                onChange={e => setFormData({...formData, color: e.target.value})}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-2 flex items-center gap-1">
-                <Hash size={10} /> GSM
-              </label>
-              <input 
-                type="number"
-                className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl font-bold text-gray-800 outline-none"
-                value={formData.gsm || ''}
-                onChange={e => setFormData({...formData, gsm: e.target.value})}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-2 flex items-center gap-1">
-                <Ruler size={10} /> Size
-              </label>
-              <input 
-                type="number"
-                className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl font-bold text-gray-800 outline-none"
-                value={formData.width_inches || ''}
-                onChange={e => setFormData({...formData, width_inches: e.target.value})}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Length</label>
-              <input 
-                type="number"
-                className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl font-bold text-gray-800 outline-none"
-                value={formData.length_meters || ''}
-                onChange={e => setFormData({...formData, length_meters: e.target.value})}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 pt-2">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-2 flex items-center gap-1">
-                <Scale size={10} /> Gross (kg)
-              </label>
-              <input 
-                type="number"
-                step="0.01"
-                className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl font-bold text-gray-800 outline-none"
-                value={formData.gross_weight || ''}
-                onChange={e => setFormData({...formData, gross_weight: e.target.value})}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-blue-600 uppercase ml-2 flex items-center gap-1">
-                <Scale size={10} /> Net (kg)
-              </label>
-              <input 
-                type="number"
-                step="0.01"
-                className="w-full bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl font-black text-blue-900 outline-none"
-                value={formData.net_weight || ''}
-                onChange={e => setFormData({...formData, net_weight: e.target.value})}
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-6 pb-2">
-            <button 
-              type="submit" 
-              disabled={isSaving}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-100 active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              {isSaving ? "Saving..." : <><Save size={20} /> Update Roll</>}
+          {/* TARGETED CHANGE: Only show delete button if NOT in History tab (status is in_stock) */}
+          {data.status === 'in_stock' && (
+            <button onClick={async () => { if(confirm("Delete permanently?")) { await supabase.from('rolls').delete().eq('id', roll.id); onSave(); } }} className="w-full text-red-400 font-bold py-2 text-xs uppercase tracking-widest mt-4 flex items-center justify-center gap-1">
+              <Trash2 size={14}/> Delete Permanent
             </button>
-            <button 
-              type="button"
-              onClick={onClose}
-              className="px-8 bg-gray-100 text-gray-500 py-4 rounded-2xl font-bold hover:bg-gray-200 transition-all"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+          )}
+        </div>
       </div>
     </div>
   );
-};
-
-export default EditModal;
+}
