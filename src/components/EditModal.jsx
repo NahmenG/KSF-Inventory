@@ -52,13 +52,7 @@ export default function EditModal({ roll, onClose, onSave }) {
         <div className="flex flex-col gap-2">
           {data.status === 'dispatched' && <button onClick={() => setData({...data, status: 'in_stock'})} className="w-full bg-orange-50 text-orange-600 py-3 rounded-xl font-bold border border-orange-100">Move Back to In Stock</button>}
           <button onClick={handleUpdate} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"><CheckCircle size={20}/> Save All Changes</button>
-          
-          {/* TARGETED CHANGE: Only show delete button if NOT in History tab (status is in_stock) */}
-          {data.status === 'in_stock' && (
-            <button onClick={async () => { if(confirm("Delete permanently?")) { await supabase.from('rolls').delete().eq('id', roll.id); onSave(); } }} className="w-full text-red-400 font-bold py-2 text-xs uppercase tracking-widest mt-4 flex items-center justify-center gap-1">
-              <Trash2 size={14}/> Delete Permanent
-            </button>
-          )}
+          <button onClick={async () => { if(confirm("Delete permanently?")) { await supabase.from('rolls').delete().eq('id', roll.id); onSave(); } }} className="w-full text-red-400 font-bold py-2 text-xs uppercase tracking-widest mt-4 flex items-center justify-center gap-1"><Trash2 size={14}/> Delete Permanent</button>
         </div>
       </div>
     </div>
