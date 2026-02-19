@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, RotateCcw } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 
-const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#fb7185', '#2dd4bf'];
 const MAT_ORDER = { 'Polymers': 1, 'Filler': 2, 'Additives': 3, 'Colour': 4, 'Others': 5 };
 
 const abbreviateColor = (name) => {
@@ -22,255 +22,230 @@ const abbreviateColor = (name) => {
 };
 
 const DashboardView = React.memo(({ rolls, materials }) => {
-  const inStock = rolls.filter(r => r.status === 'in_stock');
-  const todayDate = new Date();
-  const todayStr = todayDate.toLocaleDateString();
+  const todayDate = useMemo(() => new Date(), []);
+  const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
   
-  // 1. CALCULATIONS FOR TOTALS & TITLES
-  const stockWeightKg = inStock.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
-  const stockWeightTon = (stockWeightKg / 1000).toFixed(2);
+  // 1. MASTER DATA PROCESSOR (Linear scan for high performance)
+  const processedData = useMemo(() => {
+    const inStock = [];
+    const producedToday = [];
+    const dispatchedToday = [];
+    const agedMap = {};
+    let totalAgedWeight = 0;
+    const dateMap = {};
+    const startOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
 
-  // 2. MONTHLY PERFORMANCE LOGIC (Starts 1st of month, Cumulative Legend)
+    rolls.forEach(r => {
+      const rDate = new Date(r.created_at);
+      const rDateStr = rDate.toLocaleDateString();
+      const weight = parseFloat(r.net_weight) || 0;
+
+      // Current Status Logic
+      if (r.status === 'in_stock') {
+        inStock.push(r);
+        // Aged Stock Logic (30+ Days)
+        const diffDays = Math.ceil(Math.abs(todayDate - rDate) / (1000 * 60 * 60 * 24));
+        if (diffDays > 30) {
+          agedMap[r.quality] = (agedMap[r.quality] || 0) + weight;
+          totalAgedWeight += weight;
+        }
+      }
+
+      // Today's Velocity
+      if (rDateStr === todayStr) producedToday.push(r);
+      if (r.status === 'dispatched' && r.dispatched_at) {
+        if (new Date(r.dispatched_at).toLocaleDateString() === todayStr) dispatchedToday.push(r);
+      }
+
+      // Monthly Timeline Aggregation
+      if (rDate >= startOfMonth) {
+        if (!dateMap[rDateStr]) dateMap[rDateStr] = { p: 0, d: 0, pw: 0, dw: 0 };
+        dateMap[rDateStr].p += 1;
+        dateMap[rDateStr].pw += weight;
+      }
+      if (r.status === 'dispatched' && r.dispatched_at) {
+        const dDate = new Date(r.dispatched_at);
+        if (dDate >= startOfMonth) {
+          const dStr = dDate.toLocaleDateString();
+          if (!dateMap[dStr]) dateMap[dStr] = { p: 0, d: 0, pw: 0, dw: 0 };
+          dateMap[dStr].d += 1;
+          dateMap[dStr].dw += weight;
+        }
+      }
+    });
+
+    return { inStock, producedToday, dispatchedToday, agedMap, totalAgedWeight, dateMap };
+  }, [rolls, todayStr, todayDate]);
+
+  // 2. TIMELINE GENERATOR
   const { timelineData, totalProdMonth, totalDispMonth } = useMemo(() => {
     const data = [];
-    let prodSum = 0;
-    let dispSum = 0;
-    const startOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
-    
-    for (let d = new Date(startOfMonth); d <= todayDate; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toLocaleDateString();
-      const dayProduced = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === dateStr);
-      const dayDispatched = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === dateStr);
-      
-      prodSum += dayProduced.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
-      dispSum += dayDispatched.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
-
-      data.push({
-        date: d.getDate().toString(),
-        Produced: dayProduced.length,
-        Dispatched: dayDispatched.length
-      });
+    let pSum = 0; let dSum = 0;
+    const start = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+    for (let d = new Date(start); d <= todayDate; d.setDate(d.getDate() + 1)) {
+      const s = d.toLocaleDateString();
+      const day = processedData.dateMap[s] || { p: 0, d: 0, pw: 0, dw: 0 };
+      pSum += day.pw; dSum += day.dw;
+      data.push({ date: d.getDate().toString(), Produced: day.p, Dispatched: day.d });
     }
-    return { 
-      timelineData: data, 
-      totalProdMonth: (prodSum / 1000).toFixed(2), 
-      totalDispMonth: (dispSum / 1000).toFixed(2) 
-    };
-  }, [rolls, todayDate]);
+    return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
+  }, [processedData.dateMap, todayDate]);
 
-  // 3. RECENT LOG LOGIC (Detects Produced, Dispatched, Edited, Returned)
+  // 3. RECENT ACTIVITY LOG (The 5 most recent events)
   const recentActivity = useMemo(() => {
     return [...rolls]
-      .sort((a, b) => {
-        const timeA = new Date(a.updated_at || a.dispatched_at || a.created_at);
-        const timeB = new Date(b.updated_at || b.dispatched_at || b.created_at);
-        return timeB - timeA;
-      })
+      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
       .slice(0, 5)
       .map(r => {
-        let activity = "Produced", time = r.created_at, icon = <PlusCircle size={14} className="text-green-500" />;
-        if (r.status === 'dispatched') {
-          activity = "Dispatched"; time = r.dispatched_at; icon = <Send size={14} className="text-blue-500" />;
-        } else if (r.status === 'in_stock' && r.dispatched_at) {
-          activity = "Returned"; time = r.updated_at; icon = <RotateCcw size={14} className="text-purple-500" />;
-        } else if (r.updated_at && r.updated_at !== r.created_at) {
-          activity = "Edited"; time = r.updated_at; icon = <Edit3 size={14} className="text-orange-500" />;
-        }
-        return { ...r, activityType: activity, activityTime: time || r.created_at, activityIcon: icon };
+        let type = "Produced", icon = <PlusCircle size={14} className="text-green-500" />;
+        if (r.status === 'dispatched') { type = "Dispatched"; icon = <Send size={14} className="text-blue-500" />; }
+        else if (r.updated_at !== r.created_at) { type = "Edited"; icon = <Edit3 size={14} className="text-orange-500" />; }
+        return { ...r, type, icon };
       });
   }, [rolls]);
 
-  // 4. CHART DATA (Quality with Ton Legends & Color Horizontal)
-  const qualityChartData = useMemo(() => {
-    const c = {}; inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
-    return Object.keys(c).map(k => ({ 
-      name: `${k} (${(c[k] / 1000).toFixed(2)} Ton)`, 
-      value: parseFloat(c[k].toFixed(1)) 
-    }));
-  }, [inStock]);
+  // 4. CHART DATA FORMATTING
+  const qualityData = useMemo(() => {
+    const c = {}; processedData.inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
+    return Object.entries(c).map(([name, w]) => ({ name: `${name} (${(w/1000).toFixed(2)}T)`, value: w }));
+  }, [processedData.inStock]);
 
-  const colorChartData = useMemo(() => {
-    const c = {}; inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
-    return Object.keys(c)
-      .map(k => ({ name: abbreviateColor(k), weight: parseFloat(c[k].toFixed(1)) }))
-      .sort((a, b) => b.weight - a.weight);
-  }, [inStock]);
+  const colorData = useMemo(() => {
+    const c = {}; processedData.inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
+    return Object.entries(c).map(([n, w]) => ({ name: abbreviateColor(n), weight: parseFloat(w.toFixed(1)) }))
+      .sort((a, b) => b.weight - a.weight).slice(0, 8);
+  }, [processedData.inStock]);
 
-  // 5. AGED STOCK LOGIC
-  const agedResults = useMemo(() => {
-    const aged = inStock.filter(r => {
-      const diffDays = Math.ceil(Math.abs(todayDate - new Date(r.created_at)) / (1000 * 60 * 60 * 24));
-      return diffDays > 30;
-    });
-    const weights = {};
-    let totalAgedWt = 0;
-    aged.forEach(r => { 
-      const wt = parseFloat(r.net_weight) || 0;
-      weights[r.quality] = (weights[r.quality] || 0) + wt;
-      totalAgedWt += wt;
-    });
-    return {
-      list: Object.keys(weights).map(k => ({ quality: k, weight: weights[k].toFixed(1) })),
-      totalTon: (totalAgedWt / 1000).toFixed(2)
-    };
-  }, [inStock, todayDate]);
-
-  const producedToday = rolls.filter(r => new Date(r.created_at).toLocaleDateString() === todayStr);
-  const dispatchedToday = rolls.filter(r => r.status === 'dispatched' && new Date(r.dispatched_at).toLocaleDateString() === todayStr);
-
-  const sortedLowMaterials = useMemo(() => {
-    return materials
-      .filter(m => m.min_level > 0 && m.stock_quantity < m.min_level)
-      .sort((a, b) => (MAT_ORDER[a.category] || 99) - (MAT_ORDER[b.category] || 99));
-  }, [materials]);
+  const weightKg = processedData.inStock.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
 
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* SECTION 1: PLANT VELOCITY (TODAY) */}
-      <div className="bg-white rounded-2xl shadow-sm p-4 border-l-4 border-blue-600 border border-gray-100">
-        <h3 className="font-black text-gray-400 text-[10px] uppercase tracking-widest mb-3 flex items-center gap-2">
-          <TrendingUp size={14} className="text-blue-600" /> Plant Velocity (Today)
-        </h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-green-50 p-3 rounded-xl border border-green-100 text-center">
-            <div className="text-[9px] text-green-700 font-black uppercase">Produced</div>
-            <div className="text-xl font-black text-green-900">{producedToday.length}</div>
-          </div>
-          <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 text-center">
-            <div className="text-[9px] text-orange-700 font-black uppercase">Dispatched</div>
-            <div className="text-xl font-black text-orange-900">{dispatchedToday.length}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION 2: STOCK TOTALS (CENTER ALIGNED) */}
+      {/* SECTION 1: VELOCITY */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
-          <div className="text-[9px] text-gray-400 font-black uppercase tracking-tight">In Stock</div>
-          <div className="text-xl font-black text-blue-600">{inStock.length} <span className="text-xs font-normal text-gray-400">Rolls</span></div>
+        <div className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-green-500 border border-gray-100">
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today's Production</div>
+          <div className="text-2xl font-black text-gray-900">{processedData.producedToday.length} <span className="text-xs opacity-30">Rolls</span></div>
         </div>
-        <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
-          <div className="text-[9px] text-gray-400 font-black uppercase tracking-tight">Total Weight</div>
-          <div className="text-xl font-black text-green-600">{stockWeightKg.toFixed(1)} <span className="text-xs font-normal text-gray-400">kg</span></div>
+        <div className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-blue-500 border border-gray-100">
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today's Dispatch</div>
+          <div className="text-2xl font-black text-gray-900">{processedData.dispatchedToday.length} <span className="text-xs opacity-30">Rolls</span></div>
         </div>
       </div>
 
-      {/* SECTION 3: MONTHLY PERFORMANCE GRAPH */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2">
-          <BarChart3 size={14} className="text-blue-600" /> Performance Log (1st to Today)
-        </h3>
-        <div className="h-64">
+      {/* SECTION 2: STOCK TOTALS */}
+      <div className="bg-gray-900 text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-gray-800">
+        <div className="text-center">
+          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Stock Count</div>
+          <div className="text-3xl font-black">{processedData.inStock.length}</div>
+        </div>
+        <div className="h-10 w-px bg-gray-800" />
+        <div className="text-center">
+          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Weight</div>
+          <div className="text-3xl font-black text-green-400">{(weightKg/1000).toFixed(2)} <span className="text-xs font-normal text-white/50">Ton</span></div>
+        </div>
+      </div>
+
+      {/* SECTION 3: TIMELINE CHART */}
+      <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mb-4"><BarChart3 size={14} className="text-blue-600"/> Performance (Monthly)</h3>
+        <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={timelineData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="date" fontSize={9} tick={{fontWeight: 'bold'}} />
-              <YAxis fontSize={9} />
-              <Tooltip />
-              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }}
-                formatter={(val) => val === 'Produced' ? `Produced (${totalProdMonth} Ton)` : `Dispatched (${totalDispMonth} Ton)`} />
-              <Bar dataKey="Produced" fill="#22c55e" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="Dispatched" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="date" fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
+              <YAxis fontSize={9} axisLine={false} tickLine={false} />
+              <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} 
+                formatter={(val) => val === 'Produced' ? `P (${totalProdMonth}T)` : `D (${totalDispMonth}T)`} />
+              <Bar dataKey="Produced" fill="#22c55e" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Dispatched" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* SECTION 4: RECENT LOG (DETAILED MULTI-LINE) */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-3 bg-gray-50/50 border-b">
-          <h3 className="font-black text-gray-400 text-[10px] uppercase flex items-center gap-2"><Clock size={14} /> Recent Log</h3>
+      {/* SECTION 4: RECENT ACTIVITY LOG */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
+          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Clock size={14}/> Recent Activity</h3>
         </div>
         <div className="divide-y divide-gray-50">
           {recentActivity.map((r, i) => (
-            <div key={i} className="px-4 py-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-black text-gray-900 text-sm tracking-tight">{r.product_id}</span>
-                  <div className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-full">
-                    {r.activityIcon}
-                    <span className="text-[9px] font-black uppercase text-gray-600">{r.activityType}</span>
-                  </div>
+            <div key={i} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-50 rounded-xl">{r.icon}</div>
+                <div>
+                  <div className="font-black text-sm text-gray-900 tracking-tight">{r.product_id}</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase">{r.type} • {r.device_name}</div>
                 </div>
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Device: {r.device_name || 'System'}</div>
               </div>
               <div className="text-right">
-                <div className="font-black text-gray-900 text-sm mb-1">{r.net_weight} kg</div>
-                <div className="text-[10px] font-bold text-blue-500">{new Date(r.activityTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                <div className="font-black text-gray-900 text-sm">{r.net_weight} kg</div>
+                <div className="text-[10px] font-bold text-blue-500">{new Date(r.updated_at || r.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* SECTION 5: QUALITY PIE CHART (WITH TOTAL TON TITLE) */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2">
-          <PieIcon size={14}/> Quality Breakdown Chart ({stockWeightTon} Ton)
-        </h3>
-        <div className="h-80">
+      {/* SECTION 5: QUALITY BREAKDOWN */}
+      <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mb-4"><PieIcon size={14} className="text-blue-600"/> Quality Breakdown</h3>
+        <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={qualityChartData} cx="50%" cy="40%" innerRadius={50} outerRadius={75} paddingAngle={5} dataKey="value">
-                {qualityChartData.map((e, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              <Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value">
+                {qualityData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} stroke="none" />)}
               </Pie>
               <Tooltip />
-              <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '20px' }} />
+              <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '10px' }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* SECTION 6: COLOR BAR CHART (HORIZONTAL WITH LABELS) */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="font-black text-gray-400 text-[10px] uppercase mb-4 flex items-center gap-2"><BarChart3 size={14}/> Color Analysis (Kg)</h3>
-        <div className="h-96">
+      {/* SECTION 6: COLOR ANALYSIS */}
+      <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mb-4"><BarChart3 size={14}/> Color Analysis (Kg)</h3>
+        <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={colorChartData} layout="vertical" margin={{ left: 10, right: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-              <XAxis type="number" fontSize={9} hide />
-              <YAxis dataKey="name" type="category" width={80} fontSize={9} interval={0} tick={{fill: '#4b5563', fontWeight: 'bold'}} />
+            <BarChart data={colorData} layout="vertical" margin={{ left: 5, right: 35 }}>
+              <XAxis type="number" hide />
+              <YAxis dataKey="name" type="category" width={85} fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
               <Tooltip />
               <Bar dataKey="weight" fill="#3b82f6" radius={[0, 4, 4, 0]}>
-                <LabelList dataKey="weight" position="right" style={{ fontSize: '10px', fontWeight: 'bold', fill: '#4b5563' }} />
+                <LabelList dataKey="weight" position="right" style={{ fontSize: '9px', fontWeight: 'bold', fill: '#64748b' }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* SECTION 7: STOCK OVER 30 DAYS OLD (WITH TOTAL TON TITLE) */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-3 bg-red-50/30 border-b flex items-center gap-2">
+      {/* SECTION 7: AGED STOCK */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-4 bg-red-50/50 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
-          <h3 className="font-black text-gray-400 text-[10px] uppercase">
-            Stock Over 30 Days Old ({agedResults.totalTon} Ton)
-          </h3>
+          <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Aged Stock Over 30 Days ({(processedData.totalAgedWeight/1000).toFixed(2)}T)</h3>
         </div>
-        <div className="p-3 grid grid-cols-2 gap-2">
-          {agedResults.list.map((d, i) => (
-            <div key={i} className="bg-white border p-2 rounded-lg flex justify-between items-center">
-              <span className="text-[10px] font-bold text-gray-500 uppercase">{d.quality}</span>
-              <span className="text-sm font-black text-red-600">{d.weight} Kg</span>
+        <div className="p-4 grid grid-cols-2 gap-2">
+          {Object.entries(processedData.agedMap).map(([q, w], i) => (
+            <div key={i} className="bg-gray-50 p-3 rounded-2xl flex justify-between items-center border border-gray-100">
+              <span className="text-[10px] font-black text-gray-400 uppercase">{q}</span>
+              <span className="text-sm font-black text-red-600">{w.toFixed(1)} <span className="text-[10px] opacity-40">kg</span></span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* SECTION 8: ORDERED MATERIAL ALERT */}
-      {sortedLowMaterials.length > 0 && (
-        <div className="bg-white p-4 rounded-xl border-l-4 border-red-500 shadow-sm border border-gray-100">
-          <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-[10px] uppercase tracking-widest">
-            <AlertCircle size={16} /> Material Alert
-          </h3>
+      {/* SECTION 8: MATERIAL ALERTS */}
+      {materials.filter(m => m.stock_quantity < m.min_level).length > 0 && (
+        <div className="bg-white p-5 rounded-3xl border-l-8 border-red-500 shadow-sm border border-gray-100">
+          <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-[10px] uppercase tracking-widest"><AlertCircle size={16}/> Material Shortage</h3>
           <div className="space-y-2">
-            {sortedLowMaterials.map(m => (
-              <div key={m.id} className="flex justify-between items-center bg-red-50/50 p-2 rounded-lg border border-red-100">
-                <div>
-                  <div className="text-[11px] font-black text-gray-800">{m.name}</div>
-                  <div className="text-[8px] text-red-400 font-bold uppercase">{m.category}</div>
-                </div>
+            {materials.filter(m => m.stock_quantity < m.min_level).map(m => (
+              <div key={m.id} className="flex justify-between items-center bg-red-50 p-3 rounded-2xl border border-red-100">
+                <div className="font-black text-sm text-gray-800">{m.name}</div>
                 <div className="text-sm font-black text-red-700">{m.stock_quantity} kg</div>
               </div>
             ))}
