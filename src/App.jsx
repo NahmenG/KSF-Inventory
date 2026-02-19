@@ -97,32 +97,38 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [fetchData]);
 
-  // --- THE LOGIN PAGE (RESTORED WITH BIGGER LOGO & SUBTEXT) ---
+  // --- THE LOGIN PAGE (SHARP LOGO OPTIMIZATION) ---
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
         <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-sm w-full text-center border border-gray-100 animate-in fade-in duration-500">
           
-          {/* 1. Bigger Company Logo */}
+          {/* 1. Optimized Sharp Logo */}
           <div className="flex justify-center mb-4">
             <img 
               src="/logo.png" 
               alt="KSF Logo" 
-              className="w-32 h-32 md:w-40 md:h-40 object-contain"
+              className="w-32 h-32 md:w-44 md:h-44 object-contain"
+              style={{ 
+                imageRendering: '-webkit-optimize-contrast', // Chrome/Safari Sharpness
+                imageRendering: 'crisp-edges',              // General Sharpness
+                transform: 'translateZ(0)'                  // Hardware acceleration fix
+              }}
               onError={(e) => {
                 e.target.style.display = 'none';
                 e.target.nextSibling.style.display = 'flex';
               }}
             />
-            <div style={{display: 'none'}} className="bg-blue-600 w-32 h-32 md:w-40 md:h-40 rounded-3xl items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
+            {/* Fallback box */}
+            <div style={{display: 'none'}} className="bg-blue-600 w-32 h-32 md:w-44 md:h-44 rounded-3xl items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
               <span className="text-white text-5xl font-black tracking-tighter">KSF</span>
             </div>
           </div>
           
-          {/* 2. Inventory Management as Subtext under Logo */}
+          {/* 2. Inventory Management Subtext */}
           <div className="mb-10">
-            <h1 className="text-xl font-black text-gray-800 tracking-tight">Inventory Management</h1>
-            <div className="w-12 h-1 bg-blue-600 mx-auto mt-2 rounded-full opacity-20"></div>
+            <h1 className="text-xl font-black text-gray-800 tracking-tight uppercase">Inventory Management</h1>
+            <div className="w-16 h-1 bg-blue-600 mx-auto mt-2 rounded-full opacity-10"></div>
           </div>
           
           {/* 3. Login Buttons */}
