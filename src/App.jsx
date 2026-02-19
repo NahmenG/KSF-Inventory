@@ -97,22 +97,32 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [fetchData]);
 
-  // --- THE LOGIN PAGE (EXACT RESTORATION WITH LOGO) ---
+  // --- THE LOGIN PAGE (EXACT RESTORATION WITH IMAGE LOGO) ---
   if (!user && !isGuest) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
+      <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
         <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl max-w-sm w-full text-center border border-gray-100">
           
-          {/* 1. Company Logo on Top (Ensuring visible rendering) */}
+          {/* 1. Company Logo on Top */}
           <div className="flex justify-center mb-6">
-            <div className="bg-blue-600 w-24 h-24 rounded-3xl flex items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
+            <img 
+              src="/logo.png" 
+              alt="KSF Logo" 
+              className="w-24 h-24 object-contain"
+              onError={(e) => {
+                // Fallback to stylized text if image is missing from public folder
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'flex';
+              }}
+            />
+            {/* Fallback stylized box if logo.png is not found */}
+            <div style={{display: 'none'}} className="bg-blue-600 w-24 h-24 rounded-3xl items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
               <span className="text-white text-4xl font-black tracking-tighter">KSF</span>
             </div>
           </div>
           
           {/* 2. Inventory Management Text */}
-          <h1 className="text-2xl font-black text-gray-800 mb-2 tracking-tight">Inventory Management</h1>
-          <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-10">Factory Control Portal</p>
+          <h1 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">Inventory Management</h1>
           
           {/* 3. Two Login Buttons */}
           <div className="space-y-3">
