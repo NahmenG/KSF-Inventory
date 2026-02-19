@@ -97,52 +97,56 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [fetchData]);
 
-  // --- THE LOGIN PAGE (SHARP LOGO OPTIMIZATION) ---
+  // --- THE LOGIN PAGE (MAX SHARPNESS + UPDATED SUBTEXT) ---
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
-        <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-sm w-full text-center border border-gray-100 animate-in fade-in duration-500">
+        <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100 animate-in fade-in duration-500">
           
-          {/* 1. Optimized Sharp Logo */}
-          <div className="flex justify-center mb-4">
+          {/* 1. Large Sharp Logo */}
+          <div className="flex justify-center mb-2">
             <img 
               src="/logo.png" 
               alt="KSF Logo" 
-              className="w-32 h-32 md:w-44 md:h-44 object-contain"
+              className="w-40 h-40 md:w-56 md:h-56 object-contain"
               style={{ 
-                imageRendering: '-webkit-optimize-contrast', // Chrome/Safari Sharpness
-                imageRendering: 'crisp-edges',              // General Sharpness
-                transform: 'translateZ(0)'                  // Hardware acceleration fix
+                imageRendering: 'pixelated', // High-contrast sharpening
+                imageRendering: '-webkit-optimize-contrast',
+                transform: 'scale(1.02)' // Micro-scale to force anti-aliasing refresh
               }}
               onError={(e) => {
                 e.target.style.display = 'none';
                 e.target.nextSibling.style.display = 'flex';
               }}
             />
-            {/* Fallback box */}
-            <div style={{display: 'none'}} className="bg-blue-600 w-32 h-32 md:w-44 md:h-44 rounded-3xl items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
-              <span className="text-white text-5xl font-black tracking-tighter">KSF</span>
+            {/* Fallback */}
+            <div style={{display: 'none'}} className="bg-blue-600 w-40 h-40 md:w-56 md:h-56 rounded-[2.5rem] items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
+              <span className="text-white text-6xl font-black tracking-tighter">KSF</span>
             </div>
           </div>
           
-          {/* 2. Inventory Management Subtext */}
-          <div className="mb-10">
-            <h1 className="text-xl font-black text-gray-800 tracking-tight uppercase">Inventory Management</h1>
-            <div className="w-16 h-1 bg-blue-600 mx-auto mt-2 rounded-full opacity-10"></div>
+          {/* 2. Inventory Manager Subtext (Narrower than Logo) */}
+          <div className="flex justify-center mb-12">
+            <div className="max-w-[150px]"> {/* Forces width to be smaller than logo */}
+              <h1 className="text-sm font-black text-gray-400 uppercase tracking-[0.2em] leading-tight">
+                Inventory Manager
+              </h1>
+              <div className="w-8 h-1 bg-blue-600 mx-auto mt-3 rounded-full opacity-20"></div>
+            </div>
           </div>
           
           {/* 3. Login Buttons */}
           <div className="space-y-3">
             <button 
               onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black shadow-xl shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
               Google Login
             </button>
             
             <button 
               onClick={() => setIsGuest(true)} 
-              className="w-full bg-slate-50 text-gray-400 py-4 rounded-2xl font-black border border-slate-100 hover:bg-slate-100 active:scale-95 transition-all"
+              className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-black border border-slate-100 hover:bg-slate-100 active:scale-95 transition-all"
             >
               Guest Mode
             </button>
