@@ -86,20 +86,14 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
   }, [processedData.dateMap, todayDate]);
 
-  // CHANGED: Fixed type logic to correctly identify Produced and Dispatched
   const recentActivity = useMemo(() => {
     return [...rolls]
       .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
       .slice(0, 5)
       .map(r => {
         let type = "Produced", icon = <PlusCircle size={14} className="text-green-500" />;
-        if (r.status === 'dispatched') { 
-          type = "Dispatched"; 
-          icon = <Send size={14} className="text-blue-500" />; 
-        } else if (r.status === 'in_stock' && r.updated_at !== r.created_at) { 
-          type = "Edited"; 
-          icon = <Edit3 size={14} className="text-orange-500" />; 
-        }
+        if (r.status === 'dispatched') { type = "Dispatched"; icon = <Send size={14} className="text-blue-500" />; }
+        else if (r.updated_at !== r.created_at) { type = "Edited"; icon = <Edit3 size={14} className="text-orange-500" />; }
         return { ...r, type, icon };
       });
   }, [rolls]);
@@ -132,15 +126,15 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 2: SUBTLE STOCK TOTALS (CHANGED: bg-gray-900 -> bg-slate-900/40 backdrop-blur-md) */}
-      <div className="bg-slate-900/40 backdrop-blur-md text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-white/10">
+      {/* SECTION 2: SUBTLE STOCK TOTALS (Updated to subtle transparent bg) */}
+      <div className="bg-[#1a1f2c]/90 backdrop-blur-md text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-gray-800">
         <div className="text-center">
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Stock Count</div>
+          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Stock Count</div>
           <div className="text-3xl font-black">{processedData.inStock.length}</div>
         </div>
-        <div className="h-10 w-px bg-white/10" />
+        <div className="h-10 w-px bg-gray-700/50" />
         <div className="text-center">
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Weight</div>
+          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Weight</div>
           <div className="text-3xl font-black text-green-400">{(weightKg/1000).toFixed(2)} <span className="text-xs font-normal text-white/50">Ton</span></div>
         </div>
       </div>
