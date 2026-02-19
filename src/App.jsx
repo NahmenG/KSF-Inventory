@@ -97,22 +97,22 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [fetchData]);
 
-  // --- THE LOGIN PAGE (MAX SHARPNESS + UPDATED SUBTEXT) ---
+  // --- THE LOGIN PAGE (FINAL LAYOUT & COLOR MATCH) ---
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100 animate-in fade-in duration-500">
           
           {/* 1. Large Sharp Logo */}
-          <div className="flex justify-center mb-2">
+          <div className="flex justify-center mb-1">
             <img 
               src="/logo.png" 
               alt="KSF Logo" 
               className="w-40 h-40 md:w-56 md:h-56 object-contain"
               style={{ 
-                imageRendering: 'pixelated', // High-contrast sharpening
+                imageRendering: 'pixelated',
                 imageRendering: '-webkit-optimize-contrast',
-                transform: 'scale(1.02)' // Micro-scale to force anti-aliasing refresh
+                transform: 'scale(1.02)' 
               }}
               onError={(e) => {
                 e.target.style.display = 'none';
@@ -120,33 +120,33 @@ export default function App() {
               }}
             />
             {/* Fallback */}
-            <div style={{display: 'none'}} className="bg-blue-600 w-40 h-40 md:w-56 md:h-56 rounded-[2.5rem] items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
+            <div style={{display: 'none'}} className="bg-[#1e40af] w-40 h-40 md:w-56 md:h-56 rounded-[2.5rem] items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
               <span className="text-white text-6xl font-black tracking-tighter">KSF</span>
             </div>
           </div>
           
-          {/* 2. Inventory Manager Subtext (Narrower than Logo) */}
-          <div className="flex justify-center mb-12">
-            <div className="max-w-[150px]"> {/* Forces width to be smaller than logo */}
-              <h1 className="text-sm font-black text-gray-400 uppercase tracking-[0.2em] leading-tight">
+          {/* 2. Inventory Manager Subtext (Positioned Higher & Case Corrected) */}
+          <div className="flex justify-center mb-10">
+            <div className="max-w-[140px]">
+              <h1 className="text-base font-bold text-gray-500 tracking-tight leading-tight">
                 Inventory Manager
               </h1>
-              <div className="w-8 h-1 bg-blue-600 mx-auto mt-3 rounded-full opacity-20"></div>
+              <div className="w-6 h-0.5 bg-[#1e40af] mx-auto mt-2 rounded-full opacity-30"></div>
             </div>
           </div>
           
-          {/* 3. Login Buttons */}
+          {/* 3. Matched Login Buttons */}
           <div className="space-y-3">
             <button 
               onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black shadow-xl shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white py-5 rounded-2xl font-black shadow-xl shadow-blue-900/10 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
               Google Login
             </button>
             
             <button 
               onClick={() => setIsGuest(true)} 
-              className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-black border border-slate-100 hover:bg-slate-100 active:scale-95 transition-all"
+              className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100 hover:bg-slate-100 active:scale-95 transition-all"
             >
               Guest Mode
             </button>
