@@ -86,14 +86,27 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
   }, [processedData.dateMap, todayDate]);
 
+  // TARGETED CHANGE: Accurate Activity Labeling
   const recentActivity = useMemo(() => {
     return [...rolls]
       .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
       .slice(0, 5)
       .map(r => {
+        const created = new Date(r.created_at).getTime();
+        const updated = new Date(r.updated_at).getTime();
+        // Tolerance of 1000ms to avoid false "Edited" flags on initial creation
+        const isNew = Math.abs(updated - created) < 1000;
+
         let type = "Produced", icon = <PlusCircle size={14} className="text-green-500" />;
-        if (r.status === 'dispatched') { type = "Dispatched"; icon = <Send size={14} className="text-blue-500" />; }
-        else if (r.updated_at !== r.created_at) { type = "Edited"; icon = <Edit3 size={14} className="text-orange-500" />; }
+        
+        if (r.status === 'dispatched') { 
+          type = "Dispatched"; 
+          icon = <Send size={14} className="text-blue-500" />; 
+        } else if (!isNew) { 
+          type = "Edited"; 
+          icon = <Edit3 size={14} className="text-orange-500" />; 
+        }
+        
         return { ...r, type, icon };
       });
   }, [rolls]);
@@ -126,20 +139,20 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 2: SUBTLE STOCK TOTALS (Updated to subtle transparent bg) */}
-      <div className="bg-[#1a1f2c]/90 backdrop-blur-md text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-gray-800">
+      {/* SECTION 2: SUBTLE STOCK TOTALS */}
+      <div className="bg-slate-900/40 backdrop-blur-md text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-white/10">
         <div className="text-center">
-          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Stock Count</div>
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Stock Count</div>
           <div className="text-3xl font-black">{processedData.inStock.length}</div>
         </div>
-        <div className="h-10 w-px bg-gray-700/50" />
+        <div className="h-10 w-px bg-white/10" />
         <div className="text-center">
-          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Weight</div>
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Weight</div>
           <div className="text-3xl font-black text-green-400">{(weightKg/1000).toFixed(2)} <span className="text-xs font-normal text-white/50">Ton</span></div>
         </div>
       </div>
 
-      {/* SECTION 3: TIMELINE CHART (Increased Title Font) */}
+      {/* SECTION 3: TIMELINE CHART */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <BarChart3 size={16} className="text-blue-600"/> Performance (Monthly)
@@ -160,7 +173,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 4: RECENT ACTIVITY LOG (Increased Title Font) */}
+      {/* SECTION 4: RECENT ACTIVITY LOG */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
           <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
@@ -186,7 +199,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 5: QUALITY BREAKDOWN (Increased Title Font) */}
+      {/* SECTION 5: QUALITY BREAKDOWN */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <PieIcon size={16} className="text-blue-600"/> Quality Breakdown
@@ -204,7 +217,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 6: COLOR ANALYSIS (Increased Title Font) */}
+      {/* SECTION 6: COLOR ANALYSIS */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <BarChart3 size={16} className="text-blue-600"/> Color Analysis (Kg)
@@ -223,7 +236,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 7: AGED STOCK (Increased Title Font) */}
+      {/* SECTION 7: AGED STOCK */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-red-50/50 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
@@ -241,7 +254,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 8: MATERIAL ALERTS (Original UI preserved) */}
+      {/* SECTION 8: MATERIAL ALERTS */}
       {materials.filter(m => m.stock_quantity < m.min_level).length > 0 && (
         <div className="bg-white p-5 rounded-3xl border-l-8 border-red-500 shadow-sm border border-gray-100">
           <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-sm md:text-base uppercase tracking-widest">
