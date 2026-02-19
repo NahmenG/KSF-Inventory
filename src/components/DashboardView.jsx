@@ -25,7 +25,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   const todayDate = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
   
-  // 1. MASTER DATA PROCESSOR (Original logic restored)
+  // 1. MASTER DATA PROCESSOR (Benchmark logic)
   const processedData = useMemo(() => {
     const inStock = [];
     const producedToday = [];
@@ -86,7 +86,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
   }, [processedData.dateMap, todayDate]);
 
-  // TARGETED CHANGE: Accurate Activity Labeling
+  // TARGETED CHANGE: Enhanced Activity Status Logic
   const recentActivity = useMemo(() => {
     return [...rolls]
       .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
@@ -94,15 +94,15 @@ const DashboardView = React.memo(({ rolls, materials }) => {
       .map(r => {
         const created = new Date(r.created_at).getTime();
         const updated = new Date(r.updated_at).getTime();
-        // Tolerance of 1000ms to avoid false "Edited" flags on initial creation
-        const isNew = Math.abs(updated - created) < 1000;
+        // Increased buffer to 5 seconds to account for database latency/triggers
+        const isNew = Math.abs(updated - created) < 5000;
 
         let type = "Produced", icon = <PlusCircle size={14} className="text-green-500" />;
         
         if (r.status === 'dispatched') { 
           type = "Dispatched"; 
           icon = <Send size={14} className="text-blue-500" />; 
-        } else if (!isNew) { 
+        } else if (r.status === 'in_stock' && !isNew) { 
           type = "Edited"; 
           icon = <Edit3 size={14} className="text-orange-500" />; 
         }
@@ -127,7 +127,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* SECTION 1: VELOCITY */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-green-500 border border-gray-100">
           <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today's Production</div>
@@ -139,20 +138,19 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 2: SUBTLE STOCK TOTALS */}
-      <div className="bg-slate-900/40 backdrop-blur-md text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-white/10">
+      {/* SECTION 2: DARKER SUBTLE STOCK TOTALS (bg-slate-900/80 for better contrast) */}
+      <div className="bg-slate-900/80 backdrop-blur-lg text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-white/10">
         <div className="text-center">
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Stock Count</div>
+          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Stock Count</div>
           <div className="text-3xl font-black">{processedData.inStock.length}</div>
         </div>
-        <div className="h-10 w-px bg-white/10" />
+        <div className="h-10 w-px bg-white/20" />
         <div className="text-center">
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Weight</div>
+          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Weight</div>
           <div className="text-3xl font-black text-green-400">{(weightKg/1000).toFixed(2)} <span className="text-xs font-normal text-white/50">Ton</span></div>
         </div>
       </div>
 
-      {/* SECTION 3: TIMELINE CHART */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <BarChart3 size={16} className="text-blue-600"/> Performance (Monthly)
@@ -173,7 +171,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 4: RECENT ACTIVITY LOG */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
           <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
@@ -199,7 +196,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 5: QUALITY BREAKDOWN */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <PieIcon size={16} className="text-blue-600"/> Quality Breakdown
@@ -217,7 +213,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 6: COLOR ANALYSIS */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <BarChart3 size={16} className="text-blue-600"/> Color Analysis (Kg)
@@ -236,7 +231,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 7: AGED STOCK */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-red-50/50 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
@@ -254,7 +248,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SECTION 8: MATERIAL ALERTS */}
       {materials.filter(m => m.stock_quantity < m.min_level).length > 0 && (
         <div className="bg-white p-5 rounded-3xl border-l-8 border-red-500 shadow-sm border border-gray-100">
           <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-sm md:text-base uppercase tracking-widest">
