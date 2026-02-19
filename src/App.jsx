@@ -97,32 +97,35 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [fetchData]);
 
-  // --- THE LOGIN PAGE (EXACT RESTORATION) ---
+  // --- THE LOGIN PAGE (EXACT RESTORATION WITH LOGO) ---
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border border-gray-100">
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl max-w-sm w-full text-center border border-gray-100">
           
-          {/* 1. Company Logo on Top */}
-          <div className="bg-blue-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-100">
-            <span className="text-white text-3xl font-black">KSF</span>
+          {/* 1. Company Logo on Top (Ensuring visible rendering) */}
+          <div className="flex justify-center mb-6">
+            <div className="bg-blue-600 w-24 h-24 rounded-3xl flex items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
+              <span className="text-white text-4xl font-black tracking-tighter">KSF</span>
+            </div>
           </div>
           
           {/* 2. Inventory Management Text */}
-          <h1 className="text-2xl font-black text-gray-800 mb-8">Inventory Management</h1>
+          <h1 className="text-2xl font-black text-gray-800 mb-2 tracking-tight">Inventory Management</h1>
+          <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-10">Factory Control Portal</p>
           
           {/* 3. Two Login Buttons */}
           <div className="space-y-3">
             <button 
               onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-100 active:scale-95 transition-all"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
               Google Login
             </button>
             
             <button 
               onClick={() => setIsGuest(true)} 
-              className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-black border border-slate-100 hover:bg-slate-100 active:scale-95 transition-all"
+              className="w-full bg-slate-50 text-gray-400 py-4 rounded-2xl font-black border border-slate-100 hover:bg-slate-100 active:scale-95 transition-all"
             >
               Guest Mode
             </button>
@@ -134,12 +137,12 @@ export default function App() {
 
   // --- MAIN APP UI ---
   return (
-    <div className="min-h-screen bg-slate-50 pt-16 pb-24">
+    <div className="min-h-screen bg-slate-50 pt-16 pb-24 font-sans">
       <Header 
         deviceName={deviceName} 
         loading={loading} 
         onLogout={() => {
-          if(window.confirm("Logout?")) {
+          if(window.confirm("Logout and clear session?")) {
             supabase.auth.signOut(); 
             localStorage.clear(); 
             window.location.reload();
@@ -153,12 +156,14 @@ export default function App() {
       />
       
       <main className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
-        {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
-        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
-        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
-        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
-        {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} />}
-        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => fetchData(true)} />}
+        <div className="animate-in fade-in duration-500">
+          {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
+          {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
+          {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
+          {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
+          {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} />}
+          {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => fetchData(true)} />}
+        </div>
       </main>
 
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
