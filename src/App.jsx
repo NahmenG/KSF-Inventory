@@ -96,17 +96,35 @@ export default function App() {
 
       setRolls([...allStock, ...allHistory]);
 
-      // 3. MATERIALS
+      // 3. FETCH MATERIALS
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       setMaterials(mats || []);
     } catch (e) { console.error("Fetch Error:", e); }
     finally { setLoading(false); }
   }, []);
 
+  // --- PERSISTENT INITIAL LOAD ---
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) { setUser(session.user); fetchData(); }
-    });
+    const initializeApp = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setUser(session.user);
+        // Check for saved date range in localStorage to persist on refresh
+        const savedFilters = localStorage.getItem('ksf_history_filters');
+        if (savedFilters) {
+          try {
+            const { startDate, endDate } = JSON.parse(savedFilters);
+            if (startDate && endDate) {
+              fetchData(startDate, endDate);
+              return;
+            }
+          } catch (e) { console.error(e); }
+        }
+        fetchData(); 
+      }
+    };
+    initializeApp();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session) fetchData();
@@ -117,7 +135,7 @@ export default function App() {
   // --- LOGIN UI ---
   if (!user && !isGuest) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
+      <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100 animate-in fade-in duration-500">
           <div className="flex justify-center mb-1">
             <img src="/logo.png" alt="KSF Logo" className="w-40 h-40 md:w-56 md:h-56 object-contain" style={{ imageRendering: 'pixelated' }} />
@@ -138,7 +156,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-16 pb-24 font-sans">
+    <div className="min-h-screen bg-slate-50 pt-16 pb-24 font-sans text-slate-900">
       <Header 
         deviceName={deviceName} loading={loading} 
         onLogout={() => { if(window.confirm("Logout?")) { supabase.auth.signOut(); localStorage.clear(); window.location.reload(); }}} 

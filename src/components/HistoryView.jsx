@@ -40,14 +40,27 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
 
   // 4. EXPORT & RESET
   const handleExport = () => {
-    const ws = XLSX.utils.json_to_sheet(filtered.map(r => ({ "Roll ID": r.product_id, "Buyer": r.customer_name, "Quality": r.quality, "Color": r.color, "GSM": r.gsm, "Weight": r.net_weight, "Date": r.dispatched_at })));
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "History");
+    const data = filtered.map(r => ({
+      "Roll ID": r.product_id,
+      "Buyer": r.customer_name || 'Generic Stock',
+      "Quality": r.quality,
+      "Color": r.color,
+      "GSM": r.gsm,
+      "Width": r.width_inches,
+      "Weight": r.net_weight,
+      "Dispatch Date": r.dispatched_at ? new Date(r.dispatched_at).toLocaleString() : 'N/A'
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "History");
     XLSX.writeFile(wb, `KSF_History_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const clearFilters = () => {
-    setFilters({ customer: '', quality: '', gsm: '', width: '', color: '', startDate: '', endDate: '' });
-    onFetchRange(null, null); // Resets to 30 days
+    const defaultFilters = { customer: '', quality: '', gsm: '', width: '', color: '', startDate: '', endDate: '' };
+    setFilters(defaultFilters);
+    localStorage.setItem('ksf_history_filters', JSON.stringify(defaultFilters));
+    onFetchRange(null, null); // Resets App to 30 days
   };
 
   return (
@@ -55,7 +68,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
         <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100 relative">
           {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color || filters.startDate || filters.endDate) && (
-            <button onClick={clearFilters} className="absolute -top-1 -right-1 p-1 bg-red-500 text-white rounded-full shadow-lg z-10 active:scale-90 transition-all"><X size={12} /></button>
+            <button onClick={clearFilters} className="absolute -top-1 -right-1 p-1 bg-red-500 text-white rounded-full shadow-lg z-10 active:scale-90 transition-all hover:bg-red-600"><X size={12} /></button>
           )}
           <div className="space-y-2">
             <div className="grid grid-cols-5 gap-1.5">
@@ -80,8 +93,12 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
       </div>
       <div className="space-y-2 px-1">
         {filtered.map(r => (
-          <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200 cursor-pointer group">
-            <div className="flex-1"><div className="font-black text-blue-600 text-lg flex items-center gap-2">{r.product_id} <span className={`text-[7px] md:text-[9px] font-black uppercase px-1.5 md:px-2 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.status === 'in_stock' ? 'In Stock' : 'Dispatched'}</span></div><div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div><div className="text-[10px] text-gray-400 uppercase font-black mt-1 flex flex-wrap gap-2"><span className="bg-slate-50 px-1.5 rounded text-gray-600 font-bold">{r.quality}</span><span className="text-blue-500 font-bold">{r.color}</span><span className="text-orange-600 bg-orange-50 px-1.5 rounded font-bold">{r.gsm} GSM</span><span className="text-green-600 bg-green-50 px-1.5 rounded font-bold">{r.width_inches}" Size</span></div></div>
+          <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200 cursor-pointer">
+            <div className="flex-1">
+              <div className="font-black text-blue-600 text-lg flex items-center gap-2">{r.product_id} <span className={`text-[7px] md:text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.status === 'in_stock' ? 'In Stock' : 'Dispatched'}</span></div>
+              <div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div>
+              <div className="text-[10px] text-gray-400 uppercase font-black mt-1 flex flex-wrap gap-2"><span className="bg-slate-50 px-1.5 rounded text-gray-600 font-bold">{r.quality}</span><span className="text-blue-500 font-bold">{r.color}</span><span className="text-orange-600 bg-orange-50 px-1.5 rounded font-bold">{r.gsm} GSM</span><span className="text-green-600 bg-green-50 px-1.5 rounded font-bold">{r.width_inches}" Size</span></div>
+            </div>
             <div className="text-right flex flex-col items-end min-w-[100px]"><div className="font-black text-2xl text-gray-900 leading-none">{r.net_weight} <span className="text-[10px] font-normal text-gray-400">kg</span></div><div className="text-[10px] font-bold text-gray-400 flex items-center gap-1 mt-2"><Clock size={10} /> {r.status === 'dispatched' && r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : new Date(r.created_at).toLocaleDateString()}</div></div>
           </div>
         ))}
