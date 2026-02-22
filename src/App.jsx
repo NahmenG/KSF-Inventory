@@ -50,7 +50,7 @@ export default function App() {
     localStorage.setItem('ksf_last_activity', Date.now().toString());
   }, [activeTab]);
 
-  // --- FULL DATA FETCHING LOGIC ---
+  // --- FULL DATA FETCHING LOGIC (Preserved Benchmark Structure) ---
   const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     try {
@@ -103,7 +103,6 @@ export default function App() {
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100 animate-in fade-in duration-500">
           
-          {/* 1. Large Sharp Logo */}
           <div className="flex justify-center mb-1">
             <img 
               src="/logo.png" 
@@ -114,39 +113,28 @@ export default function App() {
                 imageRendering: '-webkit-optimize-contrast',
                 transform: 'scale(1.02)' 
               }}
-              onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.nextSibling.style.display = 'flex';
-              }}
             />
-            {/* Fallback */}
-            <div style={{display: 'none'}} className="bg-[#1e40af] w-40 h-40 md:w-56 md:h-56 rounded-[2.5rem] items-center justify-center shadow-xl shadow-blue-100 border-4 border-white">
-              <span className="text-white text-6xl font-black tracking-tighter">KSF</span>
-            </div>
           </div>
           
-          {/* 2. Inventory Manager Subtext (Positioned Higher & Case Corrected) */}
           <div className="flex justify-center mb-10">
             <div className="max-w-[140px]">
-              <h1 className="text-base font-bold text-gray-500 tracking-tight leading-tight">
+              <h1 className="text-base font-bold text-gray-400 tracking-tight leading-tight">
                 Inventory Manager
               </h1>
               <div className="w-6 h-0.5 bg-[#1e40af] mx-auto mt-2 rounded-full opacity-30"></div>
             </div>
           </div>
           
-          {/* 3. Matched Login Buttons */}
           <div className="space-y-3">
             <button 
               onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} 
-              className="w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white py-5 rounded-2xl font-black shadow-xl shadow-blue-900/10 active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white py-5 rounded-2xl font-black shadow-xl"
             >
               Google Login
             </button>
-            
             <button 
               onClick={() => setIsGuest(true)} 
-              className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100 hover:bg-slate-100 active:scale-95 transition-all"
+              className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100"
             >
               Guest Mode
             </button>
@@ -180,9 +168,20 @@ export default function App() {
         <div className="animate-in fade-in duration-500">
           {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
           {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
+          
+          {/* STOCK TAB: Shows all rolls (Original Benchmark behavior) */}
           {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
+          
           {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
-          {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} />}
+          
+          {/* HISTORY TAB: ONLY SHOWS DISPATCHED ROLLS (Requested Change) */}
+          {activeTab === 'history' && (
+            <HistoryView 
+              rolls={rolls.filter(r => r.status === 'dispatched')} 
+              onSelectRoll={(r) => setEditRoll({...r})} 
+            />
+          )}
+          
           {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => fetchData(true)} />}
         </div>
       </main>
