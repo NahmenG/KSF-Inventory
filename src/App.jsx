@@ -27,6 +27,7 @@ export default function App() {
   const [materials, setMaterials] = useState([]);
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
+  const [activeRange, setActiveRange] = useState('30days'); 
 
   // --- SESSION TAB PERSISTENCE ---
   const [activeTab, setActiveTab] = useState(() => {
@@ -50,11 +51,11 @@ export default function App() {
     localStorage.setItem('ksf_last_activity', Date.now().toString());
   }, [activeTab]);
 
-  // --- UPDATED DATA FETCHING LOGIC (Accepts Start and End Dates) ---
+  // --- FULL DATA FETCHING LOGIC (Optimized for Egress & >1000 Rows) ---
   const fetchData = useCallback(async (start = null, end = null) => {
     setLoading(true);
     try {
-      // 1. FETCH ALL IN-STOCK ROLLS (No limit, pagination loop)
+      // 1. FETCH ALL IN-STOCK ROLLS (Pagination Loop)
       let allStock = [];
       let stockFrom = 0;
       const step = 1000;
@@ -74,7 +75,7 @@ export default function App() {
         stockFrom += step;
       }
 
-      // 2. FETCH DISPATCHED ROLLS
+      // 2. FETCH DISPATCHED ROLLS (History)
       let allHistory = [];
       let historyFrom = 0;
       
@@ -84,18 +85,18 @@ export default function App() {
         .eq('status', 'dispatched')
         .order('dispatched_at', { ascending: false });
 
-      // LOGIC: If user provided dates, use them. Otherwise, default to 30 days.
       if (start && end) {
         historyQuery = historyQuery.gte('dispatched_at', start).lte('dispatched_at', end + 'T23:59:59');
+        setActiveRange('custom');
       } else {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         historyQuery = historyQuery.gte('dispatched_at', thirtyDaysAgo.toISOString());
+        setActiveRange('30days');
       }
 
       while (true) {
         const { data, error } = await historyQuery.range(historyFrom, historyFrom + step - 1);
-        
         if (error) throw error;
         if (!data || data.length === 0) break;
         allHistory = [...allHistory, ...data];
@@ -103,10 +104,9 @@ export default function App() {
         historyFrom += step;
       }
 
-      // 3. COMBINE DATA
       setRolls([...allStock, ...allHistory]);
 
-      // 4. FETCH MATERIALS
+      // 3. FETCH MATERIALS
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       setMaterials(mats || []);
 
@@ -117,7 +117,6 @@ export default function App() {
     }
   }, []);
 
-  // --- AUTH SUBSCRIPTION ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) { setUser(session.user); fetchData(); }
@@ -129,41 +128,35 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [fetchData]);
 
-  // --- THE LOGIN PAGE (Benchmark UI) ---
+  // --- LOGIN PAGE ---
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100 animate-in fade-in duration-500">
           <div className="flex justify-center mb-1">
-            <img 
-              src="/logo.png" 
-              alt="KSF Logo" 
-              className="w-40 h-40 md:w-56 md:h-56 object-contain"
-              style={{ imageRendering: 'pixelated', transform: 'scale(1.02)' }}
-            />
+            <img src="/logo.png" alt="KSF Logo" className="w-40 h-40 md:w-56 md:h-56 object-contain" style={{ imageRendering: 'pixelated' }} />
           </div>
           <div className="flex justify-center mb-10">
             <div className="max-w-[140px]">
-              <h1 className="text-base font-bold text-gray-400 tracking-tight leading-tight">Inventory Manager</h1>
+              <h1 className="text-base font-bold text-gray-500 tracking-tight leading-tight">Inventory Manager</h1>
               <div className="w-6 h-0.5 bg-[#1e40af] mx-auto mt-2 rounded-full opacity-30"></div>
             </div>
           </div>
           <div className="space-y-3">
-            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black shadow-xl">Google Login</button>
-            <button onClick={() => setIsGuest(true)} className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100">Guest Mode</button>
+            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black shadow-xl active:scale-95 transition-all">Google Login</button>
+            <button onClick={() => setIsGuest(true)} className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100 active:scale-95 transition-all">Guest Mode</button>
           </div>
         </div>
       </div>
     );
   }
 
-  // --- MAIN APP UI ---
   return (
     <div className="min-h-screen bg-slate-50 pt-16 pb-24 font-sans">
       <Header 
         deviceName={deviceName} 
         loading={loading} 
-        onLogout={() => { if(window.confirm("Logout?")) { supabase.auth.signOut(); localStorage.clear(); window.location.reload(); } }} 
+        onLogout={() => { if(window.confirm("Logout?")) { supabase.auth.signOut(); localStorage.clear(); window.location.reload(); }}} 
         onEditDeviceName={() => { const n = prompt("Device Name:", deviceName); if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)} }} 
         onLogoClick={() => setActiveTab('dashboard')} 
       />
@@ -174,20 +167,7 @@ export default function App() {
           {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
           {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
           {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
-          
-          {/* HISTORY TAB: ONLY DISPATCHED ROLLS FROM LAST 30 DAYS BY DEFAULT */}
-          {activeTab === 'history' && (
-            <HistoryView 
-              rolls={rolls.filter(r => {
-                if (r.status !== 'dispatched') return false;
-                const thirtyDaysAgo = new Date();
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                return new Date(r.dispatched_at) >= thirtyDaysAgo;
-              })} 
-              onSelectRoll={(r) => setEditRoll({...r})} 
-            />
-          )}
-          
+          {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={fetchData} activeRange={activeRange} />}
           {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => fetchData(true)} />}
         </div>
       </main>
