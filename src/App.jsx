@@ -50,7 +50,7 @@ export default function App() {
     localStorage.setItem('ksf_last_activity', Date.now().toString());
   }, [activeTab]);
 
-  // --- FULL DATA FETCHING LOGIC (Preserved Benchmark Structure) ---
+  // --- FULL DATA FETCHING LOGIC (Restored Benchmark) ---
   const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     try {
@@ -97,47 +97,28 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [fetchData]);
 
-  // --- THE LOGIN PAGE (FINAL LAYOUT & COLOR MATCH) ---
+  // --- THE LOGIN PAGE (Benchmark UI) ---
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100 animate-in fade-in duration-500">
-          
           <div className="flex justify-center mb-1">
             <img 
               src="/logo.png" 
               alt="KSF Logo" 
               className="w-40 h-40 md:w-56 md:h-56 object-contain"
-              style={{ 
-                imageRendering: 'pixelated',
-                imageRendering: '-webkit-optimize-contrast',
-                transform: 'scale(1.02)' 
-              }}
+              style={{ imageRendering: 'pixelated', transform: 'scale(1.02)' }}
             />
           </div>
-          
           <div className="flex justify-center mb-10">
             <div className="max-w-[140px]">
-              <h1 className="text-base font-bold text-gray-400 tracking-tight leading-tight">
-                Inventory Manager
-              </h1>
+              <h1 className="text-base font-bold text-gray-400 tracking-tight leading-tight">Inventory Manager</h1>
               <div className="w-6 h-0.5 bg-[#1e40af] mx-auto mt-2 rounded-full opacity-30"></div>
             </div>
           </div>
-          
           <div className="space-y-3">
-            <button 
-              onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} 
-              className="w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white py-5 rounded-2xl font-black shadow-xl"
-            >
-              Google Login
-            </button>
-            <button 
-              onClick={() => setIsGuest(true)} 
-              className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100"
-            >
-              Guest Mode
-            </button>
+            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black shadow-xl">Google Login</button>
+            <button onClick={() => setIsGuest(true)} className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100">Guest Mode</button>
           </div>
         </div>
       </div>
@@ -150,17 +131,8 @@ export default function App() {
       <Header 
         deviceName={deviceName} 
         loading={loading} 
-        onLogout={() => {
-          if(window.confirm("Logout?")) {
-            supabase.auth.signOut(); 
-            localStorage.clear(); 
-            window.location.reload();
-          }
-        }} 
-        onEditDeviceName={() => {
-          const n = prompt("Device Name:", deviceName); 
-          if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)}
-        }} 
+        onLogout={() => { if(window.confirm("Logout?")) { supabase.auth.signOut(); localStorage.clear(); window.location.reload(); } }} 
+        onEditDeviceName={() => { const n = prompt("Device Name:", deviceName); if(n) {localStorage.setItem('ksf_device_name', n); setDeviceName(n)} }} 
         onLogoClick={() => setActiveTab('dashboard')} 
       />
       
@@ -168,16 +140,18 @@ export default function App() {
         <div className="animate-in fade-in duration-500">
           {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
           {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
-          
-          {/* STOCK TAB: Shows all rolls (Original Benchmark behavior) */}
           {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
-          
           {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
           
-          {/* HISTORY TAB: ONLY SHOWS DISPATCHED ROLLS (Requested Change) */}
+          {/* HISTORY TAB: ONLY DISPATCHED ROLLS FROM LAST 30 DAYS BY DEFAULT */}
           {activeTab === 'history' && (
             <HistoryView 
-              rolls={rolls.filter(r => r.status === 'dispatched')} 
+              rolls={rolls.filter(r => {
+                if (r.status !== 'dispatched') return false;
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                return new Date(r.dispatched_at) >= thirtyDaysAgo;
+              })} 
               onSelectRoll={(r) => setEditRoll({...r})} 
             />
           )}
@@ -187,7 +161,6 @@ export default function App() {
       </main>
 
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
-      
       {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={() => { setEditRoll(null); fetchData(true); }} />}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
     </div>
