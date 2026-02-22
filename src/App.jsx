@@ -50,40 +50,41 @@ export default function App() {
     localStorage.setItem('ksf_last_activity', Date.now().toString());
   }, [activeTab]);
 
-  // --- FULL DATA FETCHING LOGIC (Restored Benchmark) ---
-  const fetchData = useCallback(async (isBackground = false) => {
-    if (!isBackground) setLoading(true);
-    try {
-      let allRolls = [];
-      let from = 0;
-      const step = 1000;
-      while (true) {
-        const { data, error } = await supabase
-          .from('rolls')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .range(from, from + step - 1);
-        
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        
-        allRolls = [...allRolls, ...data];
-        if (data.length < step) break;
-        from += step;
-      }
-      setRolls(allRolls);
+  // --- UPDATED DATA FETCHING LOGIC ---
+const fetchData = useCallback(async (isBackground = false) => {
+  if (!isBackground) setLoading(true);
+  try {
+    // 1. Fetch ALL In-Stock Rolls (Required for Stock Tab)
+    // This is usually a small amount of data compared to total history
+    const { data: stockData } = await supabase
+      .from('rolls')
+      .select('*')
+      .eq('status', 'in_stock');
 
-      const { data: mats } = await supabase
-        .from('raw_materials')
-        .select('*')
-        .order('name');
-      setMaterials(mats || []);
-    } catch (e) { 
-      console.error("Fetch Error:", e);
-    } finally { 
-      if (!isBackground) setLoading(false); 
-    }
-  }, []);
+    // 2. Fetch ONLY the last 30 days of Dispatched Rolls (The Egress Saver)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: historyData } = await supabase
+      .from('rolls')
+      .select('*')
+      .eq('status', 'dispatched')
+      .gte('dispatched_at', thirtyDaysAgo.toISOString())
+      .order('dispatched_at', { ascending: false });
+
+    // 3. Combine them in memory
+    setRolls([...(stockData || []), ...(historyData || [])]);
+
+    // 4. Materials
+    const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
+    setMaterials(mats || []);
+    
+  } catch (e) { 
+    console.error("Fetch Error:", e);
+  } finally { 
+    if (!isBackground) setLoading(false); 
+  }
+}, []);
 
   // --- AUTH SUBSCRIPTION ---
   useEffect(() => {
