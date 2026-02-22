@@ -34,7 +34,7 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
           <img 
             src="/logo.png" 
             alt="KSF Logo" 
-            className="w-14 h-14 object-contain" 
+            className="w-15 h-15 object-contain" 
             style={{ 
               imageRendering: 'pixelated', 
               transform: 'scale(1.3)' 
