@@ -54,9 +54,9 @@ export default function App() {
   const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     try {
-      // 1. FETCH ALL IN-STOCK ROLLS (Using Pagination to bypass 1000 row limit)
+      // 1. FETCH ALL IN-STOCK ROLLS (No limit)
       let allStock = [];
-      let from = 0;
+      let stockFrom = 0;
       const step = 1000;
       
       while (true) {
@@ -65,31 +65,39 @@ export default function App() {
           .select('*')
           .eq('status', 'in_stock')
           .order('created_at', { ascending: false })
-          .range(from, from + step - 1);
+          .range(stockFrom, stockFrom + step - 1);
         
         if (error) throw error;
         if (!data || data.length === 0) break;
-        
         allStock = [...allStock, ...data];
         if (data.length < step) break;
-        from += step;
+        stockFrom += step;
       }
 
-      // 2. FETCH DISPATCHED ROLLS (Strictly last 30 days to solve Egress)
+      // 2. FETCH ALL DISPATCHED ROLLS FROM LAST 30 DAYS (No limit within that range)
+      let allHistory = [];
+      let historyFrom = 0;
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const { data: historyData, error: historyError } = await supabase
-        .from('rolls')
-        .select('*')
-        .eq('status', 'dispatched')
-        .gte('dispatched_at', thirtyDaysAgo.toISOString())
-        .order('dispatched_at', { ascending: false });
-
-      if (historyError) throw historyError;
+      while (true) {
+        const { data, error } = await supabase
+          .from('rolls')
+          .select('*')
+          .eq('status', 'dispatched')
+          .gte('dispatched_at', thirtyDaysAgo.toISOString())
+          .order('dispatched_at', { ascending: false })
+          .range(historyFrom, historyFrom + step - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allHistory = [...allHistory, ...data];
+        if (data.length < step) break;
+        historyFrom += step;
+      }
 
       // 3. COMBINE DATA
-      setRolls([...allStock, ...(historyData || [])]);
+      setRolls([...allStock, ...allHistory]);
 
       // 4. FETCH MATERIALS
       const { data: mats } = await supabase
