@@ -50,11 +50,11 @@ export default function App() {
     localStorage.setItem('ksf_last_activity', Date.now().toString());
   }, [activeTab]);
 
-  // --- UPDATED DATA FETCHING LOGIC ---
-  const fetchData = useCallback(async (isBackground = false) => {
-    if (!isBackground) setLoading(true);
+  // --- UPDATED DATA FETCHING LOGIC (Accepts Start and End Dates) ---
+  const fetchData = useCallback(async (start = null, end = null) => {
+    setLoading(true);
     try {
-      // 1. FETCH ALL IN-STOCK ROLLS (No limit)
+      // 1. FETCH ALL IN-STOCK ROLLS (No limit, pagination loop)
       let allStock = [];
       let stockFrom = 0;
       const step = 1000;
@@ -74,20 +74,27 @@ export default function App() {
         stockFrom += step;
       }
 
-      // 2. FETCH ALL DISPATCHED ROLLS FROM LAST 30 DAYS (No limit within that range)
+      // 2. FETCH DISPATCHED ROLLS
       let allHistory = [];
       let historyFrom = 0;
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      let historyQuery = supabase
+        .from('rolls')
+        .select('*')
+        .eq('status', 'dispatched')
+        .order('dispatched_at', { ascending: false });
+
+      // LOGIC: If user provided dates, use them. Otherwise, default to 30 days.
+      if (start && end) {
+        historyQuery = historyQuery.gte('dispatched_at', start).lte('dispatched_at', end + 'T23:59:59');
+      } else {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        historyQuery = historyQuery.gte('dispatched_at', thirtyDaysAgo.toISOString());
+      }
 
       while (true) {
-        const { data, error } = await supabase
-          .from('rolls')
-          .select('*')
-          .eq('status', 'dispatched')
-          .gte('dispatched_at', thirtyDaysAgo.toISOString())
-          .order('dispatched_at', { ascending: false })
-          .range(historyFrom, historyFrom + step - 1);
+        const { data, error } = await historyQuery.range(historyFrom, historyFrom + step - 1);
         
         if (error) throw error;
         if (!data || data.length === 0) break;
@@ -100,16 +107,13 @@ export default function App() {
       setRolls([...allStock, ...allHistory]);
 
       // 4. FETCH MATERIALS
-      const { data: mats } = await supabase
-        .from('raw_materials')
-        .select('*')
-        .order('name');
+      const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       setMaterials(mats || []);
 
     } catch (e) { 
       console.error("Fetch Error:", e);
     } finally { 
-      if (!isBackground) setLoading(false); 
+      setLoading(false); 
     }
   }, []);
 
