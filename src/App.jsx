@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
 // Full Component Imports
@@ -28,6 +28,9 @@ export default function App() {
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
   const [activeRange, setActiveRange] = useState('30days'); 
+  
+  // Use a ref to prevent double-fetching during auth state changes
+  const initialFetchDone = useRef(false);
 
   // --- SESSION TAB PERSISTENCE ---
   const [activeTab, setActiveTab] = useState(() => {
@@ -48,11 +51,11 @@ export default function App() {
     localStorage.setItem('ksf_last_activity', Date.now().toString());
   }, [activeTab]);
 
-  // --- OPTIMIZED DATA FETCHING (EGRESS SAVER) ---
+  // --- DATA FETCHING LOGIC ---
   const fetchData = useCallback(async (start = null, end = null) => {
     setLoading(true);
     try {
-      // 1. FETCH ALL IN-STOCK ROLLS (Pagination Loop for >1000 rows)
+      // 1. FETCH ALL IN-STOCK ROLLS
       let allStock = [];
       let stockFrom = 0;
       const step = 1000;
@@ -95,39 +98,42 @@ export default function App() {
       }
 
       setRolls([...allStock, ...allHistory]);
-
-      // 3. FETCH MATERIALS
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       setMaterials(mats || []);
     } catch (e) { console.error("Fetch Error:", e); }
     finally { setLoading(false); }
   }, []);
 
-  // --- PERSISTENT INITIAL LOAD ---
+  // --- PERSISTENT AUTH & LOAD LOGIC ---
   useEffect(() => {
-    const initializeApp = async () => {
+    const startUp = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
+      if (session && !initialFetchDone.current) {
         setUser(session.user);
-        // Check for saved date range in localStorage to persist on refresh
+        initialFetchDone.current = true;
+
         const savedFilters = localStorage.getItem('ksf_history_filters');
         if (savedFilters) {
           try {
             const { startDate, endDate } = JSON.parse(savedFilters);
             if (startDate && endDate) {
-              fetchData(startDate, endDate);
+              await fetchData(startDate, endDate);
               return;
             }
           } catch (e) { console.error(e); }
         }
-        fetchData(); 
+        await fetchData(); 
       }
     };
-    initializeApp();
+    startUp();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
-      if (session) fetchData();
+      // Only fetch if this is a fresh login event and we haven't fetched yet
+      if (session && event === 'SIGNED_IN' && !initialFetchDone.current) {
+        initialFetchDone.current = true;
+        fetchData();
+      }
     });
     return () => subscription.unsubscribe();
   }, [fetchData]);
