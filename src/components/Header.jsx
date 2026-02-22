@@ -27,42 +27,41 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-md h-24 border-b border-gray-100 z-50 flex items-center justify-between px-6">
+      <header className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-md h-16 border-b border-gray-100 z-50 flex items-center justify-between px-6">
         
         {/* LEFT SIDE: LARGE LOGO */}
         <div className="flex items-center cursor-pointer" onClick={onLogoClick}>
           <img 
             src="/logo.png" 
             alt="KSF Logo" 
-            className="w-20 h-20 object-contain" 
+            className="w-14 h-14 object-contain" 
             style={{ 
               imageRendering: 'pixelated', 
-              imageRendering: '-webkit-optimize-contrast',
-              transform: 'scale(1.2)' 
+              transform: 'scale(1.15)' 
             }} 
           />
         </div>
 
         {/* RIGHT SIDE: STATUS, DEVICE NAME & SETTINGS */}
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col items-end border-r border-gray-100 pr-4">
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col items-end border-r border-gray-100 pr-3">
             <div className="flex items-center gap-1.5 mb-0.5">
-              <span className={`text-[9px] font-black uppercase tracking-widest ${loading ? 'text-orange-500' : 'text-green-600'}`}>
+              <span className={`text-[8px] font-black uppercase tracking-widest ${loading ? 'text-orange-500' : 'text-green-600'}`}>
                 {loading ? 'Syncing' : 'System Live'}
               </span>
-              <div className={`w-2 h-2 rounded-full ${loading ? 'bg-orange-400 animate-pulse' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]'}`} />
+              <div className={`w-1.5 h-1.5 rounded-full ${loading ? 'bg-orange-400 animate-pulse' : 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.4)]'}`} />
             </div>
             <div className="flex flex-col items-end">
-              <span className="text-[7px] font-black text-gray-400 uppercase tracking-tighter leading-none">Connected Terminal</span>
-              <span className="text-xs font-black text-blue-600 uppercase tracking-tight leading-tight">{deviceName}</span>
+              <span className="text-[7px] font-black text-gray-400 uppercase tracking-tighter leading-none">Terminal</span>
+              <span className="text-[10px] font-black text-blue-600 uppercase tracking-tight leading-tight">{deviceName}</span>
             </div>
           </div>
           
           <button 
             onClick={() => setShowSettings(true)} 
-            className="p-3.5 bg-slate-50 text-slate-500 rounded-2xl border border-slate-100 active:scale-90 transition-all shadow-sm hover:bg-slate-100"
+            className="p-2 bg-slate-50 text-slate-500 rounded-xl border border-slate-100 active:scale-90 transition-all hover:bg-slate-100"
           >
-            <Settings size={24} />
+            <Settings size={20} />
           </button>
         </div>
       </header>
