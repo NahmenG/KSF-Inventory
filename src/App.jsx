@@ -167,7 +167,16 @@ export default function App() {
           {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
           {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
           {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
-          {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={fetchData} activeRange={activeRange} />}
+          {activeTab === 'history' && (
+            <HistoryView 
+              // This filter ensures that even after a range fetch, 
+              // only DISPATCHED rolls show up in this tab.
+              rolls={rolls.filter(r => r.status === 'dispatched')} 
+              onSelectRoll={(r) => setEditRoll({...r})} 
+              activeRange={activeRange}
+              onFetchRange={(start, end) => fetchData(start, end)} 
+            />
+          )}
           {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => fetchData(true)} />}
         </div>
       </main>
