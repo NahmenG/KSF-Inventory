@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Download, Clock, X, ChevronDown, History, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Download, Clock, X, ChevronDown, History, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 /**
  * HistoryView Component
- * Extended full version with master data export and mobile optimizations.
+ * Benchmark version with Date Range fetching.
  */
-const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
+const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
   // 1. STATE PERSISTENCE
   const [filters, setFilters] = useState(() => {
     const saved = localStorage.getItem('ksf_history_filters');
@@ -23,12 +23,11 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
       gsm: '',
       width: '',
       color: '',
-      dispatchDate: '',
-      onlyDispatched: false
+      startDate: '', // Updated
+      endDate: ''    // Updated
     };
   });
 
-  // Keep sorting logic internal but remove UI control as requested
   const [sort] = useState('newest');
 
   useEffect(() => {
@@ -42,8 +41,6 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
   // 3. FILTERING LOGIC
   const filtered = useMemo(() => {
     return rolls.filter(r => {
-      if (filters.onlyDispatched && r.status !== 'dispatched') return false;
-
       const matchCustomer = !filters.customer || 
         (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
         r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
@@ -53,10 +50,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
       const matchWidth = !filters.width || String(r.width_inches) === filters.width;
       const matchColor = !filters.color || r.color === filters.color;
 
-      const matchDispatchDate = !filters.dispatchDate || 
-        (r.dispatched_at && new Date(r.dispatched_at).toLocaleDateString() === new Date(filters.dispatchDate).toLocaleDateString());
-      
-      return matchCustomer && matchQuality && matchGSM && matchWidth && matchColor && matchDispatchDate;
+      return matchCustomer && matchQuality && matchGSM && matchWidth && matchColor;
     })
     .sort((a, b) => {
       const dateA = new Date(a.dispatched_at || a.created_at);
@@ -96,8 +90,8 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
       gsm: '',
       width: '',
       color: '',
-      dispatchDate: '',
-      onlyDispatched: false
+      startDate: '',
+      endDate: ''
     });
   };
 
@@ -108,7 +102,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
         <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100 relative">
           
-          {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color || filters.dispatchDate || filters.onlyDispatched) && (
+          {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color || filters.startDate || filters.endDate) && (
             <button onClick={clearFilters} className="absolute top-3 right-3 p-1.5 bg-red-50 text-red-500 rounded-full hover:bg-red-600 hover:text-white transition-all z-10 shadow-sm border border-red-100">
               <X size={14} />
             </button>
@@ -131,7 +125,11 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
             </div>
             <input type="number" className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none" placeholder="GSM" value={filters.gsm} onChange={e => setFilters({...filters, gsm: e.target.value})} />
             <input type="number" className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none" placeholder="Size" value={filters.width} onChange={e => setFilters({...filters, width: e.target.value})} />
-            <input type="date" className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none uppercase" value={filters.dispatchDate} onChange={e => setFilters({...filters, dispatchDate: e.target.value})} />
+            
+            {/* DATE RANGE INPUTS */}
+            <input type="date" className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none uppercase" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} />
+            <input type="date" className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none uppercase" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} />
+            
             <div className="relative">
               <select className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none" value={filters.color} onChange={e => setFilters({...filters, color: e.target.value})}>
                 <option value="">Color</option>
@@ -142,17 +140,12 @@ const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
           </div>
 
           <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
-            {/* UPDATED: TOGGLE REPLACES SORT BUTTON */}
+            {/* FETCH BUTTON */}
             <button 
-              onClick={() => setFilters({...filters, onlyDispatched: !filters.onlyDispatched})}
-              className={`flex-1 py-1.5 border rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 ${
-                filters.onlyDispatched 
-                  ? 'bg-orange-500 text-white border-orange-400' 
-                  : 'bg-slate-100 text-slate-500 border-slate-200'
-              }`}
+              onClick={() => onFetchRange(filters.startDate, filters.endDate)}
+              className="flex-1 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
             >
-              {filters.onlyDispatched ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-              {filters.onlyDispatched ? 'Dispatched Mode' : 'View All Rolls'}
+              <RefreshCw size={14} /> Fetch Range
             </button>
 
             <button onClick={handleExport} className="flex-1 bg-green-600 text-white rounded-lg font-black text-[10px] flex items-center justify-center gap-1 shadow-md active:scale-95">
