@@ -50,29 +50,35 @@ export default function App() {
     localStorage.setItem('ksf_last_activity', Date.now().toString());
   }, [activeTab]);
 
-  // --- FULL DATA FETCHING LOGIC ---
+  // --- FULL DATA FETCHING LOGIC (Updated for Optimized History) ---
   const fetchData = useCallback(async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     try {
-      let allRolls = [];
-      let from = 0;
-      const step = 1000;
-      while (true) {
-        const { data, error } = await supabase
-          .from('rolls')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .range(from, from + step - 1);
-        
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        
-        allRolls = [...allRolls, ...data];
-        if (data.length < step) break;
-        from += step;
-      }
-      setRolls(allRolls);
+      // 1. Fetch ALL In-Stock Rolls (Full Inventory)
+      const { data: stockData, error: stockError } = await supabase
+        .from('rolls')
+        .select('*')
+        .eq('status', 'in_stock')
+        .order('created_at', { ascending: false });
+      
+      if (stockError) throw stockError;
 
+      // 2. Fetch Dispatched Rolls (History Only) - Limited to last 30 days to save data
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data: historyData, error: historyError } = await supabase
+        .from('rolls')
+        .select('*')
+        .eq('status', 'dispatched')
+        .gte('dispatched_at', thirtyDaysAgo.toISOString())
+        .order('dispatched_at', { ascending: false });
+
+      if (historyError) throw historyError;
+
+      setRolls([...(stockData || []), ...(historyData || [])]);
+
+      // 3. Fetch Materials
       const { data: mats } = await supabase
         .from('raw_materials')
         .select('*')
@@ -182,7 +188,25 @@ export default function App() {
           {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
           {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
           {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData(true)} />}
-          {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} />}
+          {activeTab === 'history' && <HistoryView rolls={rolls} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={(start, end) => {
+            // Integration for HistoryView range fetching
+            const fetchHistoryRange = async () => {
+              setLoading(true);
+              const { data } = await supabase
+                .from('rolls')
+                .select('*')
+                .eq('status', 'dispatched')
+                .gte('dispatched_at', start)
+                .lte('dispatched_at', end + 'T23:59:59')
+                .order('dispatched_at', { ascending: false });
+              
+              // Maintain all in_stock rolls while updating the history view
+              const stockOnly = rolls.filter(r => r.status === 'in_stock');
+              setRolls([...stockOnly, ...(data || [])]);
+              setLoading(false);
+            };
+            fetchHistoryRange();
+          }}/>}
           {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => fetchData(true)} />}
         </div>
       </main>
