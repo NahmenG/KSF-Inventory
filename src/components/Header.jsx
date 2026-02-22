@@ -37,7 +37,7 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
             className="w-14 h-14 object-contain" 
             style={{ 
               imageRendering: 'pixelated', 
-              transform: 'scale(1.15)' 
+              transform: 'scale(1.19)' 
             }} 
           />
         </div>
