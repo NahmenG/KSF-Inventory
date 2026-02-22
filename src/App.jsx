@@ -133,7 +133,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 pt-16 pb-24 font-sans text-slate-900">
-      <Header deviceName={deviceName} loading={loading} onLogout={() => { supabase.auth.signOut(); localStorage.clear(); window.location.reload(); }} onEditDeviceName={() => { const n = prompt("Name:", deviceName); if(n) setDeviceName(n); }} onLogoClick={() => setActiveTab('dashboard')} />
+      // Inside src/App.jsx, update the Header component call:
+
+      <Header 
+        deviceName={deviceName} 
+        loading={loading} 
+        rolls={rolls} // New prop for usage calculation
+        materials={materials} // New prop for master export
+        onLogout={() => { if(window.confirm("Logout?")) { supabase.auth.signOut(); localStorage.clear(); window.location.reload(); }}} 
+        onEditDeviceName={() => { const n = prompt("Name:", deviceName); if(n) setDeviceName(n); }} 
+        onLogoClick={() => setActiveTab('dashboard')} 
+      />
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData(true)} onPrint={setPrintData} />}
