@@ -1,7 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Download, Clock, X, ChevronDown, History, RefreshCw, Calendar } from 'lucide-react';
+import { Download, Clock, X, ChevronDown, History, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+/**
+ * HistoryView Component
+ * Benchmark Version: 2-Line Filter UI + 30-Day Label
+ */
 const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
   // 1. STATE PERSISTENCE
   const [filters, setFilters] = useState(() => {
@@ -14,7 +18,13 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
       }
     }
     return {
-      customer: '', quality: '', gsm: '', width: '', color: '', startDate: '', endDate: ''
+      customer: '',
+      quality: '',
+      gsm: '',
+      width: '',
+      color: '',
+      startDate: '',
+      endDate: ''
     };
   });
 
@@ -24,19 +34,22 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
     localStorage.setItem('ksf_history_filters', JSON.stringify(filters));
   }, [filters]);
 
+  // 2. DATA EXTRACTION FOR DROPDOWNS
   const uniqueQualities = useMemo(() => [...new Set(rolls.map(r => r.quality))].filter(Boolean).sort(), [rolls]);
   const uniqueColors = useMemo(() => [...new Set(rolls.map(r => r.color))].filter(Boolean).sort(), [rolls]);
 
+  // 3. FILTERING LOGIC
   const filtered = useMemo(() => {
     return rolls.filter(r => {
       const matchCustomer = !filters.customer || 
         (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
         r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
+      
       const matchQuality = !filters.quality || r.quality === filters.quality;
       const matchGSM = !filters.gsm || String(r.gsm) === filters.gsm;
       const matchWidth = !filters.width || String(r.width_inches) === filters.width;
       const matchColor = !filters.color || r.color === filters.color;
-
+      
       return matchCustomer && matchQuality && matchGSM && matchWidth && matchColor;
     })
     .sort((a, b) => {
@@ -46,6 +59,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
     });
   }, [rolls, filters, sort]);
 
+  // 4. EXCEL EXPORT
   const handleExport = () => {
     const data = filtered.map(r => ({
       "Roll ID": r.product_id,
@@ -56,12 +70,14 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
       "GSM": r.gsm,
       "Width (Inches)": r.width_inches,
       "Net Weight (Kg)": r.net_weight,
-      "Dispatch Date": r.dispatched_at ? new Date(r.dispatched_at).toLocaleDateString() : 'N/A',
+      "Production Date": new Date(r.created_at).toLocaleString(),
+      "Dispatch Date": r.dispatched_at ? new Date(r.dispatched_at).toLocaleString() : 'N/A'
     }));
+    
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "History");
-    XLSX.writeFile(wb, `KSF_History_${filters.startDate || 'all'}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "KSF_History");
+    XLSX.writeFile(wb, `KSF_History_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const clearFilters = () => {
@@ -71,7 +87,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* SEARCH PANEL - 2 LINE COMPACT DESIGN */}
+      {/* SEARCH PANEL */}
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
         <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100 relative">
           
@@ -84,7 +100,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
           <div className="space-y-2">
             {/* LINE 1: PRIMARY FILTERS */}
             <div className="grid grid-cols-5 gap-1.5">
-              <input className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" placeholder="Buyer / ID" value={filters.customer} onChange={e => setFilters({...filters, customer: e.target.value})} />
+              <input className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none focus:ring-1 focus:ring-blue-100" placeholder="Buyer / ID" value={filters.customer} onChange={e => setFilters({...filters, customer: e.target.value})} />
               <select className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" value={filters.quality} onChange={e => setFilters({...filters, quality: e.target.value})}>
                 <option value="">Quality</option>
                 {uniqueQualities.map(q => <option key={q} value={q}>{q}</option>)}
@@ -104,30 +120,30 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
               
               <button 
                 onClick={() => onFetchRange(filters.startDate, filters.endDate)}
-                className="bg-blue-600 text-white rounded-xl font-black text-[9px] h-full flex items-center justify-center gap-1 shadow-md active:scale-95"
+                className="bg-blue-600 text-white rounded-xl font-black text-[9px] h-full flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all"
               >
-                <RefreshCw size={12} /> FETCH
+                <RefreshCw size={12} /> FETCH RANGE
               </button>
 
               <button 
                 onClick={handleExport}
-                className="bg-green-600 text-white rounded-xl font-black text-[9px] h-full flex items-center justify-center gap-1 shadow-md active:scale-95"
+                className="bg-green-600 text-white rounded-xl font-black text-[9px] h-full flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all"
               >
-                <Download size={12} /> EXCEL
+                <Download size={12} /> XLS EXPORT
               </button>
             </div>
           </div>
         </div>
 
         {/* SUMMARY BAR */}
-        <div className="bg-gray-900 text-white p-3 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800">
+        <div className="bg-gray-900 text-white p-3 md:p-4 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800">
           <div className="flex flex-col">
-            <span className="text-[8px] text-gray-500 font-black uppercase tracking-widest">Records Found</span>
-            <span className="text-xl font-black text-orange-400">{filtered.length} <span className="text-[10px] font-normal text-white/40">Rolls</span></span>
+            <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Record for last 30 days</span>
+            <span className="text-xl md:text-2xl font-black text-orange-400">{filtered.length} <span className="text-[10px] md:text-xs font-normal opacity-40 text-white ml-1">Rolls</span></span>
           </div>
           <div className="text-right flex flex-col">
-            <span className="text-[8px] text-gray-500 font-black uppercase tracking-widest">Total weight</span>
-            <span className="text-xl font-black text-green-400">{filtered.reduce((s,r)=>s+(parseFloat(r.net_weight)||0),0).toFixed(1)} <span className="text-[10px] font-normal text-white/40 ml-1">kg</span></span>
+            <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Total weight</span>
+            <span className="text-xl md:text-2xl font-black text-green-400">{filtered.reduce((s,r)=>s+(parseFloat(r.net_weight)||0),0).toFixed(1)} <span className="text-[10px] md:text-xs font-normal text-white/50 ml-1">kg</span></span>
           </div>
         </div>
       </div>
@@ -135,11 +151,11 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange }) => {
       {/* LISTING */}
       <div className="space-y-2 px-1">
         {filtered.map(r => (
-          <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200">
+          <div key={r.id} onClick={() => onSelectRoll(r)} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200 cursor-pointer group">
             <div className="flex-1">
               <div className="font-black text-blue-600 text-lg flex items-center gap-2">
                 {r.product_id}
-                <span className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                <span className={`text-[7px] md:text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                   {r.status === 'in_stock' ? 'In Stock' : 'Dispatched'}
                 </span>
               </div>
