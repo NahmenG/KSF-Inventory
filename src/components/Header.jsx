@@ -29,16 +29,15 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
     <>
       <header className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-md h-16 border-b border-gray-100 z-50 flex items-center justify-between px-6">
         
-        {/* LEFT SIDE: INCREASED LARGE LOGO */}
+        {/* LEFT SIDE: LARGE LOGO */}
         <div className="flex items-center cursor-pointer" onClick={onLogoClick}>
           <img 
             src="/logo.png" 
             alt="KSF Logo" 
-            className="w-18 h-18 object-contain" 
+            className="w-14 h-14 object-contain" 
             style={{ 
               imageRendering: 'pixelated', 
-              transform: 'scale(1.3)',
-              transformOrigin: 'left center'
+              transform: 'scale(1.15)' 
             }} 
           />
         </div>
@@ -82,9 +81,8 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
               {/* DEVICE SECTION */}
               <section>
                 <div className="flex items-center gap-2 mb-4 text-blue-600">
-                  <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                    <Monitor size={16} /> Device Identity
-                  </span>
+                  <Monitor size={16} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Device Identity</span>
                 </div>
                 <button onClick={onEditDeviceName} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 text-left active:scale-95 transition-all">
                   <span className="block text-[8px] text-gray-400 font-black uppercase mb-1">Rename Terminal</span>
@@ -95,9 +93,8 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
               {/* EGRESS & DATA USAGE */}
               <section>
                 <div className="flex items-center gap-2 mb-4 text-orange-600">
-                  <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                    <HardDrive size={16} /> Memory & Sync
-                  </span>
+                  <HardDrive size={16} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Memory & Sync</span>
                 </div>
                 <div className="p-4 bg-orange-50/50 rounded-2xl border border-orange-100">
                   <div className="text-2xl font-black text-orange-700">{usageStats.kb} <span className="text-xs font-normal">KB</span></div>
@@ -110,9 +107,8 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
               {/* MASTER EXPORT */}
               <section>
                 <div className="flex items-center gap-2 mb-4 text-green-600">
-                  <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                    <Database size={16} /> Master Database
-                  </span>
+                  <Database size={16} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Master Database</span>
                 </div>
                 <button onClick={downloadMasterData} className="w-full p-4 bg-green-50 text-green-700 rounded-2xl border border-green-100 flex items-center justify-between active:scale-95 transition-all group">
                   <div className="text-left">
