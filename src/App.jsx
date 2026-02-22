@@ -51,40 +51,59 @@ export default function App() {
   }, [activeTab]);
 
   // --- UPDATED DATA FETCHING LOGIC ---
-const fetchData = useCallback(async (isBackground = false) => {
-  if (!isBackground) setLoading(true);
-  try {
-    // 1. Fetch ALL In-Stock Rolls (Required for Stock Tab)
-    // This is usually a small amount of data compared to total history
-    const { data: stockData } = await supabase
-      .from('rolls')
-      .select('*')
-      .eq('status', 'in_stock');
+  const fetchData = useCallback(async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
+    try {
+      // 1. FETCH ALL IN-STOCK ROLLS (Using Pagination to bypass 1000 row limit)
+      let allStock = [];
+      let from = 0;
+      const step = 1000;
+      
+      while (true) {
+        const { data, error } = await supabase
+          .from('rolls')
+          .select('*')
+          .eq('status', 'in_stock')
+          .order('created_at', { ascending: false })
+          .range(from, from + step - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        allStock = [...allStock, ...data];
+        if (data.length < step) break;
+        from += step;
+      }
 
-    // 2. Fetch ONLY the last 30 days of Dispatched Rolls (The Egress Saver)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // 2. FETCH DISPATCHED ROLLS (Strictly last 30 days to solve Egress)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { data: historyData } = await supabase
-      .from('rolls')
-      .select('*')
-      .eq('status', 'dispatched')
-      .gte('dispatched_at', thirtyDaysAgo.toISOString())
-      .order('dispatched_at', { ascending: false });
+      const { data: historyData, error: historyError } = await supabase
+        .from('rolls')
+        .select('*')
+        .eq('status', 'dispatched')
+        .gte('dispatched_at', thirtyDaysAgo.toISOString())
+        .order('dispatched_at', { ascending: false });
 
-    // 3. Combine them in memory
-    setRolls([...(stockData || []), ...(historyData || [])]);
+      if (historyError) throw historyError;
 
-    // 4. Materials
-    const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
-    setMaterials(mats || []);
-    
-  } catch (e) { 
-    console.error("Fetch Error:", e);
-  } finally { 
-    if (!isBackground) setLoading(false); 
-  }
-}, []);
+      // 3. COMBINE DATA
+      setRolls([...allStock, ...(historyData || [])]);
+
+      // 4. FETCH MATERIALS
+      const { data: mats } = await supabase
+        .from('raw_materials')
+        .select('*')
+        .order('name');
+      setMaterials(mats || []);
+
+    } catch (e) { 
+      console.error("Fetch Error:", e);
+    } finally { 
+      if (!isBackground) setLoading(false); 
+    }
+  }, []);
 
   // --- AUTH SUBSCRIPTION ---
   useEffect(() => {
