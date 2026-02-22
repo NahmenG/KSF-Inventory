@@ -64,25 +64,35 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
     XLSX.writeFile(wb, `KSF_History_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  // TARGETED CHANGE: Clears text filters AND the date range inputs
   const clearFilters = () => {
-    setFilters({ customer: '', quality: '', gsm: '', width: '', color: '', startDate: '', endDate: '' });
+    setFilters({ 
+      customer: '', 
+      quality: '', 
+      gsm: '', 
+      width: '', 
+      color: '', 
+      startDate: '', 
+      endDate: '' 
+    });
   };
 
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* SEARCH PANEL - 2 LINE COMPACT DESIGN */}
+      {/* SEARCH PANEL */}
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
         <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100 relative">
           
-          {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color) && (
-            <button onClick={clearFilters} className="absolute -top-1 -right-1 p-1 bg-red-500 text-white rounded-full shadow-lg z-10">
+          {/* Updated visibility logic to include dates */}
+          {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color || filters.startDate || filters.endDate) && (
+            <button onClick={clearFilters} className="absolute -top-1 -right-1 p-1 bg-red-500 text-white rounded-full shadow-lg z-10 active:scale-90 transition-all">
               <X size={12} />
             </button>
           )}
 
           <div className="space-y-2">
-            {/* LINE 1: PRIMARY FILTERS */}
+            {/* LINE 1 */}
             <div className="grid grid-cols-5 gap-1.5">
               <input className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" placeholder="Buyer / ID" value={filters.customer} onChange={e => setFilters({...filters, customer: e.target.value})} />
               <select className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" value={filters.quality} onChange={e => setFilters({...filters, quality: e.target.value})}>
@@ -97,7 +107,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
               </select>
             </div>
 
-            {/* LINE 2: DATE RANGE & ACTIONS */}
+            {/* LINE 2 */}
             <div className="grid grid-cols-4 gap-1.5 items-center">
               <input type="date" className="border border-gray-100 p-2 rounded-xl text-[9px] font-black bg-blue-50/30 outline-none uppercase" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} />
               <input type="date" className="border border-gray-100 p-2 rounded-xl text-[9px] font-black bg-blue-50/30 outline-none uppercase" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} />
@@ -138,7 +148,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
             <div className="flex-1">
               <div className="font-black text-blue-600 text-lg flex items-center gap-2">
                 {r.product_id}
-                <span className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                <span className={`text-[7px] md:text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                   {r.status === 'in_stock' ? 'In Stock' : 'Dispatched'}
                 </span>
               </div>
