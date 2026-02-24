@@ -80,8 +80,18 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
           </div>
         </div>
         <div className="bg-gray-900 text-white p-3 md:p-4 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800">
-          <div className="flex flex-col"><span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">{activeRange === '15days' ? 'Record for last 15 days' : 'Record for selected range'}</span><span className="text-xl md:text-2xl font-black text-orange-400">{filtered.length} <span className="text-[10px] md:text-xs font-normal opacity-40 text-white ml-1">Rolls</span></span></div>
-          <div className="text-right flex flex-col"><span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Total weight</span><span className="text-xl md:text-2xl font-black text-green-400">{filtered.reduce((s,r)=>s+(parseFloat(r.net_weight)||0),0).toFixed(1)} <span className="text-[10px] md:text-xs font-normal text-white/50 ml-1">kg</span></span></div>
+          <div className="flex flex-col">
+            <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">
+              {activeRange === '15days' ? 'Record for last 15 days' : 
+               activeRange === 'current_month' ? 'Record for current month' : 
+               'Record for selected range'}
+            </span>
+            <span className="text-xl md:text-2xl font-black text-orange-400">{filtered.length} <span className="text-[10px] md:text-xs font-normal opacity-40 text-white ml-1">Rolls</span></span>
+          </div>
+          <div className="text-right flex flex-col">
+            <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Total weight</span>
+            <span className="text-xl md:text-2xl font-black text-green-400">{filtered.reduce((s,r)=>s+(parseFloat(r.net_weight)||0),0).toFixed(1)} <span className="text-[10px] md:text-xs font-normal text-white/50 ml-1">kg</span></span>
+          </div>
         </div>
       </div>
       <div className="space-y-2 px-1">

@@ -76,34 +76,55 @@ export default function App() {
       let allHistory = [];
       
       // 2. CONDITIONAL HISTORY FETCHING
+let allHistory = [];
+      let historyFrom = 0;
+      
       if (start && end) {
-        // Custom Range (User Manual Action)
-        const { data } = await supabase.from('rolls').select('*')
-          .eq('status', 'dispatched')
-          .gte('dispatched_at', start)
-          .lte('dispatched_at', end + 'T23:59:59');
-        allHistory = data || [];
+        // PAGINATION LOOP FOR CUSTOM RANGE
+        while (true) {
+          const { data, error } = await supabase.from('rolls').select('*')
+            .eq('status', 'dispatched')
+            .gte('dispatched_at', start)
+            .lte('dispatched_at', end + 'T23:59:59')
+            .range(historyFrom, historyFrom + step - 1);
+          if (error || !data || data.length === 0) break;
+          allHistory = [...allHistory, ...data];
+          if (data.length < step) break;
+          historyFrom += step;
+        }
         setActiveRange('custom');
       } 
       else if (targetTab === 'dashboard') {
-        // Current Month (For Graphs)
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0,0,0,0);
-        const { data } = await supabase.from('rolls').select('*')
-          .eq('status', 'dispatched')
-          .gte('dispatched_at', startOfMonth.toISOString());
-        allHistory = data || [];
+        // PAGINATION LOOP FOR DASHBOARD
+        while (true) {
+          const { data, error } = await supabase.from('rolls').select('*')
+            .eq('status', 'dispatched')
+            .gte('dispatched_at', startOfMonth.toISOString())
+            .range(historyFrom, historyFrom + step - 1);
+          if (error || !data || data.length === 0) break;
+          allHistory = [...allHistory, ...data];
+          if (data.length < step) break;
+          historyFrom += step;
+        }
         setActiveRange('current_month');
       } 
       else if (targetTab === 'history') {
-        // Last 15 Days (For List)
         const fifteenDaysAgo = new Date();
         fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-        const { data } = await supabase.from('rolls').select('*')
-          .eq('status', 'dispatched')
-          .gte('dispatched_at', fifteenDaysAgo.toISOString());
-        allHistory = data || [];
+        // PAGINATION LOOP FOR HISTORY
+        while (true) {
+          const { data, error } = await supabase.from('rolls').select('*')
+            .eq('status', 'dispatched')
+            .gte('dispatched_at', fifteenDaysAgo.toISOString())
+            .range(historyFrom, historyFrom + step - 1);
+          if (error || !data || data.length === 0) break;
+          allHistory = [...allHistory, ...data];
+          if (data.length < step) break;
+          historyFrom += step;
+        }
         setActiveRange('15days');
       }
 
