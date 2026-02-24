@@ -1,64 +1,114 @@
 import React, { useState } from 'react';
-import { X, Trash2, CheckCircle, Package } from 'lucide-react';
-import { supabase } from '../supabaseClient';
+import { X, Save, Trash2, AlertCircle } from 'lucide-react';
 
-const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
-const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
+export default function EditModal({ roll, onClose, onSave, onDelete }) {
+  const [formData, setFormData] = useState({ ...roll });
+  const [isDeleting, setIsDeleting] = useState(false);
 
-export default function EditModal({ roll, onClose, onSave }) {
-  const [data, setData] = useState({ ...roll });
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(formData);
+  };
 
-  const handleUpdate = async () => {
-    const { error } = await supabase.from('rolls').update({
-      customer_name: data.customer_name,
-      quality: data.quality,
-      color: data.color,
-      gsm: data.gsm,
-      width_inches: data.width_inches,
-      net_weight: data.net_weight,
-      gross_weight: data.gross_weight,
-      length_meters: data.length_meters, // Added length to update logic
-      status: data.status,
-      dispatched_at: data.status === 'in_stock' ? null : data.dispatched_at
-    }).eq('id', roll.id);
-
-    if (!error) onSave();
-    else alert("Error: " + error.message);
+  const handleDelete = () => {
+    if (window.confirm(`Are you sure you want to PERMANENTLY delete Roll ${roll.product_id}?`)) {
+      setIsDeleting(true);
+      onDelete(roll.product_id);
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white p-6 rounded-2xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh] border border-gray-100">
-        <div className="flex justify-between items-center mb-6 border-b pb-3">
-          <h2 className="font-bold text-lg flex items-center gap-2 text-gray-800"><Package size={20} className="text-blue-600" /> Edit Roll Data</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24}/></button>
-        </div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      
+      {/* Modal Container */}
+      <div className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
         
-        <div className="bg-blue-50 p-4 rounded-xl mb-6 border border-blue-100 flex justify-between items-center">
-            <div><label className="text-[10px] font-bold text-blue-400 block uppercase">Roll ID</label><div className="text-xl font-black text-blue-800">{roll.product_id}</div></div>
-            <div className="text-right"><label className="text-[10px] font-bold text-blue-400 block uppercase">Status</label><div className={`text-xs font-bold uppercase px-2 py-1 rounded inline-block ${data.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{data.status.replace('_', ' ')}</div></div>
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-slate-50/50">
+          <div>
+            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">Edit Roll Details</h2>
+            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">{roll.product_id}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors text-gray-400">
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
-           <div className="col-span-2"><label className="text-[10px] font-bold text-gray-400 uppercase">Customer / Buyer</label><input className="w-full border p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-100" value={data.customer_name || ''} onChange={e => setData({...data, customer_name: e.target.value})} /></div>
-           <div><label className="text-[10px] font-bold text-gray-400 uppercase">Quality</label><select className="w-full border p-3 rounded-lg bg-white" value={data.quality} onChange={e => setData({...data, quality: e.target.value})}>{QUALITIES.map(q => <option key={q}>{q}</option>)}</select></div>
-           <div><label className="text-[10px] font-bold text-gray-400 uppercase">Color</label><select className="w-full border p-3 rounded-lg bg-white" value={data.color} onChange={e => setData({...data, color: e.target.value})}>{COLORS.map(c => <option key={c}>{c}</option>)}</select></div>
-           <div><label className="text-[10px] font-bold text-gray-400 uppercase">GSM</label><input type="number" className="w-full border p-3 rounded-lg" value={data.gsm} onChange={e => setData({...data, gsm: e.target.value})} /></div>
-           <div><label className="text-[10px] font-bold text-gray-400 uppercase">Size (Inches)</label><input type="number" className="w-full border p-3 rounded-lg" value={data.width_inches} onChange={e => setData({...data, width_inches: e.target.value})} /></div>
-           
-           {/* Added Length Input Field below Size */}
-           <div className="col-span-2"><label className="text-[10px] font-bold text-gray-400 uppercase">Length (Meters)</label><input type="number" className="w-full border p-3 rounded-lg font-bold" value={data.length_meters || ''} onChange={e => setData({...data, length_meters: e.target.value})} /></div>
-           
-           <div className="col-span-2 pt-2 border-t mt-2"></div>
-           <div><label className="text-[10px] font-bold text-blue-600 uppercase">Net Weight</label><input type="number" className="w-full border-2 border-blue-500 p-3 rounded-lg font-black text-xl text-blue-900" value={data.net_weight} onChange={e => setData({...data, net_weight: e.target.value})} /></div>
-           <div><label className="text-[10px] font-bold text-gray-400 uppercase">Gross Weight</label><input type="number" className="w-full border p-3 rounded-lg" value={data.gross_weight} onChange={e => setData({...data, gross_weight: e.target.value})} /></div>
-        </div>
+        {/* Form Content */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Buyer Name</label>
+            <input 
+              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              value={formData.customer_name}
+              onChange={e => setFormData({...formData, customer_name: e.target.value})}
+            />
+          </div>
 
-        <div className="flex flex-col gap-2">
-          {data.status === 'dispatched' && <button onClick={() => setData({...data, status: 'in_stock'})} className="w-full bg-orange-50 text-orange-600 py-3 rounded-xl font-bold border border-orange-100">Move Back to In Stock</button>}
-          <button onClick={handleUpdate} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"><CheckCircle size={20}/> Save All Changes</button>
-          <button onClick={async () => { if(confirm("Delete permanently?")) { await supabase.from('rolls').delete().eq('id', roll.id); onSave(); } }} className="w-full text-red-400 font-bold py-2 text-xs uppercase tracking-widest mt-4 flex items-center justify-center gap-1"><Trash2 size={14}/> Delete Permanent</button>
-        </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-2">GSM</label>
+              <input 
+                type="number"
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none"
+                value={formData.gsm}
+                onChange={e => setFormData({...formData, gsm: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Size (Inches)</label>
+              <input 
+                type="number" step="0.1"
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none"
+                value={formData.width_inches}
+                onChange={e => setFormData({...formData, width_inches: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-blue-600 uppercase ml-2">Net Weight (KG)</label>
+              <input 
+                type="number" step="0.01"
+                className="w-full p-4 bg-blue-50/30 border border-blue-100 rounded-2xl font-black text-blue-700 outline-none"
+                value={formData.net_weight}
+                onChange={e => setFormData({...formData, net_weight: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Status</label>
+              <select 
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none"
+                value={formData.status}
+                onChange={e => setFormData({...formData, status: e.target.value})}
+              >
+                <option value="in_stock">In Stock</option>
+                <option value="dispatched">Dispatched</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="pt-4 flex flex-col gap-3">
+            <button 
+              type="submit"
+              className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black flex items-center justify-center gap-2 hover:bg-black active:scale-[0.98] transition-all shadow-lg"
+            >
+              <Save size={18} /> SAVE CHANGES
+            </button>
+
+            <button 
+              type="button"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="w-full py-4 bg-red-50 text-red-600 rounded-[1.5rem] font-black text-xs flex items-center justify-center gap-2 hover:bg-red-100 active:scale-[0.98] transition-all border border-red-100"
+            >
+              {isDeleting ? "DELETING..." : <><Trash2 size={16} /> DELETE ROLL PERMANENTLY</>}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
