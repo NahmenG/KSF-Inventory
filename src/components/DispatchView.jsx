@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Camera, CheckCircle, X, Trash2, FileSpreadsheet, RefreshCw } from 'lucide-react';
-import { supabase } from '../supabaseClient';
+import { Truck, Camera, CheckCircle, X, Trash2, FileSpreadsheet } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 
-// Constants to ensure matching dropdowns in popup
+// Constants for dropdowns
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
-// --- INTERNAL GATE PASS GENERATOR ---
+// --- INTERNAL GATE PASS GENERATOR (Unchanged) ---
 const generateChallanExcel = (rolls, details) => {
   try {
     const header = [
@@ -55,7 +54,7 @@ const generateChallanExcel = (rolls, details) => {
   }
 };
 
-// --- BARCODE SCANNER COMPONENT ---
+// --- BARCODE SCANNER COMPONENT (Unchanged) ---
 const BarcodeScanner = ({ onScan, onClose }) => {
   useEffect(() => {
     const html5QrCode = new Html5Qrcode("reader");
@@ -87,7 +86,6 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const [reviewData, setReviewData] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   
-  // Persistence for current loading manifest
   const [sessionList, setSessionList] = useState(() => JSON.parse(localStorage.getItem('ksf_dispatch_list_v10') || '[]'));
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer_v10') || '');
   const [vehicleNo, setVehicleNo] = useState(() => localStorage.getItem('ksf_dispatch_vehicle_v10') || '');
@@ -101,15 +99,16 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const handleSearch = (idToSearch) => {
     const query = idToSearch || scanId;
     if (!query) return;
+    // We search the 'rolls' prop which is now our local smart list
     const roll = rolls.find(r => r.product_id.toUpperCase() === query.toUpperCase() && r.status === 'in_stock');
     
     if (roll) {
-      if (sessionList.some(r => r.id === roll.id)) {
+      if (sessionList.some(r => r.product_id === roll.product_id)) {
         alert("Roll already added to manifest!");
         setScanId('');
         return;
       }
-      setReviewData({ ...roll }); // Open Verification Popup
+      setReviewData({ ...roll }); 
     } else {
       alert('Roll not found in available stock.');
     }
@@ -119,39 +118,33 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const handleConfirmDispatch = async () => {
     if (!reviewData) return;
 
-    const { error } = await supabase.from('rolls').update({
+    // Offline-First Logic: Update the roll object for local memory
+    const updatedRoll = {
+      ...reviewData,
       status: 'dispatched',
       dispatched_at: new Date().toISOString(),
-      customer_name: reviewData.customer_name,
-      net_weight: reviewData.net_weight,
-      gross_weight: reviewData.gross_weight,
-      quality: reviewData.quality,
-      color: reviewData.color,
-      gsm: reviewData.gsm,
-      width_inches: reviewData.width_inches,
-      device_name: deviceName
-    }).eq('id', reviewData.id);
+      dispatched_by: deviceName,
+      synced: 0 // Local sync flag
+    };
 
-    if (!error) {
-      setSessionList(prev => [reviewData, ...prev]);
-      setReviewData(null);
-      onDispatch(); // Refresh main roll list in App.jsx
-    } else {
-      alert("Database error: " + error.message);
-    }
+    // Save to phone memory immediately (App.jsx will sync it later)
+    await onDispatch(updatedRoll);
+    
+    setSessionList(prev => [updatedRoll, ...prev]);
+    setReviewData(null);
   };
 
   const handleRemoveFromManifest = async (item) => {
     if (confirm("Return this roll to stock?")) {
-      const { error } = await supabase.from('rolls').update({
+      const returnedRoll = {
+        ...item,
         status: 'in_stock',
-        dispatched_at: null
-      }).eq('id', item.id);
+        dispatched_at: null,
+        synced: 0
+      };
 
-      if (!error) {
-        setSessionList(sessionList.filter(r => r.id !== item.id));
-        onDispatch();
-      }
+      await onDispatch(returnedRoll);
+      setSessionList(sessionList.filter(r => r.product_id !== item.product_id));
     }
   };
 
@@ -197,7 +190,6 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
           <button onClick={() => handleSearch()} className="bg-blue-600 text-white w-full py-4 rounded-xl font-bold shadow-lg shadow-blue-200 active:scale-95 transition-all">Identify Roll</button>
         </div>
       ) : (
-        /* THE VERIFICATION POPUP */
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white p-6 rounded-xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl border transition-all">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
