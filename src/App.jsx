@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { db } from './db'; // Ensure you have created src/db.js and installed dexie
+import { db } from './db'; 
 
 // Full Component Imports
 import Header from './components/Header.jsx';
@@ -42,7 +42,7 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC: UPLOAD OFFLINE DATA ---
+  // --- 1. SYNC LOGIC: UPLOAD OFFLINE DATA & PREVENT DUPLICATES ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine) return;
     
@@ -51,8 +51,19 @@ export default function App() {
 
     for (const roll of unsyncedRolls) {
       const { id, synced, ...dataToUpload } = roll;
-      const { error } = await supabase.from('rolls').insert([dataToUpload]);
-      if (!error) {
+      
+      // Safety Check: Avoid duplicates if already in Cloud
+      const { data: existing } = await supabase
+        .from('rolls')
+        .select('product_id')
+        .eq('product_id', roll.product_id)
+        .single();
+      
+      if (!existing) {
+        const { error } = await supabase.from('rolls').insert([dataToUpload]);
+        if (!error) await db.rolls.update(id, { synced: 1 });
+      } else {
+        // Already exists in cloud, just mark local as synced
         await db.rolls.update(id, { synced: 1 });
       }
     }
@@ -72,7 +83,7 @@ export default function App() {
     };
   }, [syncOfflineData]);
 
-  // --- 3. REALTIME LISTENER ---
+  // --- 3. REALTIME LISTENER: SYNC LOCAL DB WITH CLOUD CHANGES ---
   useEffect(() => {
     if (!user) return;
 
@@ -80,9 +91,11 @@ export default function App() {
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          // Updates or adds to IndexedDB
           await db.rolls.put({ ...payload.new, synced: 1 });
         } else if (payload.eventType === 'DELETE') {
-          await db.rolls.where({ product_id: payload.old.product_id }).delete();
+          // Removes from IndexedDB
+          await db.rolls.where('product_id').equals(payload.old.product_id).delete();
         }
         
         const allLocal = await db.rolls.toArray();
@@ -93,9 +106,9 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 4. PAGINATED DATA FETCH ---
+  // --- 4. DATA FETCH (PAGINATED + LOCAL FIRST) ---
   const fetchData = useCallback(async () => {
-    // A. Instant Load from Local DB
+    // A. Instant Load from Phone Memory
     const cachedRolls = await db.rolls.toArray();
     if (cachedRolls.length > 0) {
       setRolls(cachedRolls.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -113,7 +126,7 @@ export default function App() {
       let from = 0;
       const step = 1000;
 
-      // B. PAGINATION LOOP: Fetches every single roll for the month
+      // B. Pagination Loop (Ensures all 2000+ rolls are fetched)
       while (true) {
         const { data, error } = await supabase
           .from('rolls')
@@ -130,6 +143,7 @@ export default function App() {
       }
 
       if (allRemoteData.length > 0) {
+        // C. Clean local DB and sync with fresh data
         await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
         const finalLocal = await db.rolls.toArray();
         setRolls(finalLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -162,9 +176,12 @@ export default function App() {
 
   // Handle local save for offline capability
   const handleLocalSave = async (newRoll) => {
+    // Add to Local DB immediately
     await db.rolls.add({ ...newRoll, synced: 0 });
     const updated = await db.rolls.toArray();
     setRolls(updated.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    
+    // Attempt background sync
     if (navigator.onLine) syncOfflineData();
   };
 
@@ -208,7 +225,31 @@ export default function App() {
         {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
-      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={() => { setEditRoll(null); fetchData(); }} />}
+      
+      {editRoll && (
+        <EditModal 
+          roll={editRoll} 
+          onClose={() => setEditRoll(null)} 
+          onSave={async (updated) => {
+            setEditRoll(null);
+            if (navigator.onLine) {
+              await supabase.from('rolls').update(updated).eq('product_id', updated.product_id);
+            } else {
+              await db.rolls.put({ ...updated, synced: 0 });
+            }
+            fetchData();
+          }} 
+          onDelete={async (productId) => {
+            setEditRoll(null);
+            if (navigator.onLine) {
+              await supabase.from('rolls').delete().eq('product_id', productId);
+            }
+            await db.rolls.where('product_id').equals(productId).delete();
+            fetchData();
+          }}
+        />
+      )}
+      
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
     </div>
   );
