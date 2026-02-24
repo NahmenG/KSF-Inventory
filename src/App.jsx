@@ -42,7 +42,7 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC: UPLOAD OFFLINE DATA & PREVENT DUPLICATES ---
+  // --- 1. SYNC LOGIC: PREVENT DUPLICATES DURING UPLOAD ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine) return;
     
@@ -52,7 +52,7 @@ export default function App() {
     for (const roll of unsyncedRolls) {
       const { id, synced, ...dataToUpload } = roll;
       
-      // Safety Check: Avoid duplicates if already in Cloud
+      // Check cloud first to see if it's already there
       const { data: existing } = await supabase
         .from('rolls')
         .select('product_id')
@@ -61,9 +61,9 @@ export default function App() {
       
       if (!existing) {
         const { error } = await supabase.from('rolls').insert([dataToUpload]);
+        // Mark local as synced immediately to prevent the Realtime listener from duplicating
         if (!error) await db.rolls.update(id, { synced: 1 });
       } else {
-        // Already exists in cloud, just mark local as synced
         await db.rolls.update(id, { synced: 1 });
       }
     }
@@ -83,7 +83,7 @@ export default function App() {
     };
   }, [syncOfflineData]);
 
-  // --- 3. REALTIME LISTENER: SYNC LOCAL DB WITH CLOUD CHANGES ---
+  // --- 3. REALTIME LISTENER: DEDUPLICATION BY PRODUCT_ID ---
   useEffect(() => {
     if (!user) return;
 
@@ -91,10 +91,17 @@ export default function App() {
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          // Updates or adds to IndexedDB
-          await db.rolls.put({ ...payload.new, synced: 1 });
+          // Check if we already have this product_id locally
+          const existingLocal = await db.rolls.where('product_id').equals(payload.new.product_id).first();
+          
+          if (existingLocal) {
+            // Update the existing local entry instead of adding a new row
+            await db.rolls.update(existingLocal.id, { ...payload.new, synced: 1 });
+          } else {
+            // Truly a new roll from a different device
+            await db.rolls.put({ ...payload.new, synced: 1 });
+          }
         } else if (payload.eventType === 'DELETE') {
-          // Removes from IndexedDB
           await db.rolls.where('product_id').equals(payload.old.product_id).delete();
         }
         
@@ -108,7 +115,6 @@ export default function App() {
 
   // --- 4. DATA FETCH (PAGINATED + LOCAL FIRST) ---
   const fetchData = useCallback(async () => {
-    // A. Instant Load from Phone Memory
     const cachedRolls = await db.rolls.toArray();
     if (cachedRolls.length > 0) {
       setRolls(cachedRolls.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -126,7 +132,6 @@ export default function App() {
       let from = 0;
       const step = 1000;
 
-      // B. Pagination Loop (Ensures all 2000+ rolls are fetched)
       while (true) {
         const { data, error } = await supabase
           .from('rolls')
@@ -143,7 +148,8 @@ export default function App() {
       }
 
       if (allRemoteData.length > 0) {
-        // C. Clean local DB and sync with fresh data
+        // Clear local storage and repopulate to ensure clean slate
+        await db.rolls.clear();
         await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
         const finalLocal = await db.rolls.toArray();
         setRolls(finalLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -174,14 +180,10 @@ export default function App() {
     startUp();
   }, [fetchData, syncOfflineData]);
 
-  // Handle local save for offline capability
   const handleLocalSave = async (newRoll) => {
-    // Add to Local DB immediately
     await db.rolls.add({ ...newRoll, synced: 0 });
     const updated = await db.rolls.toArray();
     setRolls(updated.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    
-    // Attempt background sync
     if (navigator.onLine) syncOfflineData();
   };
 
