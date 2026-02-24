@@ -1,9 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Settings, LogOut, Monitor, Database, Download, X, HardDrive } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { supabase } from '../supabaseClient';
 
 export default function Header({ deviceName, loading, onLogout, onEditDeviceName, onLogoClick, rolls, materials }) {
   const [showSettings, setShowSettings] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState('connecting');
+
+  // --- REALTIME HEARTBEAT MONITOR ---
+  useEffect(() => {
+    const checkConnection = setInterval(() => {
+      // Looks for the specific channel we established in App.jsx
+      const channel = supabase.getChannels().find(c => c.name === 'schema-db-changes');
+      if (channel && channel.state === 'joined') {
+        setRealtimeStatus('online');
+      } else {
+        setRealtimeStatus('offline');
+      }
+    }, 5000);
+
+    return () => clearInterval(checkConnection);
+  }, []);
 
   // 1. DATA USAGE SUMMARY
   const usageStats = useMemo(() => {
@@ -46,10 +63,16 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-end border-r border-gray-100 pr-3">
             <div className="flex items-center gap-1.5 mb-0.5">
-              <span className={`text-[8px] font-black uppercase tracking-widest ${loading ? 'text-orange-500' : 'text-green-600'}`}>
-                {loading ? 'Syncing' : 'System Live'}
+              <span className={`text-[8px] font-black uppercase tracking-widest transition-colors duration-500 ${
+                loading ? 'text-orange-500' : 
+                realtimeStatus === 'online' ? 'text-green-600' : 'text-red-500'
+              }`}>
+                {loading ? 'Syncing' : realtimeStatus === 'online' ? 'System Live' : 'Link Offline'}
               </span>
-              <div className={`w-1.5 h-1.5 rounded-full ${loading ? 'bg-orange-400 animate-pulse' : 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.4)]'}`} />
+              <div className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
+                loading ? 'bg-orange-400 animate-pulse' : 
+                realtimeStatus === 'online' ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.4)]' : 'bg-red-500 animate-bounce'
+              }`} />
             </div>
             <div className="flex flex-col items-end">
               <span className="text-[7px] font-black text-gray-400 uppercase tracking-tighter leading-none">Terminal</span>
