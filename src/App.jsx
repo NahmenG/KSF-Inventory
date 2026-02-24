@@ -41,21 +41,18 @@ export default function App() {
     return 'dashboard';
   });
 
-  // Effect to trigger fetch when tab changes
   useEffect(() => {
     localStorage.setItem('ksf_active_tab', activeTab);
     localStorage.setItem('ksf_last_activity', Date.now().toString());
-    // Only re-fetch if we are moving to a data-heavy tab
     if (activeTab === 'dashboard' || activeTab === 'history') {
       fetchData(activeTab);
     }
   }, [activeTab]);
 
-  // --- TAB-SPECIFIC FETCHING LOGIC ---
   const fetchData = useCallback(async (targetTab = activeTab, start = null, end = null) => {
     setLoading(true);
     try {
-      // 1. ALWAYS FETCH IN-STOCK (Small payload, needed everywhere)
+      // 1. FETCH ALL IN-STOCK
       let allStock = [];
       let stockFrom = 0;
       const step = 1000;
@@ -73,14 +70,11 @@ export default function App() {
         stockFrom += step;
       }
 
+      // 2. FETCH DISPATCHED (Declared once here to fix the build error)
       let allHistory = [];
-      
-      // 2. CONDITIONAL HISTORY FETCHING
-let allHistory = [];
       let historyFrom = 0;
       
       if (start && end) {
-        // PAGINATION LOOP FOR CUSTOM RANGE
         while (true) {
           const { data, error } = await supabase.from('rolls').select('*')
             .eq('status', 'dispatched')
@@ -98,7 +92,6 @@ let allHistory = [];
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0,0,0,0);
-        // PAGINATION LOOP FOR DASHBOARD
         while (true) {
           const { data, error } = await supabase.from('rolls').select('*')
             .eq('status', 'dispatched')
@@ -114,7 +107,6 @@ let allHistory = [];
       else if (targetTab === 'history') {
         const fifteenDaysAgo = new Date();
         fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-        // PAGINATION LOOP FOR HISTORY
         while (true) {
           const { data, error } = await supabase.from('rolls').select('*')
             .eq('status', 'dispatched')
@@ -136,7 +128,6 @@ let allHistory = [];
     finally { setLoading(false); }
   }, [activeTab]);
 
-  // Initial Auth Load
   useEffect(() => {
     const startUp = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -147,7 +138,6 @@ let allHistory = [];
       }
     };
     startUp();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !initialFetchDone.current) {
