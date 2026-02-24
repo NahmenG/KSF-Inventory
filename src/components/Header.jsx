@@ -1,25 +1,27 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Settings, LogOut, Monitor, Database, Download, X, HardDrive } from 'lucide-react';
+import { Settings, LogOut, Monitor, Database, Download, X, HardDrive, CloudOff, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
+import { db } from '../db'; // Ensure IndexedDB is imported
 
-export default function Header({ deviceName, loading, onLogout, onEditDeviceName, onLogoClick, rolls, materials }) {
+export default function Header({ deviceName, loading, onLogout, onEditDeviceName, onLogoClick, rolls, materials, onManualSync }) {
   const [showSettings, setShowSettings] = useState(false);
-  const [realtimeStatus, setRealtimeStatus] = useState('connecting');
+  const [pendingCount, setPendingCount] = useState(0);
 
-  // --- REALTIME HEARTBEAT MONITOR ---
+  // --- POLL PENDING SYNC COUNT ---
   useEffect(() => {
-    const checkConnection = setInterval(() => {
-      // Looks for the specific channel we established in App.jsx
-      const channel = supabase.getChannels().find(c => c.name === 'schema-db-changes');
-      if (channel && channel.state === 'joined') {
-        setRealtimeStatus('online');
-      } else {
-        setRealtimeStatus('offline');
+    const updatePendingCount = async () => {
+      try {
+        const count = await db.rolls.where('synced').equals(0).count();
+        setPendingCount(count);
+      } catch (err) {
+        console.error("Sync count error:", err);
       }
-    }, 5000);
+    };
 
-    return () => clearInterval(checkConnection);
+    const interval = setInterval(updatePendingCount, 2000);
+    updatePendingCount();
+    return () => clearInterval(interval);
   }, []);
 
   // 1. DATA USAGE SUMMARY
@@ -59,26 +61,35 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
           />
         </div>
 
-        {/* RIGHT SIDE: STATUS, DEVICE NAME & SETTINGS */}
+        {/* RIGHT SIDE: SYNC STATUS & SETTINGS */}
         <div className="flex items-center gap-3">
-          <div className="flex flex-col items-end border-r border-gray-100 pr-3">
+          
+          {/* SYNC BADGE / MANUAL SYNC BUTTON */}
+          <button 
+            onClick={onManualSync}
+            disabled={loading}
+            className={`flex flex-col items-end border-r border-gray-100 pr-3 transition-all active:scale-95 ${loading ? 'opacity-100' : 'opacity-80 hover:opacity-100'}`}
+          >
             <div className="flex items-center gap-1.5 mb-0.5">
               <span className={`text-[8px] font-black uppercase tracking-widest transition-colors duration-500 ${
                 loading ? 'text-orange-500' : 
-                realtimeStatus === 'online' ? 'text-green-600' : 'text-red-500'
+                pendingCount > 0 ? 'text-orange-600' : 'text-green-600'
               }`}>
-                {loading ? 'Syncing' : realtimeStatus === 'online' ? 'System Live' : 'Link Offline'}
+                {loading ? 'Syncing...' : pendingCount > 0 ? `${pendingCount} Pending` : 'All Synced'}
               </span>
-              <div className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
-                loading ? 'bg-orange-400 animate-pulse' : 
-                realtimeStatus === 'online' ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.4)]' : 'bg-red-500 animate-bounce'
-              }`} />
+              {loading ? (
+                <RefreshCw size={8} className="text-orange-500 animate-spin" />
+              ) : pendingCount > 0 ? (
+                <CloudOff size={8} className="text-orange-600" />
+              ) : (
+                <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.4)]" />
+              )}
             </div>
             <div className="flex flex-col items-end">
               <span className="text-[7px] font-black text-gray-400 uppercase tracking-tighter leading-none">Terminal</span>
               <span className="text-[10px] font-black text-blue-600 uppercase tracking-tight leading-tight">{deviceName}</span>
             </div>
-          </div>
+          </button>
           
           <button 
             onClick={() => setShowSettings(true)} 
@@ -89,7 +100,7 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
         </div>
       </header>
 
-      {/* SETTINGS DRAWER */}
+      {/* SETTINGS DRAWER (Unchanged) */}
       {showSettings && (
         <div className="fixed inset-0 z-[100] animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
