@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Camera, CheckCircle, X, Trash2, FileSpreadsheet } from 'lucide-react';
+import { Truck, Camera, CheckCircle, X, Trash2, FileSpreadsheet, ChevronDown } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 
-// Constants to ensure matching dropdowns
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
-// --- UPDATED GATE PASS GENERATOR ---
+// --- UPDATED EXCEL: WEIGHT TOTALS ONLY ---
 const generateChallanExcel = (rolls, details) => {
   try {
     const header = [
@@ -26,53 +25,41 @@ const generateChallanExcel = (rolls, details) => {
       r.color,
       r.width_inches,
       r.gsm,
-      parseFloat(r.length_meters) || 0,
+      r.length_meters,
       parseFloat(r.gross_weight) || 0,
       parseFloat(r.net_weight) || 0
     ]);
 
     const totalNet = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
     const totalGross = rolls.reduce((sum, r) => sum + (parseFloat(r.gross_weight) || 0), 0);
-    const totalMeters = rolls.reduce((sum, r) => sum + (parseFloat(r.length_meters) || 0), 0);
 
     const footer = [
       [],
-      ["", "", "", "", "", "TOTALS:", totalMeters.toFixed(0) + " m", totalGross.toFixed(2), totalNet.toFixed(2)]
+      ["", "", "", "", "", "", "TOTALS:", totalGross.toFixed(2), totalNet.toFixed(2)]
     ];
 
     const finalData = [...header, ...body, ...footer];
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(finalData);
-
-    ws['!cols'] = [
-      { wch: 6 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }
-    ];
+    ws['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
-
     XLSX.utils.book_append_sheet(wb, ws, "GatePass");
-    const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    XLSX.writeFile(wb, `GatePass_${details.buyer.replace(/\s/g, '_')}.xlsx`);
     return true;
-  } catch (err) {
-    alert("Excel Error: " + err.message);
-    return false;
-  }
+  } catch (err) { alert("Excel Error: " + err.message); return false; }
 };
 
-// --- BARCODE SCANNER (Unchanged UI) ---
+// --- SCANNER (Unchanged) ---
 const BarcodeScanner = ({ onScan, onClose }) => {
   useEffect(() => {
     const html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScan, () => {}).catch(console.error);
-    return () => {
-      try { html5QrCode.stop().then(() => html5QrCode.clear()); } catch (e) {}
-    };
+    return () => { try { html5QrCode.stop().then(() => html5QrCode.clear()); } catch (e) {} };
   }, [onScan]);
-
   return (
     <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-4">
       <div id="reader" className="w-full bg-white rounded overflow-hidden max-w-sm shadow-2xl"></div>
-      <button onClick={onClose} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-full font-bold shadow-lg">Close Camera</button>
+      <button onClick={onClose} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-full font-bold shadow-lg">Close</button>
     </div>
   );
 };
@@ -81,150 +68,146 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const [scanId, setScanId] = useState('');
   const [reviewData, setReviewData] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
-  
-  const [sessionList, setSessionList] = useState(() => JSON.parse(localStorage.getItem('ksf_dispatch_list_v11') || '[]'));
+  const [sessionList, setSessionList] = useState(() => JSON.parse(localStorage.getItem('ksf_dispatch_list_v12') || '[]'));
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer_v11') || '');
   const [vehicleNo, setVehicleNo] = useState(() => localStorage.getItem('ksf_dispatch_vehicle_v11') || '');
 
   useEffect(() => {
-    localStorage.setItem('ksf_dispatch_list_v11', JSON.stringify(sessionList));
-    localStorage.setItem('ksf_dispatch_customer_v11', customerName);
-    localStorage.setItem('ksf_dispatch_vehicle_v11', vehicleNo);
-  }, [sessionList, customerName, vehicleNo]);
+    localStorage.setItem('ksf_dispatch_list_v12', JSON.stringify(sessionList));
+  }, [sessionList]);
+
+  // AUTO-CALCULATION FOR POPUP
+  const handlePopupValueChange = (field, value) => {
+    const updated = { ...reviewData, [field]: value };
+    if (field === 'width_inches' || field === 'gross_weight') {
+      const w = parseFloat(field === 'width_inches' ? value : reviewData.width_inches);
+      const g = parseFloat(field === 'gross_weight' ? value : reviewData.gross_weight);
+      if (!isNaN(w) && !isNaN(g) && w > 0) updated.net_weight = (g - (w / 63)).toFixed(2);
+    }
+    setReviewData(updated);
+  };
 
   const handleSearch = (idToSearch) => {
     const query = idToSearch || scanId;
     if (!query) return;
     const roll = rolls.find(r => r.product_id.toUpperCase() === query.toUpperCase() && r.status === 'in_stock');
-    
     if (roll) {
-      if (sessionList.some(r => r.product_id === roll.product_id)) {
-        alert("Roll already in manifest!");
-        setScanId('');
-        return;
-      }
-      setReviewData({ ...roll }); 
-    } else {
-      alert('Roll not found or already dispatched.');
-    }
+      if (sessionList.some(r => r.product_id === roll.product_id)) return alert("Already in manifest!");
+      setReviewData({ ...roll });
+    } else { alert('Roll not found or already dispatched.'); }
     setScanId('');
   };
 
   const handleConfirmDispatch = async () => {
     if (!reviewData) return;
-
-    // LOCAL-FIRST: Update the roll object for the phone memory
-    const updatedRoll = {
-      ...reviewData,
-      status: 'dispatched',
-      dispatched_at: new Date().toISOString(),
-      dispatched_by: deviceName,
-      synced: 0 // Mark for background sync in App.jsx
-    };
-
-    // Use the onDispatch prop which we confirmed works for offline sync
-    await onDispatch(updatedRoll);
-    
-    setSessionList(prev => [updatedRoll, ...prev]);
-    setReviewData(null);
+    try {
+      const updatedRoll = {
+        ...reviewData,
+        status: 'dispatched',
+        dispatched_at: new Date().toISOString(),
+        dispatched_by: deviceName,
+        synced: 0
+      };
+      
+      // THIS IS THE CRITICAL LINE: No direct Supabase calls
+      await onDispatch(updatedRoll);
+      setSessionList(prev => [updatedRoll, ...prev]);
+      setReviewData(null);
+    } catch (e) { alert("Action Failed. Please try again."); }
   };
 
   const handleRemoveFromManifest = async (item) => {
-    if (confirm("Return this roll to stock?")) {
-      const returnedRoll = { ...item, status: 'in_stock', dispatched_at: null, synced: 0 };
-      await onDispatch(returnedRoll);
+    if (confirm("Return to stock?")) {
+      const returned = { ...item, status: 'in_stock', dispatched_at: null, synced: 0 };
+      await onDispatch(returned);
       setSessionList(sessionList.filter(r => r.product_id !== item.product_id));
     }
   };
 
-  const handleFinalizeGatePass = () => {
-    if (sessionList.length === 0) return alert("Manifest is empty.");
-    const success = generateChallanExcel(sessionList, { buyer: customerName, vehicle: vehicleNo });
-    if (success && confirm("Gate Pass Generated. Clear list?")) {
-      setSessionList([]); setCustomerName(''); setVehicleNo('');
-    }
-  };
-
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-24 max-w-2xl mx-auto">
       {isScanning && <BarcodeScanner onScan={(txt) => { setIsScanning(false); handleSearch(txt); }} onClose={() => setIsScanning(false)} />}
       
-      <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-4 rounded-xl text-white shadow-lg">
-        <h3 className="font-bold mb-3 flex items-center gap-2"><Truck size={20} /> Dispatch Manifest</h3>
+      <div className="bg-blue-600 p-4 rounded-2xl text-white shadow-lg">
+        <h3 className="font-black text-xs uppercase tracking-widest mb-3 flex items-center gap-2">Manifest Details</h3>
         <div className="grid grid-cols-2 gap-2">
-          <input className="w-full p-2 rounded text-black text-sm outline-none" placeholder="Buyer" value={customerName} onChange={e => setCustomerName(e.target.value)} />
-          <input className="w-full p-2 rounded text-black text-sm outline-none" placeholder="Vehicle #" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
+          <input className="w-full p-3 rounded-xl text-black font-bold text-sm outline-none" placeholder="Buyer" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+          <input className="w-full p-3 rounded-xl text-black font-bold text-sm outline-none" placeholder="Vehicle #" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
         </div>
       </div>
 
-      {!reviewData ? (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
-          <div className="flex gap-2 mb-4">
-            <input className="flex-1 border-2 border-gray-200 p-3 rounded-lg text-center font-mono focus:border-blue-500 outline-none" placeholder="Enter / Scan ID" value={scanId} onChange={e => setScanId(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSearch()} />
-            <button onClick={() => setIsScanning(true)} className="bg-gray-900 text-white p-3 rounded-lg"><Camera size={24} /></button>
-          </div>
-          <button onClick={() => handleSearch()} className="bg-blue-600 text-white w-full py-4 rounded-xl font-bold active:scale-95 transition-all">Identify Roll</button>
+      <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 text-center">
+        <div className="flex gap-2 mb-4">
+          <input className="flex-1 border-2 border-gray-100 p-4 rounded-2xl text-center font-mono focus:border-blue-500 outline-none font-bold" placeholder="ID (Scan/Type)" value={scanId} onChange={e => setScanId(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} />
+          <button onClick={() => setIsScanning(true)} className="bg-slate-900 text-white p-4 rounded-2xl"><Camera size={24} /></button>
         </div>
-      ) : (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl border">
-            <div className="flex justify-between items-center mb-4 border-b pb-2">
-              <h3 className="font-bold text-lg text-blue-600">Verify Dispatch</h3>
-              <button onClick={() => setReviewData(null)}><X size={24} /></button>
+        <button onClick={() => handleSearch()} className="bg-blue-600 text-white w-full py-5 rounded-2xl font-black shadow-lg shadow-blue-100 active:scale-95 transition-all">IDENTIFY ROLL</button>
+      </div>
+
+      {reviewData && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
+          <div className="bg-white p-6 rounded-[2.5rem] w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex justify-between items-center mb-4 border-b pb-3">
+              <h3 className="font-black text-blue-600 uppercase tracking-tight">Verify & Edit</h3>
+              <button onClick={() => setReviewData(null)}><X size={24}/></button>
             </div>
-            <div className="bg-blue-50 p-3 rounded text-center mb-4 border border-blue-100">
-              <div className="text-xl font-black text-blue-800 tracking-widest">{reviewData.product_id}</div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="col-span-2">
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Buyer Name</label>
-                <input className="w-full border p-2 rounded bg-gray-50 font-bold" value={reviewData.customer_name} onChange={e => setReviewData({ ...reviewData, customer_name: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Quality</label>
-                <select className="w-full border p-2 rounded bg-white text-sm" value={reviewData.quality} onChange={e => setReviewData({ ...reviewData, quality: e.target.value })}>
+            
+            <div className="space-y-4">
+              <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Buyer Name</label>
+              <input className="w-full p-3 bg-slate-50 border rounded-2xl font-bold" value={reviewData.customer_name} onChange={e => handlePopupValueChange('customer_name', e.target.value)} /></div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Quality</label>
+                <select className="w-full p-3 border rounded-2xl font-bold bg-white outline-none" value={reviewData.quality} onChange={e => handlePopupValueChange('quality', e.target.value)}>
                   {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Color</label>
-                <select className="w-full border p-2 rounded bg-white text-sm" value={reviewData.color} onChange={e => setReviewData({ ...reviewData, color: e.target.value })}>
+                </select></div>
+                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Color</label>
+                <select className="w-full p-3 border rounded-2xl font-bold bg-white outline-none" value={reviewData.color} onChange={e => handlePopupValueChange('color', e.target.value)}>
                   {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                </select></div>
               </div>
-              <div className="col-span-2">
-                <label className="text-[10px] font-bold text-blue-600 uppercase">Final Net Weight (kg)</label>
-                <input type="number" className="w-full border-2 border-blue-500 p-2 rounded font-black text-blue-900 text-lg" value={reviewData.net_weight} onChange={e => setReviewData({ ...reviewData, net_weight: e.target.value })} />
+
+              <div className="grid grid-cols-3 gap-2">
+                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">GSM</label><input type="number" className="w-full p-3 border rounded-2xl font-bold" value={reviewData.gsm} onChange={e => handlePopupValueChange('gsm', e.target.value)} /></div>
+                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Size (in)</label><input type="number" className="w-full p-3 border rounded-2xl font-bold" value={reviewData.width_inches} onChange={e => handlePopupValueChange('width_inches', e.target.value)} /></div>
+                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Len (m)</label><input type="number" className="w-full p-3 border rounded-2xl font-bold" value={reviewData.length_meters} onChange={e => handlePopupValueChange('length_meters', e.target.value)} /></div>
               </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Gross (kg)</label>
+                <input type="number" step="0.01" className="w-full p-4 border rounded-2xl font-black text-lg bg-slate-50" value={reviewData.gross_weight} onChange={e => handlePopupValueChange('gross_weight', e.target.value)} /></div>
+                <div><label className="text-[10px] font-black text-blue-600 uppercase ml-2">Net (kg)</label>
+                <input type="number" step="0.01" className="w-full p-4 border-2 border-blue-500 rounded-2xl font-black text-lg text-blue-700 bg-blue-50" value={reviewData.net_weight} readOnly /></div>
+              </div>
+
+              <button onClick={handleConfirmDispatch} className="w-full bg-green-600 text-white py-5 rounded-[1.5rem] font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
+                <CheckCircle size={20} /> ADD TO MANIFEST
+              </button>
             </div>
-            <button onClick={handleConfirmDispatch} className="w-full bg-green-600 text-white py-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
-              <CheckCircle size={20} /> Add to Manifest
-            </button>
           </div>
         </div>
       )}
 
       {sessionList.length > 0 && (
-        <div className="bg-white rounded-xl shadow border border-gray-100 overflow-hidden">
-          <div className="p-3 bg-gray-50 border-b flex justify-between font-bold text-gray-500 text-sm">
+        <div className="bg-white rounded-[2rem] shadow border border-gray-100 overflow-hidden">
+          <div className="p-4 bg-slate-50 border-b flex justify-between font-black text-gray-500 text-[10px] uppercase">
             <span>Items: {sessionList.length}</span>
-            <span>Weight: {sessionList.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0).toFixed(1)} kg</span>
+            <span>Total: {sessionList.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0).toFixed(1)} kg</span>
           </div>
           <div className="max-h-64 overflow-y-auto">
             {sessionList.map((item, i) => (
-              <div key={i} className="p-3 border-b flex justify-between items-center hover:bg-gray-50">
-                <div>
-                  <div className="font-mono text-gray-800 font-bold">{item.product_id}</div>
-                  <div className="text-[10px] text-gray-400 uppercase">{item.quality} • {item.net_weight}kg • {item.length_meters}m</div>
-                </div>
-                <button onClick={() => handleRemoveFromManifest(item)} className="text-red-500 p-2"><Trash2 size={18}/></button>
+              <div key={i} className="p-4 border-b flex justify-between items-center hover:bg-slate-50">
+                <div><div className="font-black text-gray-800">{item.product_id}</div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase">{item.quality} • {item.net_weight}kg</div></div>
+                <button onClick={() => handleRemoveFromManifest(item)} className="text-red-400 p-2"><Trash2 size={20}/></button>
               </div>
             ))}
           </div>
-          <div className="p-4 bg-gray-50 border-t flex flex-col gap-3">
-             <button onClick={handleFinalizeGatePass} className="w-full bg-green-700 text-white py-4 rounded-xl font-bold flex justify-center gap-2 items-center shadow-lg active:scale-95 transition-all">
-                <FileSpreadsheet size={20} /> Generate Gate Pass (XLS)
+          <div className="p-4">
+             <button onClick={() => generateChallanExcel(sessionList, { buyer: customerName, vehicle: vehicleNo })} className="w-full bg-green-700 text-white py-5 rounded-2xl font-black flex justify-center gap-2 items-center shadow-lg active:scale-95 transition-all">
+                <FileSpreadsheet size={20} /> GENERATE GATE PASS
              </button>
+             <button onClick={() => { if(confirm("Clear current list?")) setSessionList([]); }} className="w-full mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Clear Manifest</button>
           </div>
         </div>
       )}
