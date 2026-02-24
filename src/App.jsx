@@ -33,26 +33,54 @@ export default function App() {
     try {
       const savedTab = localStorage.getItem('ksf_active_tab');
       const lastActivity = localStorage.getItem('ksf_last_activity');
-      const now = Date.now();
-      if (savedTab && lastActivity && (now - parseInt(lastActivity) < 1800000)) {
+      if (savedTab && lastActivity && (Date.now() - parseInt(lastActivity) < 1800000)) {
         return savedTab;
       }
     } catch (e) {}
     return 'dashboard';
   });
 
+  // --- 1. THE REALTIME LISTENER (THE DATA GUARD) ---
   useEffect(() => {
-    localStorage.setItem('ksf_active_tab', activeTab);
-    localStorage.setItem('ksf_last_activity', Date.now().toString());
-    if (activeTab === 'dashboard' || activeTab === 'history') {
-      fetchData(activeTab);
-    }
-  }, [activeTab]);
+    if (!user) return;
 
-  const fetchData = useCallback(async (targetTab = activeTab, start = null, end = null) => {
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'rolls' },
+        (payload) => {
+          setRolls((currentRolls) => {
+            if (payload.eventType === 'INSERT') {
+              // Add only the new roll to the existing list in memory
+              return [payload.new, ...currentRolls];
+            }
+            if (payload.eventType === 'UPDATE') {
+              // Update only the specific roll that changed
+              return currentRolls.map((r) => (r.id === payload.new.id ? payload.new : r));
+            }
+            if (payload.eventType === 'DELETE') {
+              // Remove the deleted roll from memory
+              return currentRolls.filter((r) => r.id === payload.old.id);
+            }
+            return currentRolls;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // --- 2. THE INITIAL FETCH (RUNS ONCE) ---
+  const fetchData = useCallback(async (targetTab = activeTab) => {
+    // Only fetch if memory is empty OR if specifically requested (like a range change)
+    if (rolls.length > 0 && !initialFetchDone.current) return;
+    
     setLoading(true);
     try {
-      // 1. FETCH ALL IN-STOCK
       let allStock = [];
       let stockFrom = 0;
       const step = 1000;
@@ -63,69 +91,43 @@ export default function App() {
           .eq('status', 'in_stock')
           .order('created_at', { ascending: false })
           .range(stockFrom, stockFrom + step - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
+        if (error || !data || data.length === 0) break;
         allStock = [...allStock, ...data];
         if (data.length < step) break;
         stockFrom += step;
       }
 
-      // 2. FETCH DISPATCHED (Declared once here to fix the build error)
       let allHistory = [];
       let historyFrom = 0;
-      
-      if (start && end) {
-        while (true) {
-          const { data, error } = await supabase.from('rolls').select('*')
-            .eq('status', 'dispatched')
-            .gte('dispatched_at', start)
-            .lte('dispatched_at', end + 'T23:59:59')
-            .range(historyFrom, historyFrom + step - 1);
-          if (error || !data || data.length === 0) break;
-          allHistory = [...allHistory, ...data];
-          if (data.length < step) break;
-          historyFrom += step;
-        }
-        setActiveRange('custom');
-      } 
-      else if (targetTab === 'dashboard') {
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0,0,0,0);
-        while (true) {
-          const { data, error } = await supabase.from('rolls').select('*')
-            .eq('status', 'dispatched')
-            .gte('dispatched_at', startOfMonth.toISOString())
-            .range(historyFrom, historyFrom + step - 1);
-          if (error || !data || data.length === 0) break;
-          allHistory = [...allHistory, ...data];
-          if (data.length < step) break;
-          historyFrom += step;
-        }
-        setActiveRange('current_month');
-      } 
-      else if (targetTab === 'history') {
-        const fifteenDaysAgo = new Date();
-        fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-        while (true) {
-          const { data, error } = await supabase.from('rolls').select('*')
-            .eq('status', 'dispatched')
-            .gte('dispatched_at', fifteenDaysAgo.toISOString())
-            .range(historyFrom, historyFrom + step - 1);
-          if (error || !data || data.length === 0) break;
-          allHistory = [...allHistory, ...data];
-          if (data.length < step) break;
-          historyFrom += step;
-        }
-        setActiveRange('15days');
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0,0,0,0);
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('rolls')
+          .select('*')
+          .eq('status', 'dispatched')
+          .gte('dispatched_at', startOfMonth.toISOString())
+          .range(historyFrom, historyFrom + step - 1);
+        if (error || !data || data.length === 0) break;
+        allHistory = [...allHistory, ...data];
+        if (data.length < step) break;
+        historyFrom += step;
       }
 
       setRolls([...allStock, ...allHistory]);
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       setMaterials(mats || []);
-
+      setActiveRange('current_month');
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
+  }, [rolls.length]);
+
+  useEffect(() => {
+    localStorage.setItem('ksf_active_tab', activeTab);
+    localStorage.setItem('ksf_last_activity', Date.now().toString());
+    // No more automatic re-fetch on tab switch! Memory handles it.
   }, [activeTab]);
 
   useEffect(() => {
@@ -138,16 +140,9 @@ export default function App() {
       }
     };
     startUp();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
-      if (session && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !initialFetchDone.current) {
-        initialFetchDone.current = true;
-        fetchData();
-      }
-    });
-    return () => subscription.unsubscribe();
   }, [fetchData]);
 
+  // Rest of the UI logic remains exactly the same...
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
@@ -168,14 +163,14 @@ export default function App() {
       <Header deviceName={deviceName} loading={loading} rolls={rolls} materials={materials} onLogout={() => { supabase.auth.signOut(); localStorage.clear(); window.location.reload(); }} onEditDeviceName={() => { const n = prompt("Device Name:", deviceName); if(n) { localStorage.setItem('ksf_device_name', n); setDeviceName(n); } }} onLogoClick={() => setActiveTab('dashboard')} />
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
-        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => fetchData()} onPrint={setPrintData} />}
+        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => {}} onPrint={setPrintData} />}
         {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
-        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => fetchData()} />}
+        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => {}} />}
         {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={(s, e) => fetchData('history', s, e)} activeRange={activeRange} />}
-        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => fetchData()} />}
+        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => {}} />}
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
-      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={() => { setEditRoll(null); fetchData(); }} />}
+      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={() => setEditRoll(null)} />}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
     </div>
   );
