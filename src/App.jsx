@@ -42,7 +42,7 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC: PREVENT DUPLICATES DURING UPLOAD ---
+  // --- 1. SYNC LOGIC: PREVENT DUPLICATES ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine) return;
     
@@ -52,7 +52,6 @@ export default function App() {
     for (const roll of unsyncedRolls) {
       const { id, synced, ...dataToUpload } = roll;
       
-      // Check cloud first to see if it's already there
       const { data: existing } = await supabase
         .from('rolls')
         .select('product_id')
@@ -61,10 +60,11 @@ export default function App() {
       
       if (!existing) {
         const { error } = await supabase.from('rolls').insert([dataToUpload]);
-        // Mark local as synced immediately to prevent the Realtime listener from duplicating
         if (!error) await db.rolls.update(id, { synced: 1 });
       } else {
-        await db.rolls.update(id, { synced: 1 });
+        // If it exists in cloud, update it to match local status
+        const { error } = await supabase.from('rolls').update(dataToUpload).eq('product_id', roll.product_id);
+        if (!error) await db.rolls.update(id, { synced: 1 });
       }
     }
   }, []);
@@ -83,7 +83,7 @@ export default function App() {
     };
   }, [syncOfflineData]);
 
-  // --- 3. REALTIME LISTENER: DEDUPLICATION BY PRODUCT_ID ---
+  // --- 3. REALTIME LISTENER: DEDUPLICATION ---
   useEffect(() => {
     if (!user) return;
 
@@ -91,14 +91,10 @@ export default function App() {
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          // Check if we already have this product_id locally
           const existingLocal = await db.rolls.where('product_id').equals(payload.new.product_id).first();
-          
           if (existingLocal) {
-            // Update the existing local entry instead of adding a new row
             await db.rolls.update(existingLocal.id, { ...payload.new, synced: 1 });
           } else {
-            // Truly a new roll from a different device
             await db.rolls.put({ ...payload.new, synced: 1 });
           }
         } else if (payload.eventType === 'DELETE') {
@@ -113,7 +109,7 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 4. DATA FETCH (PAGINATED + LOCAL FIRST) ---
+  // --- 4. DATA FETCH (PAGINATED) ---
   const fetchData = useCallback(async () => {
     const cachedRolls = await db.rolls.toArray();
     if (cachedRolls.length > 0) {
@@ -148,7 +144,6 @@ export default function App() {
       }
 
       if (allRemoteData.length > 0) {
-        // Clear local storage and repopulate to ensure clean slate
         await db.rolls.clear();
         await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
         const finalLocal = await db.rolls.toArray();
@@ -160,11 +155,8 @@ export default function App() {
         await db.materials.bulkPut(mats);
         setMaterials(mats);
       }
-    } catch (e) { 
-      console.error("Fetch error:", e); 
-    } finally { 
-      setLoading(false); 
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -180,8 +172,9 @@ export default function App() {
     startUp();
   }, [fetchData, syncOfflineData]);
 
-  const handleLocalSave = async (newRoll) => {
-    await db.rolls.add({ ...newRoll, synced: 0 });
+  // FIXED: Using .put to allow status updates from in_stock to dispatched
+  const handleLocalSave = async (updatedRoll) => {
+    await db.rolls.put({ ...updatedRoll, synced: 0 });
     const updated = await db.rolls.toArray();
     setRolls(updated.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     if (navigator.onLine) syncOfflineData();
@@ -234,12 +227,10 @@ export default function App() {
           onClose={() => setEditRoll(null)} 
           onSave={async (updated) => {
             setEditRoll(null);
+            await handleLocalSave(updated);
             if (navigator.onLine) {
               await supabase.from('rolls').update(updated).eq('product_id', updated.product_id);
-            } else {
-              await db.rolls.put({ ...updated, synced: 0 });
             }
-            fetchData();
           }} 
           onDelete={async (productId) => {
             setEditRoll(null);

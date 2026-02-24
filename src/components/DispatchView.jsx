@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Camera, CheckCircle, X, Trash2, FileSpreadsheet, ChevronDown } from 'lucide-react';
+import { Truck, Camera, CheckCircle, X, Trash2, FileSpreadsheet } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
-// --- UPDATED EXCEL: WEIGHT TOTALS ONLY ---
+// --- EXCEL GENERATOR (Weight Totals Only) ---
 const generateChallanExcel = (rolls, details) => {
   try {
     const header = [
@@ -49,7 +49,7 @@ const generateChallanExcel = (rolls, details) => {
   } catch (err) { alert("Excel Error: " + err.message); return false; }
 };
 
-// --- SCANNER (Unchanged) ---
+// --- SCANNER COMPONENT ---
 const BarcodeScanner = ({ onScan, onClose }) => {
   useEffect(() => {
     const html5QrCode = new Html5Qrcode("reader");
@@ -76,7 +76,6 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
     localStorage.setItem('ksf_dispatch_list_v12', JSON.stringify(sessionList));
   }, [sessionList]);
 
-  // AUTO-CALCULATION FOR POPUP
   const handlePopupValueChange = (field, value) => {
     const updated = { ...reviewData, [field]: value };
     if (field === 'width_inches' || field === 'gross_weight') {
@@ -100,20 +99,16 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
 
   const handleConfirmDispatch = async () => {
     if (!reviewData) return;
-    try {
-      const updatedRoll = {
-        ...reviewData,
-        status: 'dispatched',
-        dispatched_at: new Date().toISOString(),
-        dispatched_by: deviceName,
-        synced: 0
-      };
-      
-      // THIS IS THE CRITICAL LINE: No direct Supabase calls
-      await onDispatch(updatedRoll);
-      setSessionList(prev => [updatedRoll, ...prev]);
-      setReviewData(null);
-    } catch (e) { alert("Action Failed. Please try again."); }
+    const updatedRoll = {
+      ...reviewData,
+      status: 'dispatched',
+      dispatched_at: new Date().toISOString(),
+      dispatched_by: deviceName,
+      synced: 0
+    };
+    await onDispatch(updatedRoll); // Calls handleLocalSave in App.jsx
+    setSessionList(prev => [updatedRoll, ...prev]);
+    setReviewData(null);
   };
 
   const handleRemoveFromManifest = async (item) => {
@@ -155,31 +150,27 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
             <div className="space-y-4">
               <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Buyer Name</label>
               <input className="w-full p-3 bg-slate-50 border rounded-2xl font-bold" value={reviewData.customer_name} onChange={e => handlePopupValueChange('customer_name', e.target.value)} /></div>
-              
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Quality</label>
-                <select className="w-full p-3 border rounded-2xl font-bold bg-white outline-none" value={reviewData.quality} onChange={e => handlePopupValueChange('quality', e.target.value)}>
+                <select className="w-full p-3 border rounded-2xl font-bold bg-white" value={reviewData.quality} onChange={e => handlePopupValueChange('quality', e.target.value)}>
                   {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
                 </select></div>
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Color</label>
-                <select className="w-full p-3 border rounded-2xl font-bold bg-white outline-none" value={reviewData.color} onChange={e => handlePopupValueChange('color', e.target.value)}>
+                <select className="w-full p-3 border rounded-2xl font-bold bg-white" value={reviewData.color} onChange={e => handlePopupValueChange('color', e.target.value)}>
                   {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
                 </select></div>
               </div>
-
               <div className="grid grid-cols-3 gap-2">
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">GSM</label><input type="number" className="w-full p-3 border rounded-2xl font-bold" value={reviewData.gsm} onChange={e => handlePopupValueChange('gsm', e.target.value)} /></div>
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Size (in)</label><input type="number" className="w-full p-3 border rounded-2xl font-bold" value={reviewData.width_inches} onChange={e => handlePopupValueChange('width_inches', e.target.value)} /></div>
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Len (m)</label><input type="number" className="w-full p-3 border rounded-2xl font-bold" value={reviewData.length_meters} onChange={e => handlePopupValueChange('length_meters', e.target.value)} /></div>
               </div>
-
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Gross (kg)</label>
                 <input type="number" step="0.01" className="w-full p-4 border rounded-2xl font-black text-lg bg-slate-50" value={reviewData.gross_weight} onChange={e => handlePopupValueChange('gross_weight', e.target.value)} /></div>
                 <div><label className="text-[10px] font-black text-blue-600 uppercase ml-2">Net (kg)</label>
                 <input type="number" step="0.01" className="w-full p-4 border-2 border-blue-500 rounded-2xl font-black text-lg text-blue-700 bg-blue-50" value={reviewData.net_weight} readOnly /></div>
               </div>
-
               <button onClick={handleConfirmDispatch} className="w-full bg-green-600 text-white py-5 rounded-[1.5rem] font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
                 <CheckCircle size={20} /> ADD TO MANIFEST
               </button>
@@ -207,7 +198,7 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
              <button onClick={() => generateChallanExcel(sessionList, { buyer: customerName, vehicle: vehicleNo })} className="w-full bg-green-700 text-white py-5 rounded-2xl font-black flex justify-center gap-2 items-center shadow-lg active:scale-95 transition-all">
                 <FileSpreadsheet size={20} /> GENERATE GATE PASS
              </button>
-             <button onClick={() => { if(confirm("Clear current list?")) setSessionList([]); }} className="w-full mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Clear Manifest</button>
+             <button onClick={() => { if(confirm("Clear list?")) setSessionList([]); }} className="w-full mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Clear Manifest</button>
           </div>
         </div>
       )}
