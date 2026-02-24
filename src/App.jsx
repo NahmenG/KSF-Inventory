@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import { db } from './db'; // Local Database
 
 // Full Component Imports
 import Header from './components/Header.jsx';
@@ -26,6 +27,7 @@ export default function App() {
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
   const [activeRange, setActiveRange] = useState('15days'); 
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   const initialFetchDone = useRef(false);
 
@@ -40,95 +42,100 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. THE REALTIME LISTENER (THE DATA GUARD) ---
+  // --- 1. SYNC LOGIC: UPLOAD OFFLINE DATA TO SUPABASE ---
+  const syncOfflineData = useCallback(async () => {
+    if (!navigator.onLine) return;
+    
+    const unsyncedRolls = await db.rolls.where({ synced: 0 }).toArray();
+    if (unsyncedRolls.length === 0) return;
+
+    console.log(`Syncing ${unsyncedRolls.length} offline entries...`);
+    
+    for (const roll of unsyncedRolls) {
+      // Remove local ID and synced flag before uploading
+      const { id, synced, ...dataToUpload } = roll;
+      const { error } = await supabase.from('rolls').insert([dataToUpload]);
+      
+      if (!error) {
+        // Update local record to mark as synced
+        await db.rolls.update(id, { synced: 1 });
+      }
+    }
+  }, []);
+
+  // --- 2. CONNECTION MONITOR ---
+  useEffect(() => {
+    const handleStatus = () => {
+      setIsOnline(navigator.onLine);
+      if (navigator.onLine) syncOfflineData();
+    };
+    window.addEventListener('online', handleStatus);
+    window.addEventListener('offline', handleStatus);
+    return () => {
+      window.removeEventListener('online', handleStatus);
+      window.removeEventListener('offline', handleStatus);
+    };
+  }, [syncOfflineData]);
+
+  // --- 3. REALTIME LISTENER ---
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase
       .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'rolls' },
-        (payload) => {
-          setRolls((currentRolls) => {
-            if (payload.eventType === 'INSERT') {
-              // Add only the new roll to the existing list in memory
-              return [payload.new, ...currentRolls];
-            }
-            if (payload.eventType === 'UPDATE') {
-              // Update only the specific roll that changed
-              return currentRolls.map((r) => (r.id === payload.new.id ? payload.new : r));
-            }
-            if (payload.eventType === 'DELETE') {
-              // Remove the deleted roll from memory
-              return currentRolls.filter((r) => r.id === payload.old.id);
-            }
-            return currentRolls;
-          });
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          await db.rolls.put({ ...payload.new, synced: 1 });
+        } else if (payload.eventType === 'DELETE') {
+          await db.rolls.where({ product_id: payload.old.product_id }).delete();
         }
-      )
+        
+        // Refresh UI from Local DB
+        const allLocal = await db.rolls.toArray();
+        setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 2. THE INITIAL FETCH (RUNS ONCE) ---
-  const fetchData = useCallback(async (targetTab = activeTab) => {
-    // Only fetch if memory is empty OR if specifically requested (like a range change)
-    if (rolls.length > 0 && !initialFetchDone.current) return;
-    
+  // --- 4. DATA FETCH & PERSISTENCE ---
+  const fetchData = useCallback(async () => {
+    // A. Always load from Phone Memory first (Instant)
+    const cachedRolls = await db.rolls.toArray();
+    if (cachedRolls.length > 0) {
+      setRolls(cachedRolls.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    }
+
+    if (!navigator.onLine) return;
+
     setLoading(true);
     try {
-      let allStock = [];
-      let stockFrom = 0;
-      const step = 1000;
-      while (true) {
-        const { data, error } = await supabase
-          .from('rolls')
-          .select('*')
-          .eq('status', 'in_stock')
-          .order('created_at', { ascending: false })
-          .range(stockFrom, stockFrom + step - 1);
-        if (error || !data || data.length === 0) break;
-        allStock = [...allStock, ...data];
-        if (data.length < step) break;
-        stockFrom += step;
-      }
-
-      let allHistory = [];
-      let historyFrom = 0;
+      // B. Fetch only current month to keep it light
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0,0,0,0);
 
-      while (true) {
-        const { data, error } = await supabase
-          .from('rolls')
-          .select('*')
-          .eq('status', 'dispatched')
-          .gte('dispatched_at', startOfMonth.toISOString())
-          .range(historyFrom, historyFrom + step - 1);
-        if (error || !data || data.length === 0) break;
-        allHistory = [...allHistory, ...data];
-        if (data.length < step) break;
-        historyFrom += step;
-      }
+      const { data: remoteData, error } = await supabase
+        .from('rolls')
+        .select('*')
+        .or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`);
 
-      setRolls([...allStock, ...allHistory]);
+      if (remoteData) {
+        // Save remote data to local DB
+        await db.rolls.bulkPut(remoteData.map(r => ({ ...r, synced: 1 })));
+        const finalLocal = await db.rolls.toArray();
+        setRolls(finalLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      }
+      
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
-      setMaterials(mats || []);
-      setActiveRange('current_month');
+      if (mats) {
+        await db.materials.bulkPut(mats);
+        setMaterials(mats);
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [rolls.length]);
-
-  useEffect(() => {
-    localStorage.setItem('ksf_active_tab', activeTab);
-    localStorage.setItem('ksf_last_activity', Date.now().toString());
-    // No more automatic re-fetch on tab switch! Memory handles it.
-  }, [activeTab]);
+  }, []);
 
   useEffect(() => {
     const startUp = async () => {
@@ -137,12 +144,20 @@ export default function App() {
         setUser(session.user);
         initialFetchDone.current = true;
         fetchData();
+        syncOfflineData();
       }
     };
     startUp();
-  }, [fetchData]);
+  }, [fetchData, syncOfflineData]);
 
-  // Rest of the UI logic remains exactly the same...
+  // Handle local save for offline capability
+  const handleLocalSave = async (newRoll) => {
+    await db.rolls.add({ ...newRoll, synced: 0 });
+    const updated = await db.rolls.toArray();
+    setRolls(updated.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    if (navigator.onLine) syncOfflineData();
+  };
+
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
@@ -160,17 +175,25 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 pt-16 pb-24 font-sans text-slate-900">
-      <Header deviceName={deviceName} loading={loading} rolls={rolls} materials={materials} onLogout={() => { supabase.auth.signOut(); localStorage.clear(); window.location.reload(); }} onEditDeviceName={() => { const n = prompt("Device Name:", deviceName); if(n) { localStorage.setItem('ksf_device_name', n); setDeviceName(n); } }} onLogoClick={() => setActiveTab('dashboard')} />
+      <Header 
+        deviceName={deviceName} 
+        loading={loading} 
+        rolls={rolls} 
+        materials={materials} 
+        onLogout={() => { supabase.auth.signOut(); localStorage.clear(); db.delete(); window.location.reload(); }} 
+        onEditDeviceName={() => { const n = prompt("Device Name:", deviceName); if(n) { localStorage.setItem('ksf_device_name', n); setDeviceName(n); } }} 
+        onLogoClick={() => setActiveTab('dashboard')} 
+      />
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
-        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={() => {}} onPrint={setPrintData} />}
+        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
         {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
-        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={() => {}} />}
-        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={(s, e) => fetchData('history', s, e)} activeRange={activeRange} />}
-        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={() => {}} />}
+        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
+        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={fetchData} activeRange={activeRange} />}
+        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
-      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={() => setEditRoll(null)} />}
+      {editRoll && <EditModal roll={editRoll} onClose={() => setEditRoll(null)} onSave={() => { setEditRoll(null); fetchData(); }} />}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
     </div>
   );
