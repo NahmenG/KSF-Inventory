@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
-// --- INTERNAL GATE PASS GENERATOR (Unchanged) ---
+// --- INTERNAL GATE PASS GENERATOR ---
 const generateChallanExcel = (rolls, details) => {
   try {
     const header = [
@@ -16,32 +16,40 @@ const generateChallanExcel = (rolls, details) => {
       ["Date:", new Date().toLocaleDateString(), "Time:", new Date().toLocaleTimeString()],
       ["Buyer:", details.buyer, "Vehicle:", details.vehicle],
       [],
-      ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "Length (m)", "GSM", "Gross Kg", "Net Kg"]
+      ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "GSM", "Length (m)", "Gross Kg", "Net Kg"]
     ];
+    
     const body = rolls.map((r, i) => [
       i + 1,
       r.product_id,
       r.quality,
       r.color,
       r.width_inches,
-      r.length_meters,
       r.gsm,
+      parseFloat(r.length_meters) || 0,
       parseFloat(r.gross_weight) || 0,
       parseFloat(r.net_weight) || 0
     ]);
+
     const totalNet = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
     const totalGross = rolls.reduce((sum, r) => sum + (parseFloat(r.gross_weight) || 0), 0);
+    const totalLength = rolls.reduce((sum, r) => sum + (parseFloat(r.length_meters) || 0), 0);
+
     const footer = [
       [],
-      ["", "", "", "", "", "", "Totals:", totalGross.toFixed(2), totalNet.toFixed(2)]
+      ["", "", "", "", "", "Totals:", totalLength.toFixed(0) + " m", totalGross.toFixed(2), totalNet.toFixed(2)]
     ];
+
     const finalData = [...header, ...body, ...footer];
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(finalData);
+    
+    // Auto-width columns
     ws['!cols'] = [
-      { wch: 8 }, { wch: 15 }, { wch: 12 }, { wch: 12 },
-      { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }
+      { wch: 6 }, { wch: 15 }, { wch: 12 }, { wch: 12 },
+      { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }
     ];
+    
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
     XLSX.utils.book_append_sheet(wb, ws, "GatePass");
     const fileName = `GatePass_${details.buyer.replace(/\s/g, '_')}_${new Date().getTime()}.xlsx`;
@@ -80,7 +88,6 @@ const BarcodeScanner = ({ onScan, onClose }) => {
   );
 };
 
-// --- MAIN DISPATCH VIEW ---
 export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const [scanId, setScanId] = useState('');
   const [reviewData, setReviewData] = useState(null);
@@ -99,7 +106,6 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const handleSearch = (idToSearch) => {
     const query = idToSearch || scanId;
     if (!query) return;
-    // We search the 'rolls' prop which is now our local smart list
     const roll = rolls.find(r => r.product_id.toUpperCase() === query.toUpperCase() && r.status === 'in_stock');
     
     if (roll) {
@@ -118,20 +124,22 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const handleConfirmDispatch = async () => {
     if (!reviewData) return;
 
-    // Offline-First Logic: Update the roll object for local memory
     const updatedRoll = {
       ...reviewData,
       status: 'dispatched',
       dispatched_at: new Date().toISOString(),
       dispatched_by: deviceName,
-      synced: 0 // Local sync flag
+      synced: 0 
     };
 
-    // Save to phone memory immediately (App.jsx will sync it later)
-    await onDispatch(updatedRoll);
-    
-    setSessionList(prev => [updatedRoll, ...prev]);
-    setReviewData(null);
+    // FIXED: Using product_id as the primary identifier to ensure local storage updates
+    try {
+      await onDispatch(updatedRoll);
+      setSessionList(prev => [updatedRoll, ...prev]);
+      setReviewData(null);
+    } catch (err) {
+      alert("Error adding to manifest. Please try again.");
+    }
   };
 
   const handleRemoveFromManifest = async (item) => {
@@ -149,6 +157,10 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   };
 
   const handleFinalizeGatePass = () => {
+    if (sessionList.length === 0) {
+        alert("Manifest is empty.");
+        return;
+    }
     const success = generateChallanExcel(sessionList, { 
       buyer: customerName, 
       vehicle: vehicleNo 
