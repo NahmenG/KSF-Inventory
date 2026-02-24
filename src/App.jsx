@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { db } from './db'; // Local Database
+import { db } from './db'; // Ensure you have created src/db.js and installed dexie
 
 // Full Component Imports
 import Header from './components/Header.jsx';
@@ -26,7 +26,7 @@ export default function App() {
   const [materials, setMaterials] = useState([]);
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
-  const [activeRange, setActiveRange] = useState('15days'); 
+  const [activeRange, setActiveRange] = useState('current_month'); 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   const initialFetchDone = useRef(false);
@@ -42,22 +42,17 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC: UPLOAD OFFLINE DATA TO SUPABASE ---
+  // --- 1. SYNC LOGIC: UPLOAD OFFLINE DATA ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine) return;
     
     const unsyncedRolls = await db.rolls.where({ synced: 0 }).toArray();
     if (unsyncedRolls.length === 0) return;
 
-    console.log(`Syncing ${unsyncedRolls.length} offline entries...`);
-    
     for (const roll of unsyncedRolls) {
-      // Remove local ID and synced flag before uploading
       const { id, synced, ...dataToUpload } = roll;
       const { error } = await supabase.from('rolls').insert([dataToUpload]);
-      
       if (!error) {
-        // Update local record to mark as synced
         await db.rolls.update(id, { synced: 1 });
       }
     }
@@ -90,7 +85,6 @@ export default function App() {
           await db.rolls.where({ product_id: payload.old.product_id }).delete();
         }
         
-        // Refresh UI from Local DB
         const allLocal = await db.rolls.toArray();
         setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       })
@@ -99,9 +93,9 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 4. DATA FETCH & PERSISTENCE ---
+  // --- 4. PAGINATED DATA FETCH ---
   const fetchData = useCallback(async () => {
-    // A. Always load from Phone Memory first (Instant)
+    // A. Instant Load from Local DB
     const cachedRolls = await db.rolls.toArray();
     if (cachedRolls.length > 0) {
       setRolls(cachedRolls.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -111,19 +105,32 @@ export default function App() {
 
     setLoading(true);
     try {
-      // B. Fetch only current month to keep it light
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0,0,0,0);
 
-      const { data: remoteData, error } = await supabase
-        .from('rolls')
-        .select('*')
-        .or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`);
+      let allRemoteData = [];
+      let from = 0;
+      const step = 1000;
 
-      if (remoteData) {
-        // Save remote data to local DB
-        await db.rolls.bulkPut(remoteData.map(r => ({ ...r, synced: 1 })));
+      // B. PAGINATION LOOP: Fetches every single roll for the month
+      while (true) {
+        const { data, error } = await supabase
+          .from('rolls')
+          .select('*')
+          .or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`)
+          .range(from, from + step - 1);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        allRemoteData = [...allRemoteData, ...data];
+        if (data.length < step) break;
+        from += step;
+      }
+
+      if (allRemoteData.length > 0) {
+        await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
         const finalLocal = await db.rolls.toArray();
         setRolls(finalLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       }
@@ -133,8 +140,11 @@ export default function App() {
         await db.materials.bulkPut(mats);
         setMaterials(mats);
       }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) { 
+      console.error("Fetch error:", e); 
+    } finally { 
+      setLoading(false); 
+    }
   }, []);
 
   useEffect(() => {
@@ -157,6 +167,11 @@ export default function App() {
     setRolls(updated.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     if (navigator.onLine) syncOfflineData();
   };
+
+  useEffect(() => {
+    localStorage.setItem('ksf_active_tab', activeTab);
+    localStorage.setItem('ksf_last_activity', Date.now().toString());
+  }, [activeTab]);
 
   if (!user && !isGuest) {
     return (
