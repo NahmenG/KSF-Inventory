@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Trash2, ChevronDown } from 'lucide-react';
 
-const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
+// UPDATED MASTER LIST
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
 export default function EditModal({ roll, onClose, onSave, onDelete }) {
@@ -50,7 +51,7 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto max-h-[75vh]">
-          {/* CUSTOMER */}
+          {/* BUYER NAME */}
           <div className="space-y-1">
             <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Buyer Name</label>
             <input 
@@ -65,7 +66,11 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Quality</label>
               <div className="relative">
-                <select className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}>
+                <select 
+                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-500" 
+                  value={formData.quality} 
+                  onChange={e => handleValueChange('quality', e.target.value)}
+                >
                   {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
                 </select>
                 <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -74,7 +79,11 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Color</label>
               <div className="relative">
-                <select className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}>
+                <select 
+                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-500" 
+                  value={formData.color} 
+                  onChange={e => handleValueChange('color', e.target.value)}
+                >
                   {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -101,7 +110,7 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
           {/* WEIGHTS */}
           <div className="grid grid-cols-2 gap-4 pt-2">
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Gross Weight (KG)</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Gross Weight (kg)</label>
               <input 
                 type="number" step="0.01"
                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-lg outline-none focus:ring-2 focus:ring-blue-500"
@@ -110,10 +119,10 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-blue-600 uppercase ml-2">Net Weight (KG)</label>
+              <label className="text-[10px] font-black text-blue-600 uppercase ml-2">Net Weight (kg)</label>
               <input 
                 type="number" step="0.01" readOnly
-                className="w-full p-4 bg-blue-50/50 border-2 border-blue-100 rounded-2xl font-black text-blue-800 text-lg outline-none"
+                className="w-full p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl font-black text-blue-800 text-lg outline-none"
                 value={formData.net_weight}
               />
             </div>
