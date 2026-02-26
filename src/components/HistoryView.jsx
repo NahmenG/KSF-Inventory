@@ -22,12 +22,12 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
     localStorage.setItem('ksf_history_filters', JSON.stringify(filters));
   }, [filters]);
 
-  // 2. DATA EXTRACTION
+// 2. DATA EXTRACTION
   const uniqueQualities = useMemo(() => {
-    // Explicitly including BOPP Fabric so it's always selectable
-    const baseQualities = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
-    const foundQualities = rolls.map(r => r.quality).filter(Boolean);
-    return [...new Set([...baseQualities, ...foundQualities])].sort();
+    const masterQualities = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
+    const currentQualities = rolls.map(r => r.quality).filter(Boolean);
+    
+    return [...new Set([...masterQualities, ...currentQualities])].sort();
   }, [rolls]);
 
   const uniqueColors = useMemo(() => {

@@ -4,12 +4,11 @@ import * as XLSX from 'xlsx';
 
 /**
  * StockView Component
- * Manages the "In Stock" inventory with advanced multi-parameter filtering,
+ * Manages the "In Stock" inventory with BOPP Fabric support, 
  * persistent search states, and detailed Excel reporting.
  */
 const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
   // 1. STATE PERSISTENCE LOGIC
-  // Restores search filters from localStorage so operators don't lose their place on refresh
   const [filters, setFilters] = useState(() => {
     const saved = localStorage.getItem('ksf_stock_filters');
     if (saved) {
@@ -30,20 +29,22 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
 
   const [sort, setSort] = useState('newest');
 
-  // Sync filters to local storage on every change
   useEffect(() => {
     localStorage.setItem('ksf_stock_filters', JSON.stringify(filters));
   }, [filters]);
 
-  // 2. DYNAMIC DROPDOWN DATA EXTRACTION
-  // Automatically populates filters based on current stock data
-  const uniqueQualities = useMemo(() => {
-    const qualities = rolls
+// 2. DYNAMIC DROPDOWN DATA EXTRACTION
+    const uniqueQualities = useMemo(() => {
+    // We hardcode the master list to ensure BOPP is always an option
+    const masterQualities = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
+    const currentQualities = rolls
       .filter(r => r.status === 'in_stock')
       .map(r => r.quality)
       .filter(Boolean);
-    return [...new Set(qualities)].sort();
-  }, [rolls]);
+    
+    // Merge both lists and remove duplicates
+    return [...new Set([...masterQualities, ...currentQualities])].sort();
+    }, [rolls]);
 
   const uniqueColors = useMemo(() => {
     const colors = rolls
@@ -56,24 +57,15 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
   // 3. MASTER FILTERING & SORTING LOGIC
   const filtered = useMemo(() => {
     return rolls.filter(r => {
-      // Logic for Status (Only physical stock)
       const isStock = r.status === 'in_stock';
       
-      // Logic for Buyer Name or Product ID search
       const matchCustomer = !filters.customer || 
         (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
         r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
       
-      // Logic for Quality Dropdown
       const matchQuality = !filters.quality || r.quality === filters.quality;
-      
-      // Logic for GSM Search (Numeric Exact Match)
       const matchGSM = !filters.gsm || String(r.gsm) === filters.gsm;
-      
-      // Logic for Width / Size Search (Numeric Exact Match)
       const matchWidth = !filters.width || String(r.width_inches) === filters.width;
-      
-      // Logic for Color Dropdown
       const matchColor = !filters.color || r.color === filters.color;
       
       return isStock && matchCustomer && matchQuality && matchGSM && matchWidth && matchColor;
@@ -86,7 +78,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
   }, [rolls, filters, sort]);
 
   // 4. COMPREHENSIVE EXCEL EXPORT
-  // Exports all technical parameters requested: Length, Weights, GSM, Width, Color, Name
+  // Updated to ensure Length and Gross Weight are accurately exported
   const handleExport = () => {
     const data = filtered.map(r => ({
       "Roll ID": r.product_id,
@@ -96,8 +88,8 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
       "GSM": r.gsm,
       "Width (Inches)": r.width_inches,
       "Length (Meters)": r.length_meters || 0,
-      "Net Weight (Kg)": r.net_weight,
-      "Gross Weight (Kg)": r.gross_weight,
+      "Gross Weight (Kg)": r.gross_weight || 0,
+      "Net Weight (Kg)": r.net_weight || 0,
       "Production Date": new Date(r.created_at).toLocaleString(),
       "Status": "In Stock",
       "Device Station": r.device_name || 'N/A'
@@ -106,33 +98,24 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Current_Inventory");
-    XLSX.writeFile(wb, `KSF_Stock_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `KSF_Stock_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // 5. RESET FILTERS HANDLER
   const clearFilters = () => {
-    setFilters({
-      customer: '',
-      quality: '',
-      gsm: '',
-      width: '',
-      color: ''
-    });
+    setFilters({ customer: '', quality: '', gsm: '', width: '', color: '' });
   };
 
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* SECTION 1: STICKY SEARCH PANEL */}
+      {/* SECTION 1: SEARCH PANEL */}
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
         <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100 relative transition-all">
           
-          {/* RESET BUTTON (TOP RIGHT RED CROSS) */}
           {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color) && (
             <button 
               onClick={clearFilters} 
               className="absolute top-3 right-3 p-1.5 bg-red-50 text-red-500 rounded-full hover:bg-red-600 hover:text-white transition-all z-10 shadow-sm border border-red-100 active:scale-90"
-              title="Clear All Filters"
             >
               <X size={14} />
             </button>
@@ -143,18 +126,16 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
           </h3>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            {/* Buyer/ID Search */}
             <input 
-              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-300 shadow-inner" 
+              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all shadow-inner" 
               placeholder="Buyer / ID" 
               value={filters.customer} 
               onChange={e => setFilters({...filters, customer: e.target.value})} 
             />
 
-            {/* Quality Dropdown */}
             <div className="relative">
               <select 
-                className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all shadow-inner"
+                className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 shadow-inner"
                 value={filters.quality}
                 onChange={e => setFilters({...filters, quality: e.target.value})}
               >
@@ -166,28 +147,25 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
               <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
 
-            {/* GSM Filter */}
             <input 
               type="number"
-              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-300 shadow-inner" 
+              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 shadow-inner" 
               placeholder="GSM" 
               value={filters.gsm} 
               onChange={e => setFilters({...filters, gsm: e.target.value})} 
             />
 
-            {/* Size Filter */}
             <input 
               type="number"
-              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-300 shadow-inner" 
+              className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 shadow-inner" 
               placeholder="Size" 
               value={filters.width} 
               onChange={e => setFilters({...filters, width: e.target.value})} 
             />
             
-            {/* Color Dropdown */}
             <div className="relative">
               <select 
-                className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all shadow-inner"
+                className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 shadow-inner"
                 value={filters.color}
                 onChange={e => setFilters({...filters, color: e.target.value})}
               >
@@ -216,7 +194,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
           </div>
         </div>
 
-        {/* SECTION 2: COMPACT BLACK SUMMATION BAR (BLUE COUNT THEME) */}
+        {/* SECTION 2: SUMMATION BAR */}
         <div className="bg-gray-900 text-white p-3 md:p-4 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800 transition-all">
           <div className="flex flex-col">
             <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Inventory Count</span>
