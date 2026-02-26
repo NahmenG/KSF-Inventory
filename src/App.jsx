@@ -42,7 +42,7 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC: ROBUST INDIVIDUAL UPSERT ---
+  // --- 1. SYNC LOGIC: UPDATED TO REFRESH STATE AFTER LOOP ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -53,7 +53,6 @@ export default function App() {
     console.log(`Starting sync for ${unsyncedRolls.length} rolls...`);
 
     for (const roll of unsyncedRolls) {
-      // Remove Dexie internal 'id' before uploading to Supabase
       const { id, synced, ...dataToUpload } = roll;
       
       const { error } = await supabase
@@ -62,15 +61,15 @@ export default function App() {
       
       if (!error) {
         await db.rolls.update(roll.product_id, { synced: 1 });
-        console.log(`Successfully synced: ${roll.product_id}`);
       } else {
-        // This will help identify if the 'dispatched_by' column is still missing
         console.error(`Sync error for ${roll.product_id}:`, error.message);
       }
     }
     
-    const allLocal = await db.rolls.toArray();
-    setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    // REFRESH UI: Pull data again from local DB to update the "Pending" count in Header
+    const refreshedLocal = await db.rolls.toArray();
+    setRolls(refreshedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    
     setLoading(false);
   }, [loading]);
 
@@ -93,6 +92,9 @@ export default function App() {
 
         if (!error) {
           await db.rolls.update(updatedRoll.product_id, { synced: 1 });
+          // Refresh UI again to show "Synced" status
+          const syncedLocal = await db.rolls.toArray();
+          setRolls(syncedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
         }
       }
     } catch (err) {
