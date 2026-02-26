@@ -42,31 +42,38 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC: PREVENT DUPLICATES & GHOST REVERSIONS ---
+  // --- 1. SYNC LOGIC: ROBUST INDIVIDUAL UPSERT ---
   const syncOfflineData = useCallback(async () => {
-    if (!navigator.onLine) return;
+    if (!navigator.onLine || loading) return;
     
     const unsyncedRolls = await db.rolls.where({ synced: 0 }).toArray();
     if (unsyncedRolls.length === 0) return;
 
+    setLoading(true);
+    console.log(`Starting sync for ${unsyncedRolls.length} rolls...`);
+
     for (const roll of unsyncedRolls) {
+      // Extract data, removing the Dexie-only 'id' to prevent PK conflicts
       const { id, synced, ...dataToUpload } = roll;
       
-      const { data: existing } = await supabase
+      const { error } = await supabase
         .from('rolls')
-        .select('product_id')
-        .eq('product_id', roll.product_id)
-        .single();
+        .upsert(dataToUpload, { onConflict: 'product_id' });
       
-      if (!existing) {
-        const { error } = await supabase.from('rolls').insert([dataToUpload]);
-        if (!error) await db.rolls.update(roll.product_id, { synced: 1 });
+      if (!error) {
+        await db.rolls.update(roll.product_id, { synced: 1 });
+        console.log(`Successfully synced: ${roll.product_id}`);
       } else {
-        const { error } = await supabase.from('rolls').update(dataToUpload).eq('product_id', roll.product_id);
-        if (!error) await db.rolls.update(roll.product_id, { synced: 1 });
+        // This will print the exact reason (e.g., "violates check constraint")
+        console.error(`Sync error for ${roll.product_id}:`, error.message);
       }
     }
-  }, []);
+    
+    // Refresh local state to update Header status
+    const allLocal = await db.rolls.toArray();
+    setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    setLoading(false);
+  }, [loading]);
 
   // --- 2. CORE SAVE HANDLER (The "Shield" Logic) ---
   const handleLocalSave = async (updatedRoll) => {
@@ -83,10 +90,12 @@ export default function App() {
         const { id, synced, ...dataToUpload } = updatedRoll;
         const { error } = await supabase
           .from('rolls')
-          .upsert(dataToUpload); // Use upsert to handle both new and status-change updates
+          .upsert(dataToUpload, { onConflict: 'product_id' });
 
         if (!error) {
           await db.rolls.update(updatedRoll.product_id, { synced: 1 });
+        } else {
+          console.error("Cloud Save Fail:", error.message);
         }
       }
     } catch (err) {
@@ -172,7 +181,6 @@ export default function App() {
       }
 
       if (allRemoteData.length > 0) {
-        // Only clear and overwrite if we aren't in the middle of an offline session
         const unsyncedCount = await db.rolls.where('synced').equals(0).count();
         if (unsyncedCount === 0) {
           await db.rolls.clear();
@@ -235,7 +243,6 @@ export default function App() {
     localStorage.setItem('ksf_last_activity', Date.now().toString());
   }, [activeTab]);
 
-  // --- RENDER LOGIC ---
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
@@ -267,9 +274,9 @@ export default function App() {
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
-        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
+        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
         {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
-        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={setEditRoll} onFetchRange={fetchData} activeRange={activeRange} />}
+        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={fetchData} activeRange={activeRange} />}
         {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
 
