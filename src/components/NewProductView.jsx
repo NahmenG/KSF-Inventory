@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Package, Hash, User, Clock, RotateCcw, Loader, AlertTriangle, ChevronDown } from 'lucide-react';
 
-const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
 const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
@@ -58,7 +58,7 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     if (errorMsg) setErrorMsg('');
   };
 
-  // SUBMIT & AUTO-INCREMENT (Modified for Offline Support)
+  // SUBMIT & AUTO-INCREMENT
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSaving) return;
@@ -72,7 +72,6 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
 
     setIsSaving(true);
     
-    // Create the roll object locally
     const newRoll = { 
       product_id: fullId, 
       customer_name: String(formData.customer_name || 'Stock').trim(), 
@@ -86,23 +85,18 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
       status: 'in_stock',
       device_name: String(deviceName || 'Station_Main'),
       created_at: new Date().toISOString(),
-      synced: 0 // Local sync flag
+      synced: 0 
     };
 
     try {
-      // 1. Trigger Local Save (IndexedDB via App.jsx) - This works without internet
       await onSaved(newRoll);
-
-      // 2. Trigger Print Immediately (Offline Ready)
       onPrint(newRoll);
 
-      // 3. Update Sequence
       const nextSeq = String(Number(rollSeq) + 1);
       setRollSeq(nextSeq);
       localStorage.setItem('ksf_roll_sequence', nextSeq);
       localStorage.setItem('ksf_roll_prefix', rollPrefix);
 
-      // 4. Reset Weights Only (Form Persistence Logic)
       setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
       
     } catch (err) {
