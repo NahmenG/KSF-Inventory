@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Camera, CheckCircle, X, Trash2, FileSpreadsheet } from 'lucide-react';
+import { Truck, Camera, CheckCircle, X, Trash2, FileSpreadsheet, ChevronDown } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 
-const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric'];
+// UPDATED QUALITY LIST FOR DISPATCH VERIFICATION
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
-// --- EXCEL GENERATOR (Weight Totals Only) ---
+// --- INTERNAL GATE PASS GENERATOR (Unchanged) ---
 const generateChallanExcel = (rolls, details) => {
   try {
     const header = [
@@ -49,7 +50,7 @@ const generateChallanExcel = (rolls, details) => {
   } catch (err) { alert("Excel Error: " + err.message); return false; }
 };
 
-// --- SCANNER COMPONENT ---
+// --- BARCODE SCANNER (Unchanged) ---
 const BarcodeScanner = ({ onScan, onClose }) => {
   useEffect(() => {
     const html5QrCode = new Html5Qrcode("reader");
@@ -74,7 +75,9 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
 
   useEffect(() => {
     localStorage.setItem('ksf_dispatch_list_v12', JSON.stringify(sessionList));
-  }, [sessionList]);
+    localStorage.setItem('ksf_dispatch_customer_v11', customerName);
+    localStorage.setItem('ksf_dispatch_vehicle_v11', vehicleNo);
+  }, [sessionList, customerName, vehicleNo]);
 
   const handlePopupValueChange = (field, value) => {
     const updated = { ...reviewData, [field]: value };
@@ -99,16 +102,18 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
 
   const handleConfirmDispatch = async () => {
     if (!reviewData) return;
-    const updatedRoll = {
-      ...reviewData,
-      status: 'dispatched',
-      dispatched_at: new Date().toISOString(),
-      dispatched_by: deviceName,
-      synced: 0
-    };
-    await onDispatch(updatedRoll); // Calls handleLocalSave in App.jsx
-    setSessionList(prev => [updatedRoll, ...prev]);
-    setReviewData(null);
+    try {
+      const updatedRoll = {
+        ...reviewData,
+        status: 'dispatched',
+        dispatched_at: new Date().toISOString(),
+        dispatched_by: deviceName,
+        synced: 0
+      };
+      await onDispatch(updatedRoll);
+      setSessionList(prev => [updatedRoll, ...prev]);
+      setReviewData(null);
+    } catch (e) { alert("Action Failed. Please try again."); }
   };
 
   const handleRemoveFromManifest = async (item) => {
@@ -150,27 +155,49 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
             <div className="space-y-4">
               <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Buyer Name</label>
               <input className="w-full p-3 bg-slate-50 border rounded-2xl font-bold" value={reviewData.customer_name} onChange={e => handlePopupValueChange('customer_name', e.target.value)} /></div>
+              
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Quality</label>
-                <select className="w-full p-3 border rounded-2xl font-bold bg-white" value={reviewData.quality} onChange={e => handlePopupValueChange('quality', e.target.value)}>
-                  {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
-                </select></div>
-                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Color</label>
-                <select className="w-full p-3 border rounded-2xl font-bold bg-white" value={reviewData.color} onChange={e => handlePopupValueChange('color', e.target.value)}>
-                  {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
-                </select></div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Quality</label>
+                  <div className="relative">
+                    <select 
+                      className="w-full p-3 border rounded-2xl font-bold bg-white outline-none appearance-none" 
+                      value={reviewData.quality} 
+                      onChange={e => handlePopupValueChange('quality', e.target.value)}
+                    >
+                      {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Color</label>
+                  <div className="relative">
+                    <select 
+                      className="w-full p-3 border rounded-2xl font-bold bg-white outline-none appearance-none" 
+                      value={reviewData.color} 
+                      onChange={e => handlePopupValueChange('color', e.target.value)}
+                    >
+                      {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
               </div>
+
               <div className="grid grid-cols-3 gap-2">
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">GSM</label><input type="number" className="w-full p-3 border rounded-2xl font-bold" value={reviewData.gsm} onChange={e => handlePopupValueChange('gsm', e.target.value)} /></div>
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Size (in)</label><input type="number" className="w-full p-3 border rounded-2xl font-bold" value={reviewData.width_inches} onChange={e => handlePopupValueChange('width_inches', e.target.value)} /></div>
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Len (m)</label><input type="number" className="w-full p-3 border rounded-2xl font-bold" value={reviewData.length_meters} onChange={e => handlePopupValueChange('length_meters', e.target.value)} /></div>
               </div>
+
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Gross (kg)</label>
                 <input type="number" step="0.01" className="w-full p-4 border rounded-2xl font-black text-lg bg-slate-50" value={reviewData.gross_weight} onChange={e => handlePopupValueChange('gross_weight', e.target.value)} /></div>
                 <div><label className="text-[10px] font-black text-blue-600 uppercase ml-2">Net (kg)</label>
-                <input type="number" step="0.01" className="w-full p-4 border-2 border-blue-500 rounded-2xl font-black text-lg text-blue-700 bg-blue-50" value={reviewData.net_weight} readOnly /></div>
+                <input type="number" step="0.01" className="w-full p-4 border-2 border-blue-100 rounded-2xl font-black text-lg text-blue-700 bg-blue-50" value={reviewData.net_weight} readOnly /></div>
               </div>
+
               <button onClick={handleConfirmDispatch} className="w-full bg-green-600 text-white py-5 rounded-[1.5rem] font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
                 <CheckCircle size={20} /> ADD TO MANIFEST
               </button>
@@ -198,7 +225,7 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
              <button onClick={() => generateChallanExcel(sessionList, { buyer: customerName, vehicle: vehicleNo })} className="w-full bg-green-700 text-white py-5 rounded-2xl font-black flex justify-center gap-2 items-center shadow-lg active:scale-95 transition-all">
                 <FileSpreadsheet size={20} /> GENERATE GATE PASS
              </button>
-             <button onClick={() => { if(confirm("Clear list?")) setSessionList([]); }} className="w-full mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Clear Manifest</button>
+             <button onClick={() => { if(confirm("Clear current list?")) setSessionList([]); }} className="w-full mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Clear Manifest</button>
           </div>
         </div>
       )}
