@@ -42,7 +42,7 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC: PREVENT DUPLICATES ---
+  // --- 1. SYNC LOGIC: PREVENT DUPLICATES & GHOST REVERSIONS ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine) return;
     
@@ -60,16 +60,41 @@ export default function App() {
       
       if (!existing) {
         const { error } = await supabase.from('rolls').insert([dataToUpload]);
-        if (!error) await db.rolls.update(id, { synced: 1 });
+        if (!error) await db.rolls.update(roll.product_id, { synced: 1 });
       } else {
-        // If it exists in cloud, update it to match local status
         const { error } = await supabase.from('rolls').update(dataToUpload).eq('product_id', roll.product_id);
-        if (!error) await db.rolls.update(id, { synced: 1 });
+        if (!error) await db.rolls.update(roll.product_id, { synced: 1 });
       }
     }
   }, []);
 
-  // --- 2. CONNECTION MONITOR ---
+  // --- 2. CORE SAVE HANDLER (The "Shield" Logic) ---
+  const handleLocalSave = async (updatedRoll) => {
+    try {
+      // 1. Instant local update with "Shield" (synced: 0)
+      await db.rolls.put({ ...updatedRoll, synced: 0 });
+      
+      // 2. Refresh UI immediately
+      const allLocal = await db.rolls.toArray();
+      setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+
+      // 3. Immediate Cloud Egress
+      if (navigator.onLine) {
+        const { id, synced, ...dataToUpload } = updatedRoll;
+        const { error } = await supabase
+          .from('rolls')
+          .upsert(dataToUpload); // Use upsert to handle both new and status-change updates
+
+        if (!error) {
+          await db.rolls.update(updatedRoll.product_id, { synced: 1 });
+        }
+      }
+    } catch (err) {
+      console.error("Critical Save Error:", err);
+    }
+  };
+
+  // --- 3. CONNECTION MONITOR ---
   useEffect(() => {
     const handleStatus = () => {
       setIsOnline(navigator.onLine);
@@ -83,25 +108,25 @@ export default function App() {
     };
   }, [syncOfflineData]);
 
-  // --- 3. REALTIME LISTENER: DEDUPLICATION ---
+  // --- 4. REALTIME LISTENER: DEDUPLICATION SHIELD ---
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
-        // Only accept cloud updates if we don't have a pending local change (synced: 0)
-        const localRecord = await db.rolls.where('product_id').equals(payload.new.product_id).first();
+        const productId = payload.new?.product_id || payload.old?.product_id;
+        if (!productId) return;
+
+        const localRecord = await db.rolls.where('product_id').equals(productId).first();
         
-        if (localRecord && localRecord.synced === 0) {
-          // IGNORE CLOUD UPDATE: Our local dispatch is more recent and still syncing
-          return;
-        }
+        // SHIELD: Ignore cloud if we have a local change pending
+        if (localRecord && localRecord.synced === 0) return;
 
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           await db.rolls.put({ ...payload.new, synced: 1 });
         } else if (payload.eventType === 'DELETE') {
-          await db.rolls.where('product_id').equals(payload.old.product_id).delete();
+          await db.rolls.where('product_id').equals(productId).delete();
         }
         
         const allLocal = await db.rolls.toArray();
@@ -112,7 +137,7 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 4. DATA FETCH (PAGINATED) ---
+  // --- 5. DATA FETCH (PAGINATED) ---
   const fetchData = useCallback(async () => {
     const cachedRolls = await db.rolls.toArray();
     if (cachedRolls.length > 0) {
@@ -147,8 +172,12 @@ export default function App() {
       }
 
       if (allRemoteData.length > 0) {
-        await db.rolls.clear();
-        await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
+        // Only clear and overwrite if we aren't in the middle of an offline session
+        const unsyncedCount = await db.rolls.where('synced').equals(0).count();
+        if (unsyncedCount === 0) {
+          await db.rolls.clear();
+          await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
+        }
         const finalLocal = await db.rolls.toArray();
         setRolls(finalLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       }
@@ -162,6 +191,7 @@ export default function App() {
     finally { setLoading(false); }
   }, []);
 
+  // --- 6. AUTH & INITIALIZATION ---
   useEffect(() => {
     const startUp = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -173,41 +203,39 @@ export default function App() {
       }
     };
     startUp();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
   }, [fetchData, syncOfflineData]);
 
-  // FIXED: Using .put to allow status updates from in_stock to dispatched
-    const handleLocalSave = async (updatedRoll) => {
-    try {
-      // 1. Update the Phone's local database first (Instant UI change)
-      await db.rolls.put({ ...updatedRoll, synced: 0 });
-      
-      // 2. Refresh the UI state immediately so it moves to History tab
-      const allLocal = await db.rolls.toArray();
-      setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+  // --- 7. UI HELPERS ---
+  const handleLogout = async () => {
+    if(confirm("Logout and clear local cache?")) {
+      await supabase.auth.signOut();
+      await db.rolls.clear();
+      await db.materials.clear();
+      setUser(null);
+      setIsGuest(false);
+      window.location.reload();
+    }
+  };
 
-      // 3. IMMEDIATE CLOUD PUSH (Don't wait for background loop)
-      if (navigator.onLine) {
-        const { id, synced, ...dataToUpload } = updatedRoll;
-        const { error } = await supabase
-          .from('rolls')
-          .update(dataToUpload)
-          .eq('product_id', updatedRoll.product_id);
-
-        if (!error) {
-          // Mark as synced locally so the Listener doesn't overwrite it
-          await db.rolls.update(updatedRoll.product_id, { synced: 1 });
-        }
-      }
-      } catch (err) {
-      console.error("Dispatch Sync Error:", err);
-      }
-    };
+  const handleEditDeviceName = () => {
+    const name = prompt("Enter Terminal Name:", deviceName);
+    if (name) {
+      setDeviceName(name);
+      localStorage.setItem('ksf_device_name', name);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('ksf_active_tab', activeTab);
     localStorage.setItem('ksf_last_activity', Date.now().toString());
   }, [activeTab]);
 
+  // --- RENDER LOGIC ---
   if (!user && !isGuest) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
@@ -231,16 +259,20 @@ export default function App() {
         onLogout={handleLogout} 
         onEditDeviceName={handleEditDeviceName} 
         onLogoClick={() => setActiveTab('dashboard')}
-        onManualSync={syncOfflineData} // This connects the button to the sync logic
+        onManualSync={syncOfflineData}
+        rolls={rolls}
+        materials={materials}
       />
+      
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
-        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={(r) => setEditRoll({...r})} />}
+        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
         {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
-        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={fetchData} activeRange={activeRange} />}
+        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={setEditRoll} onFetchRange={fetchData} activeRange={activeRange} />}
         {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
+
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
       
       {editRoll && (
@@ -250,22 +282,20 @@ export default function App() {
           onSave={async (updated) => {
             setEditRoll(null);
             await handleLocalSave(updated);
-            if (navigator.onLine) {
-              await supabase.from('rolls').update(updated).eq('product_id', updated.product_id);
-            }
           }} 
           onDelete={async (productId) => {
+            if (!confirm("Permanently delete this roll?")) return;
             setEditRoll(null);
+            await db.rolls.where('product_id').equals(productId).delete();
             if (navigator.onLine) {
               await supabase.from('rolls').delete().eq('product_id', productId);
             }
-            await db.rolls.where('product_id').equals(productId).delete();
             fetchData();
           }}
         />
       )}
       
-      {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
+      {printData && <LabelPrint roll={printData} onClose={() => setPrintData(null)} />}
     </div>
   );
 }
