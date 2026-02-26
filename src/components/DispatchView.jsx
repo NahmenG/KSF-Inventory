@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
-// --- INTERNAL GATE PASS GENERATOR (Unchanged) ---
+// --- INTERNAL GATE PASS GENERATOR ---
 const generateChallanExcel = (rolls, details) => {
   try {
     const header = [
@@ -50,7 +50,7 @@ const generateChallanExcel = (rolls, details) => {
   } catch (err) { alert("Excel Error: " + err.message); return false; }
 };
 
-// --- BARCODE SCANNER (Unchanged) ---
+// --- BARCODE SCANNER ---
 const BarcodeScanner = ({ onScan, onClose }) => {
   useEffect(() => {
     const html5QrCode = new Html5Qrcode("reader");
@@ -121,6 +121,28 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
       const returned = { ...item, status: 'in_stock', dispatched_at: null, synced: 0 };
       await onDispatch(returned);
       setSessionList(sessionList.filter(r => r.product_id !== item.product_id));
+    }
+  };
+
+  // UPDATED: Function to clear everything after Excel generation
+  const handleFinalizeGatePass = () => {
+    if (sessionList.length === 0) return alert("Manifest is empty.");
+    
+    const success = generateChallanExcel(sessionList, { 
+      buyer: customerName, 
+      vehicle: vehicleNo 
+    });
+    
+    if (success) {
+      if (confirm("Gate Pass Generated. Clear manifest and start new load?")) {
+        setSessionList([]);
+        setCustomerName('');
+        setVehicleNo('');
+        // Clear storage to prevent data coming back on refresh
+        localStorage.removeItem('ksf_dispatch_list_v12');
+        localStorage.removeItem('ksf_dispatch_customer_v11');
+        localStorage.removeItem('ksf_dispatch_vehicle_v11');
+      }
     }
   };
 
@@ -222,10 +244,10 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
             ))}
           </div>
           <div className="p-4">
-             <button onClick={() => generateChallanExcel(sessionList, { buyer: customerName, vehicle: vehicleNo })} className="w-full bg-green-700 text-white py-5 rounded-2xl font-black flex justify-center gap-2 items-center shadow-lg active:scale-95 transition-all">
+             <button onClick={handleFinalizeGatePass} className="w-full bg-green-700 text-white py-5 rounded-2xl font-black flex justify-center gap-2 items-center shadow-lg active:scale-95 transition-all">
                 <FileSpreadsheet size={20} /> GENERATE GATE PASS
              </button>
-             <button onClick={() => { if(confirm("Clear current list?")) setSessionList([]); }} className="w-full mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Clear Manifest</button>
+             <button onClick={() => { if(confirm("Clear current list?")) { setSessionList([]); setCustomerName(''); setVehicleNo(''); } }} className="w-full mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Clear Manifest</button>
           </div>
         </div>
       )}
