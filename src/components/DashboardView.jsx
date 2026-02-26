@@ -3,7 +3,6 @@ import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart a
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#fb7185', '#2dd4bf'];
-const MAT_ORDER = { 'Polymers': 1, 'Filler': 2, 'Additives': 3, 'Colour': 4, 'Others': 5 };
 
 const abbreviateColor = (name) => {
   if (!name) return 'N/A';
@@ -25,7 +24,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   const todayDate = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
   
-  // 1. MASTER DATA PROCESSOR (Benchmark logic)
+  // 1. MASTER DATA PROCESSOR
   const processedData = useMemo(() => {
     const inStock = [];
     const producedToday = [];
@@ -49,11 +48,13 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         }
       }
 
+      // Today's Logic
       if (rDateStr === todayStr) producedToday.push(r);
       if (r.status === 'dispatched' && r.dispatched_at) {
         if (new Date(r.dispatched_at).toLocaleDateString() === todayStr) dispatchedToday.push(r);
       }
 
+      // Monthly Timeline logic
       if (rDate >= startOfMonth) {
         if (!dateMap[rDateStr]) dateMap[rDateStr] = { p: 0, d: 0, pw: 0, dw: 0 };
         dateMap[rDateStr].p += 1;
@@ -77,34 +78,40 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     const data = [];
     let pSum = 0; let dSum = 0;
     const start = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
-    for (let d = new Date(start); d <= todayDate; d.setDate(d.getDate() + 1)) {
-      const s = d.toLocaleDateString();
+    const tempDate = new Date(start);
+    while (tempDate <= todayDate) {
+      const s = tempDate.toLocaleDateString();
       const day = processedData.dateMap[s] || { p: 0, d: 0, pw: 0, dw: 0 };
       pSum += day.pw; dSum += day.dw;
-      data.push({ date: d.getDate().toString(), Produced: day.p, Dispatched: day.d });
+      data.push({ date: tempDate.getDate().toString(), Produced: day.p, Dispatched: day.d });
+      tempDate.setDate(tempDate.getDate() + 1);
     }
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
   }, [processedData.dateMap, todayDate]);
 
-  // TARGETED CHANGE: Enhanced Activity Status Logic
+  // FIXED: Recent Activity Sorting (Newest DISPATCH or PRODUCTION at top)
   const recentActivity = useMemo(() => {
     return [...rolls]
-      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
-      .slice(0, 5)
+      .sort((a, b) => {
+        const timeA = new Date(a.dispatched_at || a.created_at).getTime();
+        const timeB = new Date(b.dispatched_at || b.created_at).getTime();
+        return timeB - timeA;
+      })
+      .slice(0, 8) // Increased to show more recent actions
       .map(r => {
-        const created = new Date(r.created_at).getTime();
-        const updated = new Date(r.updated_at).getTime();
-        // Increased buffer to 5 seconds to account for database latency/triggers
-        const isNew = Math.abs(updated - created) < 5000;
-
         let type = "Produced", icon = <PlusCircle size={14} className="text-green-500" />;
         
         if (r.status === 'dispatched') { 
           type = "Dispatched"; 
           icon = <Send size={14} className="text-blue-500" />; 
-        } else if (r.status === 'in_stock' && !isNew) { 
-          type = "Edited"; 
-          icon = <Edit3 size={14} className="text-orange-500" />; 
+        } else {
+          // Check if it was edited by comparing updated_at (if available in your DB)
+          const created = new Date(r.created_at).getTime();
+          const updated = new Date(r.updated_at || r.created_at).getTime();
+          if (Math.abs(updated - created) > 10000) {
+            type = "Edited";
+            icon = <Edit3 size={14} className="text-orange-500" />;
+          }
         }
         
         return { ...r, type, icon };
@@ -119,7 +126,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   const colorData = useMemo(() => {
     const c = {}; processedData.inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
     return Object.entries(c).map(([n, w]) => ({ name: abbreviateColor(n), weight: parseFloat(w.toFixed(1)) }))
-      .sort((a, b) => b.weight - a.weight).slice(0, 8);
+      .sort((a, b) => b.weight - a.weight).slice(0, 10);
   }, [processedData.inStock]);
 
   const weightKg = processedData.inStock.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
@@ -127,35 +134,37 @@ const DashboardView = React.memo(({ rolls, materials }) => {
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
+      {/* STAT CARDS */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-green-500 border border-gray-100">
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today's Production</div>
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today Production</div>
           <div className="text-2xl font-black text-gray-900">{processedData.producedToday.length} <span className="text-xs opacity-30">Rolls</span></div>
         </div>
         <div className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-blue-500 border border-gray-100">
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today's Dispatch</div>
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today Dispatch</div>
           <div className="text-2xl font-black text-gray-900">{processedData.dispatchedToday.length} <span className="text-xs opacity-30">Rolls</span></div>
         </div>
       </div>
 
-      {/* SECTION 2: DARKER SUBTLE STOCK TOTALS (bg-slate-900/80 for better contrast) */}
-      <div className="bg-slate-900/80 backdrop-blur-lg text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-white/10">
+      {/* STOCK TOTALS */}
+      <div className="bg-slate-900 text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-white/10">
         <div className="text-center">
-          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Stock Count</div>
+          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">In Stock</div>
           <div className="text-3xl font-black">{processedData.inStock.length}</div>
         </div>
         <div className="h-10 w-px bg-white/20" />
         <div className="text-center">
-          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Weight</div>
+          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Weight Stock</div>
           <div className="text-3xl font-black text-green-400">{(weightKg/1000).toFixed(2)} <span className="text-xs font-normal text-white/50">Ton</span></div>
         </div>
       </div>
 
+      {/* PERFORMANCE CHART */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-        <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
-          <BarChart3 size={16} className="text-blue-600"/> Performance (Monthly)
+        <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+          <BarChart3 size={16} className="text-blue-600"/> Monthly Activity
         </h3>
-        <div className="h-56">
+        <div className="h-56 min-h-[224px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={timelineData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -171,10 +180,11 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
+      {/* RECENT ACTIVITY */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
-          <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
-            <Clock size={16}/> Recent Activity
+          <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+            <Clock size={16}/> Recent Actions
           </h3>
         </div>
         <div className="divide-y divide-gray-50">
@@ -184,23 +194,24 @@ const DashboardView = React.memo(({ rolls, materials }) => {
                 <div className="p-2 bg-gray-50 rounded-xl">{r.icon}</div>
                 <div>
                   <div className="font-black text-sm text-gray-900 tracking-tight">{r.product_id}</div>
-                  <div className="text-[10px] font-bold text-gray-400 uppercase">{r.type} • {r.device_name}</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase">{r.type} • {r.device_name || 'System'}</div>
                 </div>
               </div>
               <div className="text-right">
                 <div className="font-black text-gray-900 text-sm">{r.net_weight} kg</div>
-                <div className="text-[10px] font-bold text-blue-500">{new Date(r.updated_at || r.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                <div className="text-[10px] font-bold text-blue-500">{new Date(r.dispatched_at || r.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
               </div>
             </div>
           ))}
         </div>
       </div>
 
+      {/* QUALITY BREAKDOWN */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-        <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
-          <PieIcon size={16} className="text-blue-600"/> Quality Breakdown
+        <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+          <PieIcon size={16} className="text-blue-600"/> Quality Mix
         </h3>
-        <div className="h-64">
+        <div className="h-64 min-h-[256px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie data={qualityData} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value">
@@ -213,29 +224,12 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-        <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
-          <BarChart3 size={16} className="text-blue-600"/> Color Analysis (Kg)
-        </h3>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={colorData} layout="vertical" margin={{ left: 5, right: 35 }}>
-              <XAxis type="number" hide />
-              <YAxis dataKey="name" type="category" width={85} fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
-              <Tooltip />
-              <Bar dataKey="weight" fill="#3b82f6" radius={[0, 4, 4, 0]}>
-                <LabelList dataKey="weight" position="right" style={{ fontSize: '9px', fontWeight: 'bold', fill: '#64748b' }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
+      {/* AGED STOCK */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-red-50/50 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
-          <h3 className="text-sm md:text-base font-black text-gray-800 uppercase tracking-widest">
-            Aged Stock Over 30 Days ({(processedData.totalAgedWeight/1000).toFixed(2)}T)
+          <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">
+            Aged Stock (>30 Days) - {(processedData.totalAgedWeight/1000).toFixed(2)}T
           </h3>
         </div>
         <div className="p-4 grid grid-cols-2 gap-2">
@@ -248,10 +242,11 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
+      {/* SHORTAGE ALERTS */}
       {materials.filter(m => m.stock_quantity < m.min_level).length > 0 && (
         <div className="bg-white p-5 rounded-3xl border-l-8 border-red-500 shadow-sm border border-gray-100">
-          <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-sm md:text-base uppercase tracking-widest">
-            <AlertCircle size={16}/> Material Shortage
+          <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-sm uppercase tracking-widest">
+            <AlertCircle size={16}/> Stock Warning
           </h3>
           <div className="space-y-2">
             {materials.filter(m => m.stock_quantity < m.min_level).map(m => (
