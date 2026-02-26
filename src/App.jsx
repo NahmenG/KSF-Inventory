@@ -53,7 +53,7 @@ export default function App() {
     console.log(`Starting sync for ${unsyncedRolls.length} rolls...`);
 
     for (const roll of unsyncedRolls) {
-      // Extract data, removing the Dexie-only 'id' to prevent PK conflicts
+      // Remove Dexie internal 'id' before uploading to Supabase
       const { id, synced, ...dataToUpload } = roll;
       
       const { error } = await supabase
@@ -64,12 +64,11 @@ export default function App() {
         await db.rolls.update(roll.product_id, { synced: 1 });
         console.log(`Successfully synced: ${roll.product_id}`);
       } else {
-        // This will print the exact reason (e.g., "violates check constraint")
+        // This will help identify if the 'dispatched_by' column is still missing
         console.error(`Sync error for ${roll.product_id}:`, error.message);
       }
     }
     
-    // Refresh local state to update Header status
     const allLocal = await db.rolls.toArray();
     setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     setLoading(false);
@@ -78,7 +77,7 @@ export default function App() {
   // --- 2. CORE SAVE HANDLER (The "Shield" Logic) ---
   const handleLocalSave = async (updatedRoll) => {
     try {
-      // 1. Instant local update with "Shield" (synced: 0)
+      // 1. Instant local update with "Shield" flag
       await db.rolls.put({ ...updatedRoll, synced: 0 });
       
       // 2. Refresh UI immediately
@@ -94,8 +93,6 @@ export default function App() {
 
         if (!error) {
           await db.rolls.update(updatedRoll.product_id, { synced: 1 });
-        } else {
-          console.error("Cloud Save Fail:", error.message);
         }
       }
     } catch (err) {
