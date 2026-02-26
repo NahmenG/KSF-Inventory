@@ -90,13 +90,16 @@ export default function App() {
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
+        // Only accept cloud updates if we don't have a pending local change (synced: 0)
+        const localRecord = await db.rolls.where('product_id').equals(payload.new.product_id).first();
+        
+        if (localRecord && localRecord.synced === 0) {
+          // IGNORE CLOUD UPDATE: Our local dispatch is more recent and still syncing
+          return;
+        }
+
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const existingLocal = await db.rolls.where('product_id').equals(payload.new.product_id).first();
-          if (existingLocal) {
-            await db.rolls.update(existingLocal.id, { ...payload.new, synced: 1 });
-          } else {
-            await db.rolls.put({ ...payload.new, synced: 1 });
-          }
+          await db.rolls.put({ ...payload.new, synced: 1 });
         } else if (payload.eventType === 'DELETE') {
           await db.rolls.where('product_id').equals(payload.old.product_id).delete();
         }
@@ -173,12 +176,32 @@ export default function App() {
   }, [fetchData, syncOfflineData]);
 
   // FIXED: Using .put to allow status updates from in_stock to dispatched
-  const handleLocalSave = async (updatedRoll) => {
-    await db.rolls.put({ ...updatedRoll, synced: 0 });
-    const updated = await db.rolls.toArray();
-    setRolls(updated.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    if (navigator.onLine) syncOfflineData();
-  };
+    const handleLocalSave = async (updatedRoll) => {
+    try {
+      // 1. Update the Phone's local database first (Instant UI change)
+      await db.rolls.put({ ...updatedRoll, synced: 0 });
+      
+      // 2. Refresh the UI state immediately so it moves to History tab
+      const allLocal = await db.rolls.toArray();
+      setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+
+      // 3. IMMEDIATE CLOUD PUSH (Don't wait for background loop)
+      if (navigator.onLine) {
+        const { id, synced, ...dataToUpload } = updatedRoll;
+        const { error } = await supabase
+          .from('rolls')
+          .update(dataToUpload)
+          .eq('product_id', updatedRoll.product_id);
+
+        if (!error) {
+          // Mark as synced locally so the Listener doesn't overwrite it
+          await db.rolls.update(updatedRoll.product_id, { synced: 1 });
+        }
+      }
+      } catch (err) {
+      console.error("Dispatch Sync Error:", err);
+      }
+    };
 
   useEffect(() => {
     localStorage.setItem('ksf_active_tab', activeTab);
@@ -205,11 +228,10 @@ export default function App() {
       <Header 
         deviceName={deviceName} 
         loading={loading} 
-        rolls={rolls} 
-        materials={materials} 
-        onLogout={() => { supabase.auth.signOut(); localStorage.clear(); db.delete(); window.location.reload(); }} 
-        onEditDeviceName={() => { const n = prompt("Device Name:", deviceName); if(n) { localStorage.setItem('ksf_device_name', n); setDeviceName(n); } }} 
-        onLogoClick={() => setActiveTab('dashboard')} 
+        onLogout={handleLogout} 
+        onEditDeviceName={handleEditDeviceName} 
+        onLogoClick={() => setActiveTab('dashboard')}
+        onManualSync={syncOfflineData} // This connects the button to the sync logic
       />
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
