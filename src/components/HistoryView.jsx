@@ -1,190 +1,220 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Download, Calendar, Filter, ChevronDown, Hash, User, Tag } from 'lucide-react';
+import { Download, Clock, X, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-/**
- * HistoryView Component
- * Manages the "Dispatched" records with BOPP Fabric support,
- * custom date range filtering, and comprehensive dispatch reporting.
- */
-const HistoryView = React.memo(({ rolls, onSelectRoll }) => {
-  // 1. FILTERS & SEARCH STATE
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterQuality, setFilterQuality] = useState('All');
-  const [dateRange, setDateRange] = useState('all'); // all, today, week, month
+const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange }) => {
+  // 1. STATE PERSISTENCE
+  const [filters, setFilters] = useState(() => {
+    const saved = localStorage.getItem('ksf_history_filters');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error parsing history filters:", e);
+      }
+    }
+    return { customer: '', quality: '', gsm: '', width: '', color: '', startDate: '', endDate: '' };
+  });
 
-  // 2. DYNAMIC QUALITY LIST (Includes BOPP Fabric)
-  const qualities = useMemo(() => {
-    const base = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
-    return ['All', ...base].sort();
-  }, []);
+  const [sort] = useState('newest');
 
-  // 3. FILTERING LOGIC
-  const filteredHistory = useMemo(() => {
+  useEffect(() => {
+    localStorage.setItem('ksf_history_filters', JSON.stringify(filters));
+  }, [filters]);
+
+  // 2. DATA EXTRACTION
+  const uniqueQualities = useMemo(() => {
+    // Explicitly including BOPP Fabric so it's always selectable
+    const baseQualities = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
+    const foundQualities = rolls.map(r => r.quality).filter(Boolean);
+    return [...new Set([...baseQualities, ...foundQualities])].sort();
+  }, [rolls]);
+
+  const uniqueColors = useMemo(() => {
+    const colors = rolls.map(r => r.color).filter(Boolean);
+    return [...new Set(colors)].sort();
+  }, [rolls]);
+
+  // 3. FILTERING
+  const filtered = useMemo(() => {
     return rolls.filter(r => {
-      if (r.status !== 'dispatched') return false;
-
-      const matchSearch = !searchTerm || 
-        r.product_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (r.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchQuality = filterQuality === 'All' || r.quality === filterQuality;
-
-      // Date Filtering
-      if (dateRange === 'all') return matchSearch && matchQuality;
+      // Logic for Buyer Name or Product ID search
+      const matchCustomer = !filters.customer || 
+        (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
+        r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
       
-      const rollDate = new Date(r.dispatched_at || r.created_at);
-      const now = new Date();
-      if (dateRange === 'today') {
-        return matchSearch && matchQuality && rollDate.toDateString() === now.toDateString();
-      }
-      if (dateRange === 'week') {
-        const weekAgo = new Date(now.setDate(now.getDate() - 7));
-        return matchSearch && matchQuality && rollDate >= weekAgo;
-      }
+      const matchQuality = !filters.quality || r.quality === filters.quality;
+      const matchGSM = !filters.gsm || String(r.gsm) === filters.gsm;
+      const matchWidth = !filters.width || String(r.width_inches) === filters.width;
+      const matchColor = !filters.color || r.color === filters.color;
       
-      return matchSearch && matchQuality;
+      return matchCustomer && matchQuality && matchGSM && matchWidth && matchColor;
     }).sort((a, b) => new Date(b.dispatched_at || b.created_at) - new Date(a.dispatched_at || a.created_at));
-  }, [rolls, searchTerm, filterQuality, dateRange]);
+  }, [rolls, filters]);
 
-  // 4. MASTER DISPATCH EXPORT
+  // 4. EXPORT & RESET
   const handleExport = () => {
-    const data = filteredHistory.map(r => ({
-      "Dispatch Date": new Date(r.dispatched_at).toLocaleString(),
+    const data = filtered.map(r => ({
       "Roll ID": r.product_id,
-      "Buyer Name": r.customer_name,
+      "Buyer": r.customer_name || 'Generic Stock',
       "Quality": r.quality,
       "Color": r.color,
       "GSM": r.gsm,
-      "Size (In)": r.width_inches,
-      "Length (M)": r.length_meters || 0,
-      "Gross Wt (Kg)": r.gross_weight || 0,
-      "Net Wt (Kg)": r.net_weight || 0,
-      "Dispatched By": r.dispatched_by || r.device_name || 'N/A'
+      "Width (in)": r.width_inches,
+      "Length (m)": r.length_meters || 0,
+      "Gross Weight (kg)": r.gross_weight || 0,
+      "Net Weight (kg)": r.net_weight || 0,
+      "Dispatch Date": r.dispatched_at ? new Date(r.dispatched_at).toLocaleString() : 'N/A',
+      "Device": r.device_name || 'N/A'
     }));
-
+    
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Dispatch_History");
-    XLSX.writeFile(wb, `KSF_Dispatch_History_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "History");
+    XLSX.writeFile(wb, `KSF_History_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const clearFilters = () => {
+    const defaultFilters = { customer: '', quality: '', gsm: '', width: '', color: '', startDate: '', endDate: '' };
+    setFilters(defaultFilters);
+    localStorage.setItem('ksf_history_filters', JSON.stringify(defaultFilters));
+    if (onFetchRange) onFetchRange(null, null); 
   };
 
   return (
-    <div className="space-y-4 pb-24 animate-in fade-in duration-500">
-      
-      {/* SEARCH & FILTER SECTION */}
-      <div className="bg-white p-5 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-4">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input 
-            className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-            placeholder="Search ID or Buyer..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
+    <div className="space-y-4 pb-20 animate-in fade-in duration-500">
+      <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
+        <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100 relative">
+          
+          {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color || filters.startDate || filters.endDate) && (
+            <button 
+              onClick={clearFilters} 
+              className="absolute -top-1 -right-1 p-1 bg-red-500 text-white rounded-full shadow-lg z-10 active:scale-90 transition-all hover:bg-red-600"
+            >
+              <X size={12} />
+            </button>
+          )}
+
+          <div className="space-y-2">
+            <div className="grid grid-cols-5 gap-1.5">
+              <input 
+                className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none focus:ring-1 focus:ring-blue-200" 
+                placeholder="Buyer / ID" 
+                value={filters.customer} 
+                onChange={e => setFilters({...filters, customer: e.target.value})} 
+              />
+              <select 
+                className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" 
+                value={filters.quality} 
+                onChange={e => setFilters({...filters, quality: e.target.value})}
+              >
+                <option value="">Quality</option>
+                {uniqueQualities.map(q => <option key={q} value={q}>{q}</option>)}
+              </select>
+              <input 
+                type="number" 
+                className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" 
+                placeholder="GSM" 
+                value={filters.gsm} 
+                onChange={e => setFilters({...filters, gsm: e.target.value})} 
+              />
+              <input 
+                type="number" 
+                className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" 
+                placeholder="Size" 
+                value={filters.width} 
+                onChange={e => setFilters({...filters, width: e.target.value})} 
+              />
+              <select 
+                className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" 
+                value={filters.color} 
+                onChange={e => setFilters({...filters, color: e.target.value})}
+              >
+                <option value="">Color</option>
+                {uniqueColors.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-4 gap-1.5 items-center">
+              <input 
+                type="date" 
+                className="border border-gray-100 p-2 rounded-xl text-[9px] font-black bg-blue-50/30 outline-none uppercase" 
+                value={filters.startDate} 
+                onChange={e => setFilters({...filters, startDate: e.target.value})} 
+              />
+              <input 
+                type="date" 
+                className="border border-gray-100 p-2 rounded-xl text-[9px] font-black bg-blue-50/30 outline-none uppercase" 
+                value={filters.endDate} 
+                onChange={e => setFilters({...filters, endDate: e.target.value})} 
+              />
+              <button 
+                onClick={() => onFetchRange(filters.startDate, filters.endDate)} 
+                className="bg-blue-600 text-white rounded-xl font-black text-[9px] h-full py-2 flex items-center justify-center gap-1 active:scale-95 transition-all"
+              >
+                <RefreshCw size={12} /> FETCH RANGE
+              </button>
+              <button 
+                onClick={handleExport} 
+                className="bg-green-600 text-white rounded-xl font-black text-[9px] h-full py-2 flex items-center justify-center gap-1 active:scale-95 transition-all"
+              >
+                <Download size={12} /> EXCEL
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="relative">
-            <select 
-              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs outline-none appearance-none"
-              value={filterQuality}
-              onChange={e => setFilterQuality(e.target.value)}
-            >
-              {qualities.map(q => <option key={q} value={q}>{q}</option>)}
-            </select>
-            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <div className="bg-gray-900 text-white p-3 md:p-4 rounded-2xl flex justify-between items-center shadow-2xl border border-gray-800">
+          <div className="flex flex-col">
+            <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">
+              {activeRange === '15days' ? 'Record for last 15 days' : 
+               activeRange === 'current_month' ? 'Record for current month' : 
+               'Record for selected range'}
+            </span>
+            <span className="text-xl md:text-2xl font-black text-orange-400">
+              {filtered.length} <span className="text-[10px] md:text-xs font-normal opacity-40 text-white ml-1">Rolls</span>
+            </span>
           </div>
-
-          <div className="relative">
-            <select 
-              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs outline-none appearance-none"
-              value={dateRange}
-              onChange={e => setDateRange(e.target.value)}
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="week">Past 7 Days</option>
-            </select>
-            <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <div className="text-right flex flex-col">
+            <span className="text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-0.5">Total weight</span>
+            <span className="text-xl md:text-2xl font-black text-green-400">
+              {filtered.reduce((s,r)=>s+(parseFloat(r.net_weight)||0),0).toFixed(1)} 
+              <span className="text-[10px] md:text-xs font-normal text-white/50 ml-1">kg</span>
+            </span>
           </div>
         </div>
-
-        <button 
-          onClick={handleExport}
-          className="w-full py-4 bg-green-600 text-white rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 active:scale-95 transition-all"
-        >
-          <Download size={16} /> DOWNLOAD DISPATCH LOG (XLS)
-        </button>
       </div>
 
-      {/* SUMMARY BAR */}
-      <div className="bg-slate-900 p-5 rounded-[2.5rem] flex justify-between items-center text-white">
-        <div>
-          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Total Dispatched</p>
-          <h3 className="text-2xl font-black text-blue-400">{filteredHistory.length} <span className="text-xs font-normal text-slate-400">Rolls</span></h3>
-        </div>
-        <div className="text-right">
-          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Dispatched Tonnage</p>
-          <h3 className="text-2xl font-black text-green-400">
-            {(filteredHistory.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0) / 1000).toFixed(2)} 
-            <span className="text-xs font-normal text-slate-400 ml-1">Tons</span>
-          </h3>
-        </div>
-      </div>
-
-      {/* HISTORY LIST */}
-      <div className="space-y-3">
-        {filteredHistory.length === 0 ? (
-          <div className="text-center py-20 text-gray-400 font-bold italic bg-white rounded-[2.5rem] border border-dashed border-gray-200">
-            No dispatch records found.
-          </div>
-        ) : (
-          filteredHistory.map(r => (
-            <div 
-              key={r.id} 
-              onClick={() => onSelectRoll(r)}
-              className="bg-white p-5 rounded-[2.5rem] border border-gray-100 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg font-black text-gray-900">{r.product_id}</span>
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-tighter">
-                      {r.quality}
-                    </span>
-                  </div>
-                  <p className="text-sm font-bold text-gray-500">{r.customer_name || 'Generic Stock'}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xl font-black text-gray-900">{r.net_weight} <span className="text-[10px] text-gray-400">kg</span></p>
-                  <p className="text-[9px] font-bold text-green-600 uppercase tracking-tighter">
-                    {new Date(r.dispatched_at || r.created_at).toLocaleDateString()}
-                  </p>
-                </div>
+      <div className="space-y-2 px-1">
+        {filtered.map(r => (
+          <div 
+            key={r.id} 
+            onClick={() => onSelectRoll(r)} 
+            className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200 cursor-pointer"
+          >
+            <div className="flex-1">
+              <div className="font-black text-blue-600 text-lg flex items-center gap-2">
+                {r.product_id}
+                <span className={`text-[7px] md:text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${r.status === 'in_stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                  {r.status === 'in_stock' ? 'In Stock' : 'Dispatched'}
+                </span>
               </div>
-
-              <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gray-50 text-[9px] font-black uppercase text-gray-400">
-                <div className="flex flex-col">
-                  <span>Gross</span>
-                  <span className="text-gray-700">{r.gross_weight} kg</span>
-                </div>
-                <div className="flex flex-col">
-                  <span>GSM</span>
-                  <span className="text-gray-700">{r.gsm}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span>Size</span>
-                  <span className="text-gray-700">{r.width_inches}"</span>
-                </div>
-                <div className="flex flex-col">
-                  <span>Length</span>
-                  <span className="text-gray-700">{r.length_meters} m</span>
-                </div>
+              <div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div>
+              <div className="text-[10px] font-black mt-1 flex flex-wrap gap-2 items-center">
+                <span className="bg-slate-50 px-1.5 py-0.5 rounded text-gray-600 uppercase tracking-tighter">{r.quality}</span>
+                <span className="text-blue-500">{r.color}</span>
+                <span className="text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">{r.gsm} GSM</span>
+                <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">{r.width_inches}" Size</span>
               </div>
             </div>
-          ))
-        )}
+            <div className="text-right flex flex-col items-end min-w-[100px]">
+              <div className="font-black text-2xl text-gray-900 leading-none">{r.net_weight} <span className="text-[10px] font-normal text-gray-400">kg</span></div>
+              <div className="text-[10px] font-bold text-gray-400 flex items-center gap-1 mt-2 uppercase tracking-tighter">
+                 <Clock size={10} /> {new Date(r.dispatched_at || r.created_at).toLocaleDateString()}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
