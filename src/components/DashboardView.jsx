@@ -229,7 +229,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         <div className="p-4 bg-red-50/50 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">
-            Aged Stock (>30 Days) - {(processedData.totalAgedWeight/1000).toFixed(2)}T
+            Aged Stock ({">"}30 Days) - {(processedData.totalAgedWeight/1000).toFixed(2)}T
           </h3>
         </div>
         <div className="p-4 grid grid-cols-2 gap-2">
