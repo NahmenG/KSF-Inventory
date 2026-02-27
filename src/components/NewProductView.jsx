@@ -60,9 +60,14 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
 
   // SUBMIT & AUTO-INCREMENT
   const handleSubmit = async (e) => {
-    if (e) e.preventDefault();
+    // CRITICAL: Stop event from bubbling to parent components
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.nativeEvent) e.nativeEvent.stopImmediatePropagation();
+    }
     
-    // Prevent double submission
+    // Prevent double submission via state lock
     if (isSaving) return;
     
     const fullId = `${rollPrefix}-${rollSeq}`.trim();
@@ -93,7 +98,9 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     try {
       // Execute save and print sequentially
       await onSaved(newRoll);
-      onPrint(newRoll);
+      
+      // Delay print slightly to ensure UI stability
+      setTimeout(() => onPrint(newRoll), 100);
 
       // Auto-increment sequence only after success
       const nextSeq = String(Number(rollSeq) + 1);
@@ -103,12 +110,12 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
 
       // Reset specific fields
       setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+      setErrorMsg('');
       
     } catch (err) {
       setErrorMsg("Local Save Error: Failed to save to phone memory.");
       console.error(err);
     } finally {
-      // Re-enable button
       setIsSaving(false);
     }
   };
@@ -121,7 +128,10 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
         </h2>
         <button 
           type="button"
-          onClick={() => { if(confirm("Clear form?")) setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); }}
+          onClick={(e) => { 
+            e.stopPropagation();
+            if(confirm("Clear form?")) setFormData({ customer_name: '', quality: '', gsm: '', color: '', width_inches: '', length_meters: '', net_weight: '', gross_weight: '' }); 
+          }}
           className="text-xs font-bold text-red-500 border border-red-100 bg-red-50 px-3 py-2 rounded-lg active:scale-95 transition-all"
         >
           <RotateCcw size={14} className="inline mr-1"/> Clear
