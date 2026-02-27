@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff } from 'lucide-react';
+import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const LabelPrint = ({ data, onClose }) => {
   const canvasRef = useRef(null);
@@ -25,25 +25,29 @@ const LabelPrint = ({ data, onClose }) => {
     }
   }, [data]);
 
-  // RESTORED: EXACT ORIGINAL PDF GENERATION LOGIC
   const handleDownloadPDF = async () => {
-    if (!labelRef.current) return;
-    setIsGenerating(true);
+    if (!labelRef.current || isGenerating) return;
+    
+    setIsGenerating(true); // Show buffer immediately
+    
     try {
+      // Optimized scale 3 (Sharp for 300DPI thermal but 50% faster than scale 4)
       const canvas = await html2canvas(labelRef.current, { 
-        scale: 4, 
+        scale: 3, 
         useCORS: true, 
-        backgroundColor: '#ffffff' 
+        backgroundColor: '#ffffff',
+        logging: false // Disable logs to speed up execution
       });
+      
       const imgData = canvas.toDataURL('image/png');
-      // EXACT ORIGINAL DIMENSIONS: 2.4in x 3.9in
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'in', format: [2.4, 3.9] });
       pdf.addImage(imgData, 'PNG', 0, 0, 2.4, 3.9);
       pdf.save(`Label-${data.product_id}.pdf`);
     } catch (error) {
+      console.error(error);
       alert("Failed to generate PDF.");
     } finally {
-      setIsGenerating(false);
+      setIsGenerating(false); // Re-enable button
     }
   };
 
@@ -51,24 +55,23 @@ const LabelPrint = ({ data, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden flex flex-col max-h-screen">
+      <div className="bg-white rounded-lg w-full max-w-sm overflow-hidden flex flex-col max-h-screen shadow-2xl">
         <div className="p-4 border-b flex flex-col gap-3">
           <div className="flex justify-between items-center">
             <h2 className="font-bold text-lg text-gray-800">Label Preview</h2>
             <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full"><X size={20} /></button>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setShowBrand(!showBrand)} className={`flex items-center justify-center gap-1 text-xs font-bold p-2 rounded ${showBrand ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+            <button onClick={() => setShowBrand(!showBrand)} className={`flex items-center justify-center gap-1 text-xs font-bold p-2 rounded transition-colors ${showBrand ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
               {showBrand ? <ToggleRight size={18} /> : <ToggleLeft size={18} />} Brand
             </button>
-            <button onClick={() => setShowDate(!showDate)} className={`flex items-center justify-center gap-1 text-xs font-bold p-2 rounded ${showDate ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+            <button onClick={() => setShowDate(!showDate)} className={`flex items-center justify-center gap-1 text-xs font-bold p-2 rounded transition-colors ${showDate ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
               {showDate ? <Eye size={18} /> : <EyeOff size={18} />} Date
             </button>
           </div>
         </div>
         
         <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
-          {/* THE EXACT ORIGINAL LABEL TEMPLATE WITH ORIGINAL PADDING */}
           <div 
             ref={labelRef} 
             className="flex flex-col justify-between items-center text-center bg-white shadow-xl relative" 
@@ -132,13 +135,22 @@ const LabelPrint = ({ data, onClose }) => {
           <button 
             onClick={handleDownloadPDF} 
             disabled={isGenerating} 
-            className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 flex justify-center gap-2 items-center active:scale-95"
+            className={`flex-1 py-3 rounded-lg font-bold shadow transition-all flex justify-center gap-2 items-center ${
+              isGenerating 
+                ? 'bg-blue-300 cursor-not-allowed text-white/80' 
+                : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+            }`}
           >
-            {isGenerating ? 'Generating...' : <><Printer size={18} /> Save PDF for Print</>}
+            {isGenerating ? (
+              <><Loader2 size={18} className="animate-spin" /> Generating...</>
+            ) : (
+              <><Printer size={18} /> Save PDF for Print</>
+            )}
           </button>
           <button 
             onClick={onClose} 
-            className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50 active:scale-95"
+            disabled={isGenerating}
+            className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-50 disabled:opacity-50"
           >
             Close
           </button>
