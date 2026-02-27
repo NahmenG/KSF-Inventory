@@ -42,7 +42,7 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC: FORCED LOCAL UPDATE ---
+  // --- 1. SYNC LOGIC ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -50,34 +50,23 @@ export default function App() {
     if (unsyncedRolls.length === 0) return;
 
     setLoading(true);
-    console.log(`Starting sync for ${unsyncedRolls.length} rolls...`);
-
     for (const roll of unsyncedRolls) {
-      // Remove local 'id' so Supabase doesn't get confused
       const { id, synced, ...dataToUpload } = roll;
-      
       const { error } = await supabase
         .from('rolls')
         .upsert(dataToUpload, { onConflict: 'product_id' });
       
       if (!error) {
-        // FIXED: Using .put with the full object ensures the 'synced' flag 
-        // is updated regardless of whether 'id' or 'product_id' is the primary key.
         await db.rolls.put({ ...roll, synced: 1 });
-        console.log(`Successfully synced & updated local: ${roll.product_id}`);
-      } else {
-        console.error(`Sync error for ${roll.product_id}:`, error.message);
       }
     }
     
-    // REFRESH UI: Pull data again from local DB to clear the "32 Pending"
     const refreshedLocal = await db.rolls.toArray();
     setRolls(refreshedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    
     setLoading(false);
   }, [loading]);
 
-  // --- 2. CORE SAVE HANDLER (Shield Logic) ---
+  // --- 2. CORE SAVE HANDLER ---
   const handleLocalSave = async (updatedRoll) => {
     try {
       await db.rolls.put({ ...updatedRoll, synced: 0 });
@@ -116,67 +105,55 @@ export default function App() {
     };
   }, [syncOfflineData]);
 
-  // --- 4. REALTIME LISTENER: DEDUPLICATION SHIELD ---
+  // --- 4. REALTIME LISTENER ---
   useEffect(() => {
     if (!user) return;
-
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
         const productId = payload.new?.product_id || payload.old?.product_id;
         if (!productId) return;
-
         const localRecord = await db.rolls.where('product_id').equals(productId).first();
         if (localRecord && localRecord.synced === 0) return;
-
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           await db.rolls.put({ ...payload.new, synced: 1 });
         } else if (payload.eventType === 'DELETE') {
           await db.rolls.where('product_id').equals(productId).delete();
         }
-        
         const allLocal = await db.rolls.toArray();
         setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 5. DATA FETCH (PAGINATED) ---
+  // --- 5. DATA FETCH ---
   const fetchData = useCallback(async () => {
     const cachedRolls = await db.rolls.toArray();
     if (cachedRolls.length > 0) {
       setRolls(cachedRolls.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     }
-
     if (!navigator.onLine) return;
-
     setLoading(true);
     try {
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0,0,0,0);
-
       let allRemoteData = [];
       let from = 0;
       const step = 1000;
-
       while (true) {
         const { data, error } = await supabase
           .from('rolls')
           .select('*')
           .or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`)
           .range(from, from + step - 1);
-
         if (error) throw error;
         if (!data || data.length === 0) break;
-
         allRemoteData = [...allRemoteData, ...data];
         if (data.length < step) break;
         from += step;
       }
-
       if (allRemoteData.length > 0) {
         const unsyncedCount = await db.rolls.where('synced').equals(0).count();
         if (unsyncedCount === 0) {
@@ -186,7 +163,6 @@ export default function App() {
         const finalLocal = await db.rolls.toArray();
         setRolls(finalLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       }
-      
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) {
         await db.materials.bulkPut(mats);
@@ -208,7 +184,6 @@ export default function App() {
       }
     };
     startUp();
-    
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
@@ -270,10 +245,10 @@ export default function App() {
       
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
-        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
-        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
+        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={(roll) => setPrintData(roll)} />}
+        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={(roll) => setPrintData(roll)} onSelectRoll={(r) => setEditRoll({...r})} />}
         {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
-        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={setEditRoll} onFetchRange={fetchData} activeRange={activeRange} />}
+        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={fetchData} activeRange={activeRange} />}
         {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
 
@@ -299,7 +274,8 @@ export default function App() {
         />
       )}
       
-      {printData && <LabelPrint roll={printData} onClose={() => setPrintData(null)} />}
+      {/* FIXED: Prop name changed to 'data' to match LabelPrint component expectations */}
+      {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
     </div>
   );
 }
