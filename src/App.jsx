@@ -30,6 +30,7 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   const initialFetchDone = useRef(false);
+  const isDeleting = useRef(false);
 
   const [activeTab, setActiveTab] = useState(() => {
     try {
@@ -57,7 +58,7 @@ export default function App() {
         .upsert(dataToUpload, { onConflict: 'product_id' });
       
       if (!error) {
-        await db.rolls.put({ ...roll, synced: 1 });
+        await db.rolls.update(roll.product_id, { synced: 1 });
       }
     }
     
@@ -66,7 +67,7 @@ export default function App() {
     setLoading(false);
   }, [loading]);
 
-  // --- 2. CORE SAVE HANDLER ---
+  // --- 2. CORE SAVE HANDLER (Deduplication Shield) ---
   const handleLocalSave = async (updatedRoll) => {
     try {
       await db.rolls.put({ ...updatedRoll, synced: 0 });
@@ -81,7 +82,7 @@ export default function App() {
           .upsert(dataToUpload, { onConflict: 'product_id' });
 
         if (!error) {
-          await db.rolls.put({ ...updatedRoll, synced: 1 });
+          await db.rolls.update(updatedRoll.product_id, { synced: 1 });
           const syncedLocal = await db.rolls.toArray();
           setRolls(syncedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
         }
@@ -115,11 +116,13 @@ export default function App() {
         if (!productId) return;
         const localRecord = await db.rolls.where('product_id').equals(productId).first();
         if (localRecord && localRecord.synced === 0) return;
+
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           await db.rolls.put({ ...payload.new, synced: 1 });
         } else if (payload.eventType === 'DELETE') {
           await db.rolls.where('product_id').equals(productId).delete();
         }
+        
         const allLocal = await db.rolls.toArray();
         setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       })
@@ -263,18 +266,26 @@ export default function App() {
             await handleLocalSave(updated);
           }} 
           onDelete={async (productId) => {
+            if (isDeleting.current) return;
             if (!confirm("Permanently delete this roll?")) return;
+            isDeleting.current = true;
             setEditRoll(null);
-            await db.rolls.where('product_id').equals(productId).delete();
-            if (navigator.onLine) {
-              await supabase.from('rolls').delete().eq('product_id', productId);
+            try {
+              await db.rolls.where('product_id').equals(productId).delete();
+              if (navigator.onLine) {
+                await supabase.from('rolls').delete().eq('product_id', productId);
+              }
+              await fetchData();
+            } finally {
+              isDeleting.current = false;
             }
-            fetchData();
           }}
         />
       )}
       
-      {/* FIXED: Prop name changed to 'data' to match LabelPrint component expectations */}
+      {/* This is the critical fix: passing the roll as 'data' 
+        to match your exact LabelPrint component.
+      */}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
     </div>
   );
