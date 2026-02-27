@@ -10,11 +10,9 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const suggestionRef = useRef(null);
 
-  // BARCODE LOGIC (Manual Entry + Persistence)
   const [rollPrefix, setRollPrefix] = useState(() => localStorage.getItem('ksf_roll_prefix') || '0226N');
   const [rollSeq, setRollSeq] = useState(() => localStorage.getItem('ksf_roll_sequence') || '1462');
 
-  // FORM PERSISTENCE
   const [formData, setFormData] = useState(() => {
     const saved = localStorage.getItem('ksf_form_persist');
     return saved ? JSON.parse(saved) : { 
@@ -27,7 +25,6 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     localStorage.setItem('ksf_form_persist', JSON.stringify(formData));
   }, [formData]);
 
-  // CUSTOMER SUGGESTIONS
   const customers = useMemo(() => [...new Set(rolls.map(r => r.customer_name).filter(Boolean))].sort(), [rolls]);
   const filteredSuggestions = useMemo(() => {
     const typed = formData.customer_name?.toLowerCase() || '';
@@ -43,7 +40,6 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // AUTO-CALCULATION (Net Weight = Gross - (Width / 63))
   const handleValueChange = (field, value) => {
     const updatedData = { ...formData, [field]: value };
     if (field === 'width_inches' || field === 'gross_weight') {
@@ -58,16 +54,13 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     if (errorMsg) setErrorMsg('');
   };
 
-  // SUBMIT & AUTO-INCREMENT
   const handleSubmit = async (e) => {
-    // CRITICAL: Stop event from bubbling to parent components
     if (e) {
       e.preventDefault();
       e.stopPropagation();
       if (e.nativeEvent) e.nativeEvent.stopImmediatePropagation();
     }
     
-    // Prevent double submission via state lock
     if (isSaving) return;
     
     const fullId = `${rollPrefix}-${rollSeq}`.trim();
@@ -96,26 +89,31 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     };
 
     try {
-      // Execute save and print sequentially
+      // 1. Save to DB
       await onSaved(newRoll);
       
-      // Delay print slightly to ensure UI stability
-      setTimeout(() => onPrint(newRoll), 100);
-
-      // Auto-increment sequence only after success
+      // 2. Clear weights and increment ID immediately
       const nextSeq = String(Number(rollSeq) + 1);
       setRollSeq(nextSeq);
       localStorage.setItem('ksf_roll_sequence', nextSeq);
       localStorage.setItem('ksf_roll_prefix', rollPrefix);
 
-      // Reset specific fields
-      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
+      // Reset form fields
+      setFormData(prev => ({ 
+        ...prev, 
+        net_weight: '', 
+        gross_weight: '' 
+      }));
       setErrorMsg('');
+
+      // 3. Trigger Print (Small delay for UI stability)
+      setTimeout(() => onPrint(newRoll), 100);
       
     } catch (err) {
-      setErrorMsg("Local Save Error: Failed to save to phone memory.");
+      setErrorMsg("Error saving roll. Please try again.");
       console.error(err);
     } finally {
+      // ALWAYS stop loading bar
       setIsSaving(false);
     }
   };

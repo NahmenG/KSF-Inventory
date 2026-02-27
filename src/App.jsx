@@ -43,7 +43,6 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -67,14 +66,15 @@ export default function App() {
     setLoading(false);
   }, [loading]);
 
-  // --- 2. CORE SAVE HANDLER (Deduplication Shield) ---
   const handleLocalSave = async (updatedRoll) => {
     try {
+      // 1. Save locally with synced: 0 (Shielding status)
       await db.rolls.put({ ...updatedRoll, synced: 0 });
       
       const allLocal = await db.rolls.toArray();
       setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
 
+      // 2. Push to Supabase
       if (navigator.onLine) {
         const { id, synced, ...dataToUpload } = updatedRoll;
         const { error } = await supabase
@@ -82,6 +82,7 @@ export default function App() {
           .upsert(dataToUpload, { onConflict: 'product_id' });
 
         if (!error) {
+          // 3. Update local synced status
           await db.rolls.update(updatedRoll.product_id, { synced: 1 });
           const syncedLocal = await db.rolls.toArray();
           setRolls(syncedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -89,10 +90,10 @@ export default function App() {
       }
     } catch (err) {
       console.error("Critical Save Error:", err);
+      throw err; // Re-throw to allow NewProductView to handle error UI
     }
   };
 
-  // --- 3. CONNECTION MONITOR ---
   useEffect(() => {
     const handleStatus = () => {
       setIsOnline(navigator.onLine);
@@ -106,7 +107,7 @@ export default function App() {
     };
   }, [syncOfflineData]);
 
-  // --- 4. REALTIME LISTENER ---
+  // --- REALTIME LISTENER (DUPLICATE SHIELD) ---
   useEffect(() => {
     if (!user) return;
     const channel = supabase
@@ -114,7 +115,10 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
         const productId = payload.new?.product_id || payload.old?.product_id;
         if (!productId) return;
+        
         const localRecord = await db.rolls.where('product_id').equals(productId).first();
+        
+        // SHIELD: If we have an unsynced local record, ignore the cloud update to prevent double entry
         if (localRecord && localRecord.synced === 0) return;
 
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -130,7 +134,6 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 5. DATA FETCH ---
   const fetchData = useCallback(async () => {
     const cachedRolls = await db.rolls.toArray();
     if (cachedRolls.length > 0) {
@@ -175,7 +178,6 @@ export default function App() {
     finally { setLoading(false); }
   }, []);
 
-  // --- 6. AUTH & INITIALIZATION ---
   useEffect(() => {
     const startUp = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -193,7 +195,6 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [fetchData, syncOfflineData]);
 
-  // --- 7. UI HELPERS ---
   const handleLogout = async () => {
     if(confirm("Logout and clear local cache?")) {
       await supabase.auth.signOut();
@@ -283,9 +284,6 @@ export default function App() {
         />
       )}
       
-      {/* This is the critical fix: passing the roll as 'data' 
-        to match your exact LabelPrint component.
-      */}
       {printData && <LabelPrint data={printData} onClose={() => setPrintData(null)} />}
     </div>
   );
