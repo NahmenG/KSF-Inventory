@@ -43,7 +43,7 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. SYNC LOGIC ---
+  // --- 1. RESILIENT SYNC LOGIC ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -51,14 +51,21 @@ export default function App() {
     if (unsyncedRolls.length === 0) return;
 
     setLoading(true);
+    console.log(`Syncing ${unsyncedRolls.length} rolls via HTTPS...`);
+
     for (const roll of unsyncedRolls) {
       const { id, synced, ...dataToUpload } = roll;
+      
+      // Standard HTTPS push - works even if WebSockets are failing
       const { error } = await supabase
         .from('rolls')
         .upsert(dataToUpload, { onConflict: 'product_id' });
       
       if (!error) {
         await db.rolls.update(roll.product_id, { synced: 1 });
+        console.log(`Synced: ${roll.product_id}`);
+      } else {
+        console.error(`Sync Blocked for ${roll.product_id}:`, error.message);
       }
     }
     
@@ -110,11 +117,19 @@ export default function App() {
     };
   }, [syncOfflineData]);
 
-  // --- 4. REALTIME LISTENER (The Deduplicator) ---
+  // --- 4. REALTIME LISTENER (WebSocket Failure Protection) ---
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('db-changes', {
+        config: {
+          realtime: {
+            params: {
+              eventsPerSecond: 2, // Throttled for network stability
+            },
+          },
+        },
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
         const productId = payload.new?.product_id || payload.old?.product_id;
         if (!productId) return;
@@ -133,7 +148,13 @@ export default function App() {
         const allLocal = await db.rolls.toArray();
         setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       })
-      .subscribe();
+      .subscribe((status) => {
+        // Log WebSocket issues but don't let them crash the UI or Sync
+        if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          console.warn("Realtime WebSocket restricted. App will use HTTPS Sync mode.");
+        }
+      });
+
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
@@ -274,7 +295,6 @@ export default function App() {
           }} 
           onDelete={async (productId) => {
             if (isDeleting.current) return;
-            // Removed second confirmation check here - handled in EditModal.jsx
             isDeleting.current = true;
             setEditRoll(null);
             try {
