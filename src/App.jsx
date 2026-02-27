@@ -43,7 +43,7 @@ export default function App() {
     return 'dashboard';
   });
 
-  // --- 1. RESILIENT SYNC LOGIC ---
+  // --- 1. HARDENED SYNC LOGIC ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -56,12 +56,13 @@ export default function App() {
     for (const roll of unsyncedRolls) {
       const { id, synced, ...dataToUpload } = roll;
       
-      // Standard HTTPS push - works even if WebSockets are failing
       const { error } = await supabase
         .from('rolls')
         .upsert(dataToUpload, { onConflict: 'product_id' });
       
-      if (!error) {
+      // FIX: If no error OR if it's a conflict error (23505), mark as synced.
+      // This prevents rolls already in the cloud from staying 'Pending' locally.
+      if (!error || error.code === '23505' || error.message?.includes('already exists')) {
         await db.rolls.update(roll.product_id, { synced: 1 });
         console.log(`Synced: ${roll.product_id}`);
       } else {
@@ -74,24 +75,20 @@ export default function App() {
     setLoading(false);
   }, [loading]);
 
-  // --- 2. CORE SAVE HANDLER (The Sync Shield) ---
+  // --- 2. CORE SAVE HANDLER ---
   const handleLocalSave = async (updatedRoll) => {
     try {
-      // Step 1: Shield the record locally with synced: 0
       await db.rolls.put({ ...updatedRoll, synced: 0 });
-      
       const allLocal = await db.rolls.toArray();
       setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
 
-      // Step 2: Push to cloud
       if (navigator.onLine) {
         const { id, synced, ...dataToUpload } = updatedRoll;
         const { error } = await supabase
           .from('rolls')
           .upsert(dataToUpload, { onConflict: 'product_id' });
 
-        if (!error) {
-          // Step 3: Mark as synced once cloud confirms
+        if (!error || error.code === '23505') {
           await db.rolls.update(updatedRoll.product_id, { synced: 1 });
           const syncedLocal = await db.rolls.toArray();
           setRolls(syncedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -117,26 +114,18 @@ export default function App() {
     };
   }, [syncOfflineData]);
 
-  // --- 4. REALTIME LISTENER (WebSocket Failure Protection) ---
+  // --- 4. REALTIME LISTENER ---
   useEffect(() => {
     if (!user) return;
     const channel = supabase
       .channel('db-changes', {
-        config: {
-          realtime: {
-            params: {
-              eventsPerSecond: 2, // Throttled for network stability
-            },
-          },
-        },
+        config: { realtime: { params: { eventsPerSecond: 2 } } },
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
         const productId = payload.new?.product_id || payload.old?.product_id;
         if (!productId) return;
 
         const localRecord = await db.rolls.where('product_id').equals(productId).first();
-        
-        // SHIELD: Ignore cloud update if we have an unsynced local version (Prevents double entry)
         if (localRecord && localRecord.synced === 0) return;
 
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -149,7 +138,6 @@ export default function App() {
         setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       })
       .subscribe((status) => {
-        // Log WebSocket issues but don't let them crash the UI or Sync
         if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
           console.warn("Realtime WebSocket restricted. App will use HTTPS Sync mode.");
         }
@@ -158,7 +146,7 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 5. DATA FETCH ---
+  // --- 5. DATA FETCH (With Auto-Reconciliation) ---
   const fetchData = useCallback(async () => {
     const cachedRolls = await db.rolls.toArray();
     if (cachedRolls.length > 0) {
@@ -185,15 +173,23 @@ export default function App() {
         if (data.length < step) break;
         from += step;
       }
+      
       if (allRemoteData.length > 0) {
-        const unsyncedCount = await db.rolls.where('synced').equals(0).count();
-        if (unsyncedCount === 0) {
-          await db.rolls.clear();
-          await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
+        // RECONCILIATION: Check if any local 'pending' rolls are actually already in the cloud
+        const unsynced = await db.rolls.where('synced').equals(0).toArray();
+        const unsyncedIds = new Set(unsynced.map(r => r.product_id));
+
+        for (const remoteRoll of allRemoteData) {
+          if (unsyncedIds.has(remoteRoll.product_id)) {
+            await db.rolls.update(remoteRoll.product_id, { synced: 1 });
+          }
         }
+
+        await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
         const finalLocal = await db.rolls.toArray();
         setRolls(finalLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       }
+
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) {
         await db.materials.bulkPut(mats);
