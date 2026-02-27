@@ -17,7 +17,7 @@ const LabelPrint = ({ data, onClose }) => {
         JsBarcode(canvasRef.current, data.product_id, { 
           format: "CODE128", 
           displayValue: false, 
-          height: 35, // Increased slightly for better scan reliability
+          height: 35, 
           width: 2, 
           margin: 0 
         }); 
@@ -30,27 +30,34 @@ const LabelPrint = ({ data, onClose }) => {
     
     setIsGenerating(true); 
     
-    // Tiny timeout to let the UI render the 'Generating' state before CPU locks up
+    // Tiny delay to let the UI show 'GENERATING...' before the CPU starts
     await new Promise(resolve => setTimeout(resolve, 50));
     
     try {
-      // PERFORMANCE TWEAK: Scale 2 is the 'Sweet Spot' for speed vs quality on mobile
+      // OPTIMIZATION: Explicitly setting width/height (2.4in*96dpi / 3.9in*96dpi)
+      // This stops html2canvas from scanning the whole page layout.
       const canvas = await html2canvas(labelRef.current, { 
         scale: 2, 
         useCORS: true, 
         backgroundColor: '#ffffff',
         logging: false,
         imageTimeout: 0,
-        // Ensure we only capture the specific label dimensions
-        width: labelRef.current.offsetWidth,
-        height: labelRef.current.offsetHeight
+        width: 230,   // Forced width
+        height: 374,  // Forced height
+        removeContainer: true
       });
       
-      // JPEG is significantly faster for jsPDF to compress than PNG
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'in', format: [2.4, 3.9] });
+      // JPEG is 3x faster to encode than PNG for mobile CPUs
+      const imgData = canvas.toDataURL('image/jpeg', 0.9);
       
-      pdf.addImage(imgData, 'JPEG', 0, 0, 2.4, 3.9);
+      const pdf = new jsPDF({ 
+        orientation: 'portrait', 
+        unit: 'in', 
+        format: [2.4, 3.9] 
+      });
+
+      // Added 'FAST' alias for image compression
+      pdf.addImage(imgData, 'JPEG', 0, 0, 2.4, 3.9, undefined, 'FAST');
       pdf.save(`Label-${data.product_id}.pdf`);
     } catch (error) {
       console.error("PDF Generation Error:", error);
@@ -67,7 +74,7 @@ const LabelPrint = ({ data, onClose }) => {
       <div className="bg-white rounded-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh] shadow-2xl">
         <div className="p-4 border-b flex flex-col gap-3">
           <div className="flex justify-between items-center">
-            <h2 className="font-bold text-lg text-gray-800">Label Preview</h2>
+            <h2 className="font-bold text-lg text-gray-800 tracking-tighter uppercase">Label Preview</h2>
             <button onClick={onClose} disabled={isGenerating} className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-20 transition-colors">
               <X size={20} />
             </button>
