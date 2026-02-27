@@ -27,42 +27,51 @@ const LabelPrint = ({ data, onClose }) => {
 
   const handleDownloadPDF = async () => {
     if (!labelRef.current || isGenerating) return;
-    
     setIsGenerating(true); 
     
-    // Tiny delay to let the UI show 'GENERATING...' before the CPU starts
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Allow UI to update before blocking the thread
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
-      // OPTIMIZATION: Explicitly setting width/height (2.4in*96dpi / 3.9in*96dpi)
-      // This stops html2canvas from scanning the whole page layout.
+      // 1. Capture using a standard scale without forced pixel widths
+      // Removing 'width' and 'height' keys here prevents the iPhone crash 
+      // by letting html2canvas use the element's natural bounding box.
       const canvas = await html2canvas(labelRef.current, { 
         scale: 2, 
         useCORS: true, 
         backgroundColor: '#ffffff',
         logging: false,
         imageTimeout: 0,
-        width: 230,   // Forced width
-        height: 374,  // Forced height
         removeContainer: true
       });
       
-      // JPEG is 3x faster to encode than PNG for mobile CPUs
-      const imgData = canvas.toDataURL('image/jpeg', 0.9);
-      
-      const pdf = new jsPDF({ 
-        orientation: 'portrait', 
-        unit: 'in', 
-        format: [2.4, 3.9] 
-      });
+      // 2. BLOB OPTIMIZATION: Convert to Blob instead of DataURL to save RAM
+      canvas.toBlob(async (blob) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => {
+          const base64data = reader.result;
+          const pdf = new jsPDF({ 
+            orientation: 'portrait', 
+            unit: 'in', 
+            format: [2.4, 3.9] 
+          });
 
-      // Added 'FAST' alias for image compression
-      pdf.addImage(imgData, 'JPEG', 0, 0, 2.4, 3.9, undefined, 'FAST');
-      pdf.save(`Label-${data.product_id}.pdf`);
+          // Using 'SLOW' compression here actually prevents the iPhone 7 
+          // from crashing because it processes the image in smaller chunks.
+          pdf.addImage(base64data, 'JPEG', 0, 0, 2.4, 3.9, undefined, 'SLOW');
+          pdf.save(`Label-${data.product_id}.pdf`);
+          
+          // Memory Cleanup
+          canvas.width = 0;
+          canvas.height = 0;
+          setIsGenerating(false);
+        };
+      }, 'image/jpeg', 0.8);
+
     } catch (error) {
       console.error("PDF Generation Error:", error);
-      alert("Failed to generate PDF. Please try again.");
-    } finally {
+      alert("Error generating PDF. Please try again.");
       setIsGenerating(false);
     }
   };
@@ -104,37 +113,16 @@ const LabelPrint = ({ data, onClose }) => {
             </div>
             
             <div className="w-full grid grid-cols-2 gap-y-1 text-left px-1 flex-1 content-center">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Quality</span>
-                <span className="font-bold text-lg leading-none">{data.quality}</span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Color</span>
-                <span className="font-bold text-lg leading-none">{data.color}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Size (in)</span>
-                <span className="font-bold text-lg leading-none">{data.width_inches}"</span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Length</span>
-                <span className="font-bold text-lg leading-none">{data.length_meters}m</span>
-              </div>
-              <div className="col-span-2 text-center mt-1">
-                <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">GSM</span>
-                <span className="font-bold text-3xl leading-none">{data.gsm}</span>
-              </div>
+              <div><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-lg leading-none">{data.quality}</span></div>
+              <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-lg leading-none">{data.color}</span></div>
+              <div><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
+              <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Length</span><span className="font-bold text-lg leading-none">{data.length_meters}m</span></div>
+              <div className="col-span-2 text-center mt-1"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">GSM</span><span className="font-bold text-3xl leading-none">{data.gsm}</span></div>
             </div>
             
             <div className="w-full border-y-2 border-black py-2 my-1 flex justify-between items-end px-1">
-              <div className="text-left">
-                <span className="text-[10px] uppercase font-bold block leading-none">Gross Wt</span>
-                <span className="text-sm font-bold">{data.gross_weight} kg</span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] uppercase font-bold block text-gray-400 leading-none">Net Weight</span>
-                <span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span>
-              </div>
+              <div className="text-left leading-none"><span className="text-[10px] uppercase font-bold block leading-none">Gross Wt</span><span className="text-sm font-bold">{data.gross_weight} kg</span></div>
+              <div className="text-right leading-none"><span className="text-[10px] uppercase font-bold block text-gray-400 leading-none">Net Weight</span><span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span></div>
             </div>
             
             <div className="w-full flex flex-col items-center overflow-hidden pb-4">
@@ -154,22 +142,12 @@ const LabelPrint = ({ data, onClose }) => {
             onClick={handleDownloadPDF} 
             disabled={isGenerating} 
             className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-lg transition-all flex justify-center gap-2 items-center active:scale-95 ${
-              isGenerating 
-                ? 'bg-blue-300 cursor-not-allowed text-white' 
-                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
+              isGenerating ? 'bg-blue-300 cursor-not-allowed text-white' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
             }`}
           >
-            {isGenerating ? (
-              <><Loader2 size={18} className="animate-spin" /> GENERATING...</>
-            ) : (
-              <><Printer size={18} /> SAVE PDF</>
-            )}
+            {isGenerating ? <><Loader2 size={18} className="animate-spin" /> GENERATING...</> : <><Printer size={18} /> SAVE PDF</>}
           </button>
-          <button 
-            onClick={onClose} 
-            disabled={isGenerating}
-            className="flex-1 bg-gray-50 border border-gray-100 text-gray-500 py-4 rounded-2xl font-bold active:scale-95 transition-all hover:bg-gray-100 disabled:opacity-50 uppercase text-xs"
-          >
+          <button onClick={onClose} disabled={isGenerating} className="flex-1 bg-gray-50 border border-gray-100 text-gray-500 py-4 rounded-2xl font-bold active:scale-95 transition-all hover:bg-gray-100 disabled:opacity-50 uppercase text-xs">
             Close
           </button>
         </div>
