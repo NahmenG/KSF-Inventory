@@ -60,7 +60,9 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
 
   // SUBMIT & AUTO-INCREMENT
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    
+    // Prevent double submission
     if (isSaving) return;
     
     const fullId = `${rollPrefix}-${rollSeq}`.trim();
@@ -89,19 +91,24 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     };
 
     try {
+      // Execute save and print sequentially
       await onSaved(newRoll);
       onPrint(newRoll);
 
+      // Auto-increment sequence only after success
       const nextSeq = String(Number(rollSeq) + 1);
       setRollSeq(nextSeq);
       localStorage.setItem('ksf_roll_sequence', nextSeq);
       localStorage.setItem('ksf_roll_prefix', rollPrefix);
 
+      // Reset specific fields
       setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
       
     } catch (err) {
       setErrorMsg("Local Save Error: Failed to save to phone memory.");
+      console.error(err);
     } finally {
+      // Re-enable button
       setIsSaving(false);
     }
   };
