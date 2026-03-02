@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Package, Hash, User, Clock, RotateCcw, Loader, AlertTriangle, ChevronDown } from 'lucide-react';
 
-const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
+// ADDED 'Laminated Fabric' TO THE LIST
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
 const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
@@ -75,7 +76,7 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     const newRoll = { 
       product_id: fullId, 
       customer_name: String(formData.customer_name || 'Stock').trim(), 
-      quality: String(formData.quality || 'Semi').trim(), 
+      quality: String(formData.quality || '').trim(), // ALLOWS BLANK
       color: String(formData.color || 'White').trim(), 
       gsm: parseFloat(formData.gsm) || 0, 
       width_inches: parseFloat(formData.width_inches) || 0, 
@@ -89,31 +90,18 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     };
 
     try {
-      // 1. Save to DB
       await onSaved(newRoll);
-      
-      // 2. Clear weights and increment ID immediately
       const nextSeq = String(Number(rollSeq) + 1);
       setRollSeq(nextSeq);
       localStorage.setItem('ksf_roll_sequence', nextSeq);
       localStorage.setItem('ksf_roll_prefix', rollPrefix);
-
-      // Reset form fields
-      setFormData(prev => ({ 
-        ...prev, 
-        net_weight: '', 
-        gross_weight: '' 
-      }));
+      setFormData(prev => ({ ...prev, net_weight: '', gross_weight: '' }));
       setErrorMsg('');
-
-      // 3. Trigger Print (Small delay for UI stability)
       setTimeout(() => onPrint(newRoll), 100);
-      
     } catch (err) {
       setErrorMsg("Error saving roll. Please try again.");
       console.error(err);
     } finally {
-      // ALWAYS stop loading bar
       setIsSaving(false);
     }
   };
@@ -194,7 +182,8 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
         <div>
           <label className="text-[11px] font-bold text-gray-400 uppercase mb-1 block">Quality</label>
           <div className="relative">
-            <select required className="w-full border p-3 rounded-xl bg-white outline-none appearance-none focus:ring-2 focus:ring-blue-100 font-semibold" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}>
+            {/* REMOVED 'required' TO ALLOW BLANK */}
+            <select className="w-full border p-3 rounded-xl bg-white outline-none appearance-none focus:ring-2 focus:ring-blue-100 font-semibold" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}>
               <option value="">Select...</option>
               {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
             </select>
@@ -232,7 +221,7 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
         <button 
           type="submit" 
           disabled={isSaving} 
-          className={`col-span-2 p-5 rounded-2xl font-black text-lg mt-2 shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 ${isSaving ? 'bg-gray-400' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'}`}
+          className={`col-span-2 p-5 rounded-2xl font-black text-sm mt-2 shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 ${isSaving ? 'bg-gray-400' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 uppercase tracking-widest'}`}
         >
           {isSaving ? <Loader className="animate-spin" size={24} /> : 'Save & Print Label'}
         </button>

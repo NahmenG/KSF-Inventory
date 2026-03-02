@@ -1,22 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Save, Trash2, ChevronDown } from 'lucide-react';
 
-// UPDATED MASTER LIST
-const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
+// UPDATED LIST WITH 'Laminated Fabric'
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
 export default function EditModal({ roll, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState({ ...roll });
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // AUTO-CALCULATION logic (Net = Gross - (Width / 63))
   const handleValueChange = (field, value) => {
     const updatedData = { ...formData, [field]: value };
-    
     if (field === 'width_inches' || field === 'gross_weight') {
       const w = parseFloat(field === 'width_inches' ? value : formData.width_inches);
       const g = parseFloat(field === 'gross_weight' ? value : formData.gross_weight);
-      
       if (!isNaN(w) && !isNaN(g) && w > 0) {
         updatedData.net_weight = (g - (w / 63)).toFixed(2);
       }
@@ -41,7 +38,6 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
       
       <div className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-        
         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-slate-50/50">
           <div>
             <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">Edit Roll Details</h2>
@@ -51,7 +47,6 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto max-h-[75vh]">
-          {/* BUYER NAME */}
           <div className="space-y-1">
             <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Buyer Name</label>
             <input 
@@ -61,7 +56,6 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             />
           </div>
 
-          {/* QUALITY & COLOR */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Quality</label>
@@ -71,6 +65,8 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
                   value={formData.quality} 
                   onChange={e => handleValueChange('quality', e.target.value)}
                 >
+                  {/* ADDED Select... OPTION HERE AS WELL */}
+                  <option value="">Select...</option>
                   {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
                 </select>
                 <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -79,11 +75,8 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Color</label>
               <div className="relative">
-                <select 
-                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-500" 
-                  value={formData.color} 
-                  onChange={e => handleValueChange('color', e.target.value)}
-                >
+                <select className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-500" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}>
+                  <option value="">Select...</option>
                   {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -91,7 +84,6 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             </div>
           </div>
 
-          {/* GSM, SIZE, LENGTH */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">GSM</label>
@@ -107,34 +99,23 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             </div>
           </div>
 
-          {/* WEIGHTS */}
           <div className="grid grid-cols-2 gap-4 pt-2">
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Gross Weight (kg)</label>
-              <input 
-                type="number" step="0.01"
-                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-lg outline-none focus:ring-2 focus:ring-blue-500"
-                value={formData.gross_weight}
-                onChange={e => handleValueChange('gross_weight', e.target.value)}
-              />
+              <input type="number" step="0.01" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-lg outline-none focus:ring-2 focus:ring-blue-500" value={formData.gross_weight} onChange={e => handleValueChange('gross_weight', e.target.value)} />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-blue-600 uppercase ml-2">Net Weight (kg)</label>
-              <input 
-                type="number" step="0.01" readOnly
-                className="w-full p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl font-black text-blue-800 text-lg outline-none"
-                value={formData.net_weight}
-              />
+              <input type="number" step="0.01" readOnly className="w-full p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl font-black text-blue-800 text-lg outline-none" value={formData.net_weight} />
             </div>
           </div>
 
-          {/* ACTIONS */}
           <div className="pt-4 space-y-3">
-            <button type="submit" className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg shadow-gray-200">
+            <button type="submit" className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg shadow-gray-200 active:scale-[0.98]">
               <Save size={18} /> SAVE CHANGES
             </button>
-            <button type="button" onClick={handleDelete} disabled={isDeleting} className="w-full py-4 bg-red-50 text-red-600 rounded-[1.5rem] font-black text-xs flex items-center justify-center gap-2 hover:bg-red-100 border border-red-100 transition-all">
-              {isDeleting ? "DELETING..." : <><Trash2 size={16} /> DELETE ROLL PERMANENTLY</>}
+            <button type="button" onClick={handleDelete} disabled={isDeleting} className="w-full py-4 bg-red-50 text-red-600 rounded-[1.5rem] font-black text-xs flex items-center justify-center gap-2 hover:bg-red-100 border border-red-100 transition-all active:scale-[0.98] disabled:opacity-50 uppercase">
+              {isDeleting ? "DELETING..." : <><Trash2 size={16} /> Delete Roll Permanently</>}
             </button>
           </div>
         </form>
