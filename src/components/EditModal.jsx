@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Save, Trash2, ChevronDown } from 'lucide-react';
 
-// UPDATED LIST WITH 'Laminated Fabric'
+// MASTER LISTS
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
@@ -9,13 +9,20 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState({ ...roll });
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // --- UPDATED VALUE CHANGE HANDLER WITH BOPP CORE LOGIC ---
   const handleValueChange = (field, value) => {
     const updatedData = { ...formData, [field]: value };
-    if (field === 'width_inches' || field === 'gross_weight') {
+    
+    // Trigger calculation if Width, Gross Weight, or Quality changes
+    if (field === 'width_inches' || field === 'gross_weight' || field === 'quality') {
       const w = parseFloat(field === 'width_inches' ? value : formData.width_inches);
       const g = parseFloat(field === 'gross_weight' ? value : formData.gross_weight);
+      const q = field === 'quality' ? value : formData.quality;
+      
       if (!isNaN(w) && !isNaN(g) && w > 0) {
-        updatedData.net_weight = (g - (w / 63)).toFixed(2);
+        // BOPP uses a 2kg core per 63 inches, others use 1kg per 63 inches
+        const coreFactor = q === 'BOPP Fabric' ? 2 : 1;
+        updatedData.net_weight = (g - (coreFactor * w / 63)).toFixed(2);
       }
     }
     setFormData(updatedData);
@@ -65,7 +72,6 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
                   value={formData.quality} 
                   onChange={e => handleValueChange('quality', e.target.value)}
                 >
-                  {/* ADDED Select... OPTION HERE AS WELL */}
                   <option value="">Select...</option>
                   {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
                 </select>
