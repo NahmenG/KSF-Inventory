@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Settings, LogOut, Monitor, Database, Download, X, HardDrive, CloudOff, RefreshCw } from 'lucide-react';
+import { Settings, LogOut, Monitor, Database, Download, X, HardDrive, CloudOff, RefreshCw, ShieldAlert } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { supabase } from '../supabaseClient';
-import { db } from '../db'; // Ensure IndexedDB is imported
+import { db } from '../db'; 
 
 export default function Header({ deviceName, loading, onLogout, onEditDeviceName, onLogoClick, rolls, materials, onManualSync }) {
   const [showSettings, setShowSettings] = useState(false);
@@ -18,7 +17,6 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
         console.error("Sync count error:", err);
       }
     };
-
     const interval = setInterval(updatePendingCount, 2000);
     updatePendingCount();
     return () => clearInterval(interval);
@@ -100,7 +98,7 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
         </div>
       </header>
 
-      {/* SETTINGS DRAWER (Unchanged) */}
+      {/* SETTINGS DRAWER */}
       {showSettings && (
         <div className="fixed inset-0 z-[100] animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
@@ -112,14 +110,34 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              
+              {/* --- NEW ADMIN MODE ACCESS --- */}
+              <section>
+                <div className="flex items-center gap-2 mb-4 text-red-600">
+                  <ShieldAlert size={16} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Security & Admin</span>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowSettings(false); // Close drawer
+                    onEditDeviceName();     // Open the Main Settings Modal for Password entry
+                  }} 
+                  className="w-full p-4 bg-red-50 rounded-2xl border border-red-100 text-left active:scale-95 transition-all"
+                >
+                  <span className="block text-[8px] text-red-400 font-black uppercase mb-1">Authorization</span>
+                  <span className="font-bold text-red-800 uppercase text-xs tracking-tight">Enter Admin Mode</span>
+                </button>
+              </section>
+
               {/* DEVICE SECTION */}
               <section>
                 <div className="flex items-center gap-2 mb-4 text-blue-600">
                   <Monitor size={16} />
                   <span className="text-[10px] font-black uppercase tracking-widest">Device Identity</span>
                 </div>
-                <button onClick={onEditDeviceName} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 text-left active:scale-95 transition-all">
-                  <span className="block text-[8px] text-gray-400 font-black uppercase mb-1">Rename Terminal</span>
+                {/* Clicking this now also opens the main modal where rename + admin lives */}
+                <button onClick={() => { setShowSettings(false); onEditDeviceName(); }} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 text-left active:scale-95 transition-all">
+                  <span className="block text-[8px] text-gray-400 font-black uppercase mb-1">Terminal Details</span>
                   <span className="font-bold text-gray-800">{deviceName}</span>
                 </button>
               </section>
