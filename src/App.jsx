@@ -14,12 +14,29 @@ import MaterialsView from './components/MaterialsView.jsx';
 import EditModal from './components/EditModal.jsx';
 import LabelPrint from './components/LabelPrint.jsx';
 
+// Icons for the Settings Modal
+import { X, Lock, ShieldCheck, KeyRound, ChevronRight, LogOut, ShieldAlert } from 'lucide-react';
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [deviceName, setDeviceName] = useState(() => 
     localStorage.getItem('ksf_device_name') || 'Factory_Main'
   );
+
+  // --- ADMIN MODE STATE ---
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false); // New: Login Popup
+  const [isChangingPass, setIsChangingPass] = useState(false); // New: Change Pass Popup
+  
+  const [adminPassword, setAdminPassword] = useState(() => 
+    localStorage.getItem('ksf_admin_password') || '1234'
+  );
+  
+  const [passInput, setPassInput] = useState('');
+  const [newPassInput, setNewPassInput] = useState('');
+  const [verifyOldPassInput, setVerifyOldPassInput] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [rolls, setRolls] = useState([]);
@@ -46,28 +63,16 @@ export default function App() {
   // --- 1. HARDENED SYNC LOGIC ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
-    
     const unsyncedRolls = await db.rolls.where({ synced: 0 }).toArray();
     if (unsyncedRolls.length === 0) return;
-
     setLoading(true);
-    console.log(`Syncing ${unsyncedRolls.length} rolls via HTTPS...`);
-
     for (const roll of unsyncedRolls) {
       const { id, synced, ...dataToUpload } = roll;
-      
-      const { error } = await supabase
-        .from('rolls')
-        .upsert(dataToUpload, { onConflict: 'product_id' });
-      
+      const { error } = await supabase.from('rolls').upsert(dataToUpload, { onConflict: 'product_id' });
       if (!error || error.code === '23505' || error.message?.includes('already exists')) {
         await db.rolls.update(roll.product_id, { synced: 1 });
-        console.log(`Synced: ${roll.product_id}`);
-      } else {
-        console.error(`Sync Blocked for ${roll.product_id}:`, error.message);
       }
     }
-    
     const refreshedLocal = await db.rolls.toArray();
     setRolls(refreshedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     setLoading(false);
@@ -79,159 +84,102 @@ export default function App() {
       await db.rolls.put({ ...updatedRoll, synced: 0 });
       const allLocal = await db.rolls.toArray();
       setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-
       if (navigator.onLine) {
         const { id, synced, ...dataToUpload } = updatedRoll;
-        const { error } = await supabase
-          .from('rolls')
-          .upsert(dataToUpload, { onConflict: 'product_id' });
-
+        const { error } = await supabase.from('rolls').upsert(dataToUpload, { onConflict: 'product_id' });
         if (!error || error.code === '23505') {
           await db.rolls.update(updatedRoll.product_id, { synced: 1 });
           const syncedLocal = await db.rolls.toArray();
           setRolls(syncedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
         }
       }
-    } catch (err) {
-      console.error("Critical Save Error:", err);
-      throw err; 
-    }
+    } catch (err) { console.error("Critical Save Error:", err); throw err; }
   };
 
-  // --- 3. CONNECTION MONITOR ---
   useEffect(() => {
-    const handleStatus = () => {
-      setIsOnline(navigator.onLine);
-      if (navigator.onLine) syncOfflineData();
-    };
+    const handleStatus = () => { setIsOnline(navigator.onLine); if (navigator.onLine) syncOfflineData(); };
     window.addEventListener('online', handleStatus);
     window.addEventListener('offline', handleStatus);
-    return () => {
-      window.removeEventListener('online', handleStatus);
-      window.removeEventListener('offline', handleStatus);
-    };
+    return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
-  // --- 4. REALTIME LISTENER ---
   useEffect(() => {
     if (!user) return;
-    const channel = supabase
-      .channel('db-changes', {
-        config: { realtime: { params: { eventsPerSecond: 2 } } },
-      })
+    const channel = supabase.channel('db-changes', { config: { realtime: { params: { eventsPerSecond: 2 } } } })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
         const productId = payload.new?.product_id || payload.old?.product_id;
         if (!productId) return;
-
         const localRecord = await db.rolls.where('product_id').equals(productId).first();
         if (localRecord && localRecord.synced === 0) return;
-
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           await db.rolls.put({ ...payload.new, synced: 1 });
         } else if (payload.eventType === 'DELETE') {
           await db.rolls.where('product_id').equals(productId).delete();
         }
-        
         const allLocal = await db.rolls.toArray();
         setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-      })
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-          console.warn("Realtime WebSocket restricted. App will use HTTPS Sync mode.");
-        }
-      });
-
+      }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 5. DATA FETCH ---
   const fetchData = useCallback(async () => {
     const cachedRolls = await db.rolls.toArray();
-    if (cachedRolls.length > 0) {
-      setRolls(cachedRolls.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    }
+    if (cachedRolls.length > 0) setRolls(cachedRolls.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     if (!navigator.onLine) return;
     setLoading(true);
     try {
-      const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0,0,0,0);
-      let allRemoteData = [];
-      let from = 0;
-      const step = 1000;
+      const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
+      let allRemoteData = []; let from = 0; const step = 1000;
       while (true) {
-        const { data, error } = await supabase
-          .from('rolls')
-          .select('*')
-          .or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`)
-          .range(from, from + step - 1);
+        const { data, error } = await supabase.from('rolls').select('*')
+          .or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`).range(from, from + step - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;
         allRemoteData = [...allRemoteData, ...data];
-        if (data.length < step) break;
-        from += step;
+        if (data.length < step) break; from += step;
       }
-      
       if (allRemoteData.length > 0) {
         const unsynced = await db.rolls.where('synced').equals(0).toArray();
         const unsyncedIds = new Set(unsynced.map(r => r.product_id));
-
-        for (const remoteRoll of allRemoteData) {
-          if (unsyncedIds.has(remoteRoll.product_id)) {
-            await db.rolls.update(remoteRoll.product_id, { synced: 1 });
-          }
-        }
-
+        for (const remoteRoll of allRemoteData) { if (unsyncedIds.has(remoteRoll.product_id)) await db.rolls.update(remoteRoll.product_id, { synced: 1 }); }
         await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
         const finalLocal = await db.rolls.toArray();
         setRolls(finalLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       }
-
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
-      if (mats) {
-        await db.materials.bulkPut(mats);
-        setMaterials(mats);
-      }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+      if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
 
-  // --- 6. AUTH & INITIALIZATION ---
   useEffect(() => {
     const startUp = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session && !initialFetchDone.current) {
-        setUser(session.user);
-        initialFetchDone.current = true;
-        fetchData();
-        syncOfflineData();
-      }
+      if (session && !initialFetchDone.current) { setUser(session.user); initialFetchDone.current = true; fetchData(); syncOfflineData(); }
     };
     startUp();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); });
     return () => subscription.unsubscribe();
   }, [fetchData, syncOfflineData]);
 
-  // --- 7. UI HELPERS ---
   const handleLogout = async () => {
-    if(confirm("Logout and clear local cache?")) {
-      await supabase.auth.signOut();
-      await db.rolls.clear();
-      await db.materials.clear();
-      setUser(null);
-      setIsGuest(false);
-      window.location.reload();
-    }
+    if(confirm("Logout and clear local cache?")) { await supabase.auth.signOut(); await db.rolls.clear(); await db.materials.clear(); setUser(null); setIsGuest(false); window.location.reload(); }
   };
 
-  const handleEditDeviceName = () => {
-    const name = prompt("Enter Terminal Name:", deviceName);
-    if (name) {
-      setDeviceName(name);
-      localStorage.setItem('ksf_device_name', name);
-    }
+  // --- ADMIN FUNCTIONS ---
+  const handleAdminLogin = () => {
+    if (passInput === adminPassword) { setIsAdmin(true); setPassInput(''); setShowAdminLogin(false); } 
+    else { alert("Incorrect Admin Password"); }
+  };
+
+  const handleExitAdmin = () => { setIsAdmin(false); setIsChangingPass(false); };
+
+  const handleChangePassword = () => {
+    if (verifyOldPassInput !== adminPassword) { return alert("Current password is incorrect."); }
+    if (newPassInput.length < 4) { return alert("New password must be at least 4 digits"); }
+    setAdminPassword(newPassInput);
+    localStorage.setItem('ksf_admin_password', newPassInput);
+    setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false);
+    alert("Admin password updated successfully!");
   };
 
   useEffect(() => {
@@ -246,16 +194,7 @@ export default function App() {
           <img src="/logo.png" alt="Logo" className="w-40 h-40 mx-auto mb-1 object-contain" />
           <h1 className="text-base font-bold text-gray-500 mb-10 tracking-tight">Inventory Manager</h1>
           <div className="space-y-3">
-            {/* --- UPDATED DYNAMIC REDIRECT --- */}
-            <button 
-              onClick={() => supabase.auth.signInWithOAuth({ 
-                provider: 'google',
-                options: { redirectTo: window.location.origin }
-              })} 
-              className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black"
-            >
-              Google Login
-            </button>
+            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black">Google Login</button>
             <button onClick={() => setIsGuest(true)} className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100">Guest Mode</button>
           </div>
         </div>
@@ -266,48 +205,137 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 pt-16 pb-24 font-sans text-slate-900">
       <Header 
-        deviceName={deviceName} 
-        loading={loading} 
-        onLogout={handleLogout} 
-        onEditDeviceName={handleEditDeviceName} 
-        onLogoClick={() => setActiveTab('dashboard')}
-        onManualSync={syncOfflineData}
-        rolls={rolls}
-        materials={materials}
+        deviceName={deviceName} loading={loading} onLogout={handleLogout} 
+        onEditDeviceName={() => setShowSettings(true)} 
+        onLogoClick={() => setActiveTab('dashboard')} onManualSync={syncOfflineData}
+        rolls={rolls} materials={materials}
       />
       
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={(roll) => setPrintData(roll)} />}
-        {activeTab === 'stock' && <StockView rolls={rolls} onPrint={(roll) => setPrintData(roll)} onSelectRoll={(r) => setEditRoll({...r})} />}
+        {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={(roll) => setPrintData(roll)} onSelectRoll={(r) => setEditRoll({...r})} />}
         {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
-        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={fetchData} activeRange={activeRange} />}
+        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} isAdmin={isAdmin} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={fetchData} activeRange={activeRange} />}
         {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
 
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
       
+      {/* --- SYSTEM SETTINGS MODAL --- */}
+      {showSettings && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl relative border border-gray-100">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">System Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <label className="text-[10px] font-black text-gray-400 uppercase block mb-2">Terminal Details</label>
+                <input className="flex-1 w-full p-3 rounded-xl border border-slate-200 outline-none font-bold text-sm bg-white" value={deviceName} onChange={(e) => { setDeviceName(e.target.value); localStorage.setItem('ksf_device_name', e.target.value); }} />
+              </div>
+
+              {/* ADMIN OPTION CARD */}
+              <div className={`p-5 rounded-2xl border transition-all duration-300 ${isAdmin ? 'bg-green-50 border-green-100 shadow-inner' : 'bg-red-50 border-red-100 shadow-sm'}`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <ShieldAlert className={isAdmin ? "text-green-600" : "text-red-500"} size={18} />
+                  <span className={`text-[11px] font-black uppercase tracking-widest ${isAdmin ? "text-green-700" : "text-red-700"}`}>
+                    {isAdmin ? "Admin Access Active" : "Admin Restrictions"}
+                  </span>
+                </div>
+
+                {!isAdmin ? (
+                  <button 
+                    onClick={() => setShowAdminLogin(true)}
+                    className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-100 active:scale-95 transition-all"
+                  >
+                    Enter Admin Mode
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <button 
+                      onClick={handleExitAdmin}
+                      className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"
+                    >
+                      <LogOut size={16} /> Exit Admin Mode
+                    </button>
+                    <button 
+                      onClick={() => setIsChangingPass(true)}
+                      className="w-full py-3 border-2 border-dashed border-green-200 text-green-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-green-100/50"
+                    >
+                      <KeyRound size={14} /> Change Password
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- POPUP: ADMIN LOGIN --- */}
+      {showAdminLogin && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
+            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Enter Admin Password</h3>
+            <input 
+              autoFocus type="password" placeholder="Password" 
+              className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all"
+              value={passInput} onChange={e => setPassInput(e.target.value)}
+              onKeyPress={e => e.key === 'Enter' && handleAdminLogin()}
+            />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
+              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase">Unlock</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- POPUP: CHANGE PASSWORD --- */}
+      {isChangingPass && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
+            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><KeyRound size={14}/> Update Security Key</h3>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <span className="text-[8px] font-bold text-slate-400 uppercase ml-1 tracking-widest">Current Key</span>
+                <input 
+                  type="password" placeholder="Enter Current" 
+                  className="w-full p-3 rounded-xl border bg-slate-50 outline-none font-bold text-sm"
+                  value={verifyOldPassInput} onChange={e => setVerifyOldPassInput(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <span className="text-[8px] font-bold text-slate-400 uppercase ml-1 tracking-widest">New Secret Key</span>
+                <input 
+                  type="password" placeholder="Enter New" 
+                  className="w-full p-3 rounded-xl border bg-slate-50 outline-none font-bold text-sm"
+                  value={newPassInput} onChange={e => setNewPassInput(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button onClick={() => { setIsChangingPass(false); setVerifyOldPassInput(''); setNewPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
+              <button onClick={handleChangePassword} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-green-100">Save Key</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {editRoll && (
         <EditModal 
-          roll={editRoll} 
-          onClose={() => setEditRoll(null)} 
-          onSave={async (updated) => {
-            setEditRoll(null);
-            await handleLocalSave(updated);
-          }} 
+          roll={editRoll} isAdmin={isAdmin} onClose={() => setEditRoll(null)} 
+          onSave={async (updated) => { setEditRoll(null); await handleLocalSave(updated); }} 
           onDelete={async (productId) => {
-            if (isDeleting.current) return;
-            isDeleting.current = true;
-            setEditRoll(null);
+            if (isDeleting.current) return; isDeleting.current = true; setEditRoll(null);
             try {
               await db.rolls.where('product_id').equals(productId).delete();
-              if (navigator.onLine) {
-                await supabase.from('rolls').delete().eq('product_id', productId);
-              }
+              if (navigator.onLine) await supabase.from('rolls').delete().eq('product_id', productId);
               await fetchData();
-            } finally {
-              isDeleting.current = false;
-            }
+            } finally { isDeleting.current = false; }
           }}
         />
       )}
