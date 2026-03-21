@@ -60,8 +60,6 @@ export default function App() {
         .from('rolls')
         .upsert(dataToUpload, { onConflict: 'product_id' });
       
-      // FIX: If no error OR if it's a conflict error (23505), mark as synced.
-      // This prevents rolls already in the cloud from staying 'Pending' locally.
       if (!error || error.code === '23505' || error.message?.includes('already exists')) {
         await db.rolls.update(roll.product_id, { synced: 1 });
         console.log(`Synced: ${roll.product_id}`);
@@ -146,7 +144,7 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // --- 5. DATA FETCH (With Auto-Reconciliation) ---
+  // --- 5. DATA FETCH ---
   const fetchData = useCallback(async () => {
     const cachedRolls = await db.rolls.toArray();
     if (cachedRolls.length > 0) {
@@ -175,7 +173,6 @@ export default function App() {
       }
       
       if (allRemoteData.length > 0) {
-        // RECONCILIATION: Check if any local 'pending' rolls are actually already in the cloud
         const unsynced = await db.rolls.where('synced').equals(0).toArray();
         const unsyncedIds = new Set(unsynced.map(r => r.product_id));
 
@@ -249,7 +246,16 @@ export default function App() {
           <img src="/logo.png" alt="Logo" className="w-40 h-40 mx-auto mb-1 object-contain" />
           <h1 className="text-base font-bold text-gray-500 mb-10 tracking-tight">Inventory Manager</h1>
           <div className="space-y-3">
-            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black">Google Login</button>
+            {/* --- UPDATED DYNAMIC REDIRECT --- */}
+            <button 
+              onClick={() => supabase.auth.signInWithOAuth({ 
+                provider: 'google',
+                options: { redirectTo: window.location.origin }
+              })} 
+              className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black"
+            >
+              Google Login
+            </button>
             <button onClick={() => setIsGuest(true)} className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100">Guest Mode</button>
           </div>
         </div>
