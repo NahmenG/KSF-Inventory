@@ -3,11 +3,10 @@ import { Truck, Camera, CheckCircle, X, Trash2, FileSpreadsheet, ChevronDown } f
 import { Html5Qrcode } from 'html5-qrcode';
 import * as XLSX from 'xlsx';
 
-// UPDATED QUALITY LIST FOR DISPATCH VERIFICATION
-const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
+// UPDATED QUALITY LIST
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
-// --- INTERNAL GATE PASS GENERATOR ---
 const generateChallanExcel = (rolls, details) => {
   try {
     const header = [
@@ -18,27 +17,13 @@ const generateChallanExcel = (rolls, details) => {
       [],
       ["Sr No", "Roll ID", "Quality", "Color", "Size (in)", "GSM", "Length (m)", "Gross (kg)", "Net (kg)"]
     ];
-
     const body = rolls.map((r, i) => [
-      i + 1,
-      r.product_id,
-      r.quality,
-      r.color,
-      r.width_inches,
-      r.gsm,
-      r.length_meters,
-      parseFloat(r.gross_weight) || 0,
-      parseFloat(r.net_weight) || 0
+      i + 1, r.product_id, r.quality, r.color, r.width_inches, r.gsm, r.length_meters,
+      parseFloat(r.gross_weight) || 0, parseFloat(r.net_weight) || 0
     ]);
-
     const totalNet = rolls.reduce((sum, r) => sum + (parseFloat(r.net_weight) || 0), 0);
     const totalGross = rolls.reduce((sum, r) => sum + (parseFloat(r.gross_weight) || 0), 0);
-
-    const footer = [
-      [],
-      ["", "", "", "", "", "", "TOTALS:", totalGross.toFixed(2), totalNet.toFixed(2)]
-    ];
-
+    const footer = [[], ["", "", "", "", "", "", "TOTALS:", totalGross.toFixed(2), totalNet.toFixed(2)]];
     const finalData = [...header, ...body, ...footer];
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(finalData);
@@ -50,7 +35,6 @@ const generateChallanExcel = (rolls, details) => {
   } catch (err) { alert("Excel Error: " + err.message); return false; }
 };
 
-// --- BARCODE SCANNER ---
 const BarcodeScanner = ({ onScan, onClose }) => {
   useEffect(() => {
     const html5QrCode = new Html5Qrcode("reader");
@@ -69,6 +53,7 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const [scanId, setScanId] = useState('');
   const [reviewData, setReviewData] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // NEW: Prevent double dispatch
   const [sessionList, setSessionList] = useState(() => JSON.parse(localStorage.getItem('ksf_dispatch_list_v12') || '[]'));
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer_v11') || '');
   const [vehicleNo, setVehicleNo] = useState(() => localStorage.getItem('ksf_dispatch_vehicle_v11') || '');
@@ -81,64 +66,84 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
 
   const handlePopupValueChange = (field, value) => {
     const updated = { ...reviewData, [field]: value };
-    if (field === 'width_inches' || field === 'gross_weight') {
+    if (field === 'width_inches' || field === 'gross_weight' || field === 'quality') {
       const w = parseFloat(field === 'width_inches' ? value : reviewData.width_inches);
       const g = parseFloat(field === 'gross_weight' ? value : reviewData.gross_weight);
-      if (!isNaN(w) && !isNaN(g) && w > 0) updated.net_weight = (g - (w / 63)).toFixed(2);
+      const q = field === 'quality' ? value : reviewData.quality;
+      
+      if (!isNaN(w) && !isNaN(g) && w > 0) {
+        // BOPP uses a 3kg core per 63 inches, others use 1kg
+        const coreFactor = q === 'BOPP Fabric' ? 3 : 1;
+        updated.net_weight = (g - (coreFactor * w / 63)).toFixed(2);
+      }
     }
     setReviewData(updated);
   };
 
   const handleSearch = (idToSearch) => {
-    const query = idToSearch || scanId;
+    const query = (idToSearch || scanId || '').trim();
     if (!query) return;
+    
+    // Check if already in current manifest list
+    if (sessionList.some(r => r.product_id.toUpperCase() === query.toUpperCase())) {
+      alert("This roll is already in the manifest list!");
+      setScanId('');
+      return;
+    }
+
     const roll = rolls.find(r => r.product_id.toUpperCase() === query.toUpperCase() && r.status === 'in_stock');
     if (roll) {
-      if (sessionList.some(r => r.product_id === roll.product_id)) return alert("Already in manifest!");
       setReviewData({ ...roll });
-    } else { alert('Roll not found or already dispatched.'); }
+    } else {
+      alert('Roll not found or already dispatched.');
+    }
     setScanId('');
   };
 
   const handleConfirmDispatch = async () => {
-    if (!reviewData) return;
+    if (!reviewData || isProcessing) return;
+    
+    // CRITICAL: Double check if another click added this already
+    if (sessionList.some(r => r.product_id === reviewData.product_id)) {
+      setReviewData(null);
+      return;
+    }
+
+    setIsProcessing(true); // Lock the button immediately
     try {
       const updatedRoll = {
         ...reviewData,
         status: 'dispatched',
         dispatched_at: new Date().toISOString(),
-        dispatched_by: deviceName,
+        dispatched_by_device: deviceName,
         synced: 0
       };
       await onDispatch(updatedRoll);
       setSessionList(prev => [updatedRoll, ...prev]);
       setReviewData(null);
-    } catch (e) { alert("Action Failed. Please try again."); }
+    } catch (e) {
+      alert("Action Failed. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRemoveFromManifest = async (item) => {
-    if (confirm("Return to stock?")) {
+    if (confirm(`Return Roll ${item.product_id} to stock?`)) {
       const returned = { ...item, status: 'in_stock', dispatched_at: null, synced: 0 };
       await onDispatch(returned);
       setSessionList(sessionList.filter(r => r.product_id !== item.product_id));
     }
   };
 
-  // UPDATED: Function to clear everything after Excel generation
   const handleFinalizeGatePass = () => {
     if (sessionList.length === 0) return alert("Manifest is empty.");
-    
-    const success = generateChallanExcel(sessionList, { 
-      buyer: customerName, 
-      vehicle: vehicleNo 
-    });
-    
+    const success = generateChallanExcel(sessionList, { buyer: customerName, vehicle: vehicleNo });
     if (success) {
       if (confirm("Gate Pass Generated. Clear manifest and start new load?")) {
         setSessionList([]);
         setCustomerName('');
         setVehicleNo('');
-        // Clear storage to prevent data coming back on refresh
         localStorage.removeItem('ksf_dispatch_list_v12');
         localStorage.removeItem('ksf_dispatch_customer_v11');
         localStorage.removeItem('ksf_dispatch_vehicle_v11');
@@ -153,40 +158,38 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
       <div className="bg-blue-600 p-4 rounded-2xl text-white shadow-lg">
         <h3 className="font-black text-xs uppercase tracking-widest mb-3 flex items-center gap-2">Manifest Details</h3>
         <div className="grid grid-cols-2 gap-2">
-          <input className="w-full p-3 rounded-xl text-black font-bold text-sm outline-none" placeholder="Buyer" value={customerName} onChange={e => setCustomerName(e.target.value)} />
-          <input className="w-full p-3 rounded-xl text-black font-bold text-sm outline-none" placeholder="Vehicle #" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
+          <input className="w-full p-3 rounded-xl text-black font-bold text-sm outline-none" placeholder="Buyer Name" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+          <input className="w-full p-3 rounded-xl text-black font-bold text-sm outline-none" placeholder="Vehicle Number" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
         </div>
       </div>
 
       <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 text-center">
         <div className="flex gap-2 mb-4">
           <input className="flex-1 border-2 border-gray-100 p-4 rounded-2xl text-center font-mono focus:border-blue-500 outline-none font-bold" placeholder="ID (Scan/Type)" value={scanId} onChange={e => setScanId(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} />
-          <button onClick={() => setIsScanning(true)} className="bg-slate-900 text-white p-4 rounded-2xl"><Camera size={24} /></button>
+          <button onClick={() => setIsScanning(true)} className="bg-slate-900 text-white p-4 rounded-2xl active:scale-95 transition-all"><Camera size={24} /></button>
         </div>
-        <button onClick={() => handleSearch()} className="bg-blue-600 text-white w-full py-5 rounded-2xl font-black shadow-lg shadow-blue-100 active:scale-95 transition-all">IDENTIFY ROLL</button>
+        <button onClick={() => handleSearch()} className="bg-blue-600 text-white w-full py-5 rounded-2xl font-black shadow-lg shadow-blue-100 active:scale-95 transition-all uppercase tracking-widest">Identify Roll</button>
       </div>
 
       {reviewData && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-          <div className="bg-white p-6 rounded-[2.5rem] w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white p-6 rounded-[2.5rem] w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl relative">
             <div className="flex justify-between items-center mb-4 border-b pb-3">
-              <h3 className="font-black text-blue-600 uppercase tracking-tight">Verify & Edit</h3>
-              <button onClick={() => setReviewData(null)}><X size={24}/></button>
+              <h3 className="font-black text-blue-600 uppercase tracking-tight">Dispatch Verification</h3>
+              <button onClick={() => setReviewData(null)} className="p-1 hover:bg-gray-100 rounded-full"><X size={24}/></button>
             </div>
             
             <div className="space-y-4">
-              <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Buyer Name</label>
-              <input className="w-full p-3 bg-slate-50 border rounded-2xl font-bold" value={reviewData.customer_name} onChange={e => handlePopupValueChange('customer_name', e.target.value)} /></div>
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Buyer Name</label>
+                <input className="w-full p-3 bg-slate-50 border rounded-2xl font-bold" value={reviewData.customer_name} onChange={e => handlePopupValueChange('customer_name', e.target.value)} />
+              </div>
               
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Quality</label>
                   <div className="relative">
-                    <select 
-                      className="w-full p-3 border rounded-2xl font-bold bg-white outline-none appearance-none" 
-                      value={reviewData.quality} 
-                      onChange={e => handlePopupValueChange('quality', e.target.value)}
-                    >
+                    <select className="w-full p-3 border rounded-2xl font-bold bg-white outline-none appearance-none" value={reviewData.quality} onChange={e => handlePopupValueChange('quality', e.target.value)}>
                       {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
                     </select>
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -195,11 +198,7 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Color</label>
                   <div className="relative">
-                    <select 
-                      className="w-full p-3 border rounded-2xl font-bold bg-white outline-none appearance-none" 
-                      value={reviewData.color} 
-                      onChange={e => handlePopupValueChange('color', e.target.value)}
-                    >
+                    <select className="w-full p-3 border rounded-2xl font-bold bg-white outline-none appearance-none" value={reviewData.color} onChange={e => handlePopupValueChange('color', e.target.value)}>
                       {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -214,14 +213,16 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-2">
-                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Gross (kg)</label>
-                <input type="number" step="0.01" className="w-full p-4 border rounded-2xl font-black text-lg bg-slate-50" value={reviewData.gross_weight} onChange={e => handlePopupValueChange('gross_weight', e.target.value)} /></div>
-                <div><label className="text-[10px] font-black text-blue-600 uppercase ml-2">Net (kg)</label>
-                <input type="number" step="0.01" className="w-full p-4 border-2 border-blue-100 rounded-2xl font-black text-lg text-blue-700 bg-blue-50" value={reviewData.net_weight} readOnly /></div>
+                <div><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Gross (kg)</label><input type="number" step="0.01" className="w-full p-4 border rounded-2xl font-black text-lg bg-slate-50" value={reviewData.gross_weight} onChange={e => handlePopupValueChange('gross_weight', e.target.value)} /></div>
+                <div><label className="text-[10px] font-black text-blue-600 uppercase ml-2">Net (kg)</label><input type="number" step="0.01" className="w-full p-4 border-2 border-blue-100 rounded-2xl font-black text-lg text-blue-700 bg-blue-50" value={reviewData.net_weight} readOnly /></div>
               </div>
 
-              <button onClick={handleConfirmDispatch} className="w-full bg-green-600 text-white py-5 rounded-[1.5rem] font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
-                <CheckCircle size={20} /> ADD TO MANIFEST
+              <button 
+                onClick={handleConfirmDispatch} 
+                disabled={isProcessing}
+                className={`w-full py-5 rounded-[1.5rem] font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all ${isProcessing ? 'bg-gray-400' : 'bg-green-600 text-white'}`}
+              >
+                {isProcessing ? 'Processing...' : <><CheckCircle size={20} /> Add to Manifest</>}
               </button>
             </div>
           </div>
@@ -235,17 +236,19 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
             <span>Total: {sessionList.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0).toFixed(1)} kg</span>
           </div>
           <div className="max-h-64 overflow-y-auto">
-            {sessionList.map((item, i) => (
-              <div key={i} className="p-4 border-b flex justify-between items-center hover:bg-slate-50">
-                <div><div className="font-black text-gray-800">{item.product_id}</div>
-                <div className="text-[10px] font-bold text-gray-400 uppercase">{item.quality} • {item.net_weight}kg</div></div>
-                <button onClick={() => handleRemoveFromManifest(item)} className="text-red-400 p-2"><Trash2 size={20}/></button>
+            {sessionList.map((item) => (
+              <div key={item.product_id} className="p-4 border-b flex justify-between items-center hover:bg-slate-50">
+                <div>
+                  <div className="font-black text-gray-800">{item.product_id}</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase">{item.quality} • {item.net_weight}kg</div>
+                </div>
+                <button onClick={() => handleRemoveFromManifest(item)} className="text-red-400 p-2 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={20}/></button>
               </div>
             ))}
           </div>
           <div className="p-4">
              <button onClick={handleFinalizeGatePass} className="w-full bg-green-700 text-white py-5 rounded-2xl font-black flex justify-center gap-2 items-center shadow-lg active:scale-95 transition-all">
-                <FileSpreadsheet size={20} /> GENERATE GATE PASS
+                <FileSpreadsheet size={20} /> Generate Gate Pass
              </button>
              <button onClick={() => { if(confirm("Clear current list?")) { setSessionList([]); setCustomerName(''); setVehicleNo(''); } }} className="w-full mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Clear Manifest</button>
           </div>
