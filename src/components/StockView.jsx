@@ -4,10 +4,10 @@ import * as XLSX from 'xlsx';
 
 /**
  * StockView Component
- * Manages the "In Stock" inventory with BOPP Fabric support, 
- * persistent search states, and detailed Excel reporting.
+ * Manages the "In Stock" inventory with BOPP & Laminated Fabric support, 
+ * persistent search states, and Admin-aware UI.
  */
-const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
+const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
   // 1. STATE PERSISTENCE LOGIC
   const [filters, setFilters] = useState(() => {
     const saved = localStorage.getItem('ksf_stock_filters');
@@ -33,18 +33,17 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
     localStorage.setItem('ksf_stock_filters', JSON.stringify(filters));
   }, [filters]);
 
-// 2. DYNAMIC DROPDOWN DATA EXTRACTION
-    const uniqueQualities = useMemo(() => {
-    // We hardcode the master list to ensure BOPP is always an option
-    const masterQualities = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
+  // 2. DYNAMIC DROPDOWN DATA EXTRACTION
+  const uniqueQualities = useMemo(() => {
+    // Master list updated to include Laminated Fabric
+    const masterQualities = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
     const currentQualities = rolls
       .filter(r => r.status === 'in_stock')
       .map(r => r.quality)
       .filter(Boolean);
     
-    // Merge both lists and remove duplicates
     return [...new Set([...masterQualities, ...currentQualities])].sort();
-    }, [rolls]);
+  }, [rolls]);
 
   const uniqueColors = useMemo(() => {
     const colors = rolls
@@ -78,7 +77,6 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
   }, [rolls, filters, sort]);
 
   // 4. COMPREHENSIVE EXCEL EXPORT
-  // Updated to ensure Length and Gross Weight are accurately exported
   const handleExport = () => {
     const data = filtered.map(r => ({
       "Roll ID": r.product_id,
@@ -122,7 +120,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
           )}
 
           <h3 className="text-[9px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-1 mb-2">
-            <Filter size={12} /> Stock Search Panel
+            <Filter size={12} /> Stock Search Panel {isAdmin && <span className="ml-2 text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Admin View</span>}
           </h3>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
@@ -223,7 +221,7 @@ const StockView = React.memo(({ rolls, onPrint, onSelectRoll }) => {
             <div 
               key={r.id} 
               onClick={() => onSelectRoll(r)} 
-              className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200 cursor-pointer group"
+              className={`bg-white p-4 rounded-2xl border flex justify-between items-center active:scale-[0.98] transition-all shadow-sm cursor-pointer group ${isAdmin ? 'hover:border-green-300 border-gray-100' : 'hover:border-blue-200 border-gray-100'}`}
             >
               <div className="flex-1">
                 <div className="font-black text-blue-600 text-lg flex items-center gap-2">
