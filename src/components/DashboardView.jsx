@@ -1,6 +1,10 @@
-import React, { useMemo } from 'react';
-import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, RotateCcw } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
+import React, { useMemo, useState } from 'react';
+import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Settings2 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+
+// NEW: Import the costing components
+import RateCalculator from './RateCalculator';
+import MarketRatesModal from './MarketRatesModal';
 
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#fb7185', '#2dd4bf'];
 
@@ -20,7 +24,8 @@ const abbreviateColor = (name) => {
     .replace(/Colour Change/gi, 'CC');
 };
 
-const DashboardView = React.memo(({ rolls, materials }) => {
+const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
+  const [showRateModal, setShowRateModal] = useState(false);
   const todayDate = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
   
@@ -48,13 +53,11 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         }
       }
 
-      // Today's Logic
       if (rDateStr === todayStr) producedToday.push(r);
       if (r.status === 'dispatched' && r.dispatched_at) {
         if (new Date(r.dispatched_at).toLocaleDateString() === todayStr) dispatchedToday.push(r);
       }
 
-      // Monthly Timeline logic
       if (rDate >= startOfMonth) {
         if (!dateMap[rDateStr]) dateMap[rDateStr] = { p: 0, d: 0, pw: 0, dw: 0 };
         dateMap[rDateStr].p += 1;
@@ -89,7 +92,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
   }, [processedData.dateMap, todayDate]);
 
-  // FIXED: Recent Activity Sorting (Newest DISPATCH or PRODUCTION at top)
   const recentActivity = useMemo(() => {
     return [...rolls]
       .sort((a, b) => {
@@ -97,15 +99,13 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         const timeB = new Date(b.dispatched_at || b.created_at).getTime();
         return timeB - timeA;
       })
-      .slice(0, 8) // Increased to show more recent actions
+      .slice(0, 8)
       .map(r => {
         let type = "Produced", icon = <PlusCircle size={14} className="text-green-500" />;
-        
         if (r.status === 'dispatched') { 
           type = "Dispatched"; 
           icon = <Send size={14} className="text-blue-500" />; 
         } else {
-          // Check if it was edited by comparing updated_at (if available in your DB)
           const created = new Date(r.created_at).getTime();
           const updated = new Date(r.updated_at || r.created_at).getTime();
           if (Math.abs(updated - created) > 10000) {
@@ -113,7 +113,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
             icon = <Edit3 size={14} className="text-orange-500" />;
           }
         }
-        
         return { ...r, type, icon };
       });
   }, [rolls]);
@@ -123,18 +122,25 @@ const DashboardView = React.memo(({ rolls, materials }) => {
     return Object.entries(c).map(([name, w]) => ({ name: `${name} (${(w/1000).toFixed(2)}T)`, value: w }));
   }, [processedData.inStock]);
 
-  const colorData = useMemo(() => {
-    const c = {}; processedData.inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
-    return Object.entries(c).map(([n, w]) => ({ name: abbreviateColor(n), weight: parseFloat(w.toFixed(1)) }))
-      .sort((a, b) => b.weight - a.weight).slice(0, 10);
-  }, [processedData.inStock]);
-
   const weightKg = processedData.inStock.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
 
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* STAT CARDS */}
+      {/* 1. RATE CALCULATOR CARD (TOP PRIORITY) */}
+      <RateCalculator />
+
+      {/* 2. ADMIN: MARKET RATE UPDATE BUTTON */}
+      {isAdmin && (
+        <button 
+          onClick={() => setShowRateModal(true)}
+          className="w-full py-4 bg-white border-2 border-dashed border-blue-200 text-blue-600 rounded-[2rem] font-black text-[10px] uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+        >
+          <Settings2 size={14} /> Update Market Material Rates
+        </button>
+      )}
+
+      {/* 3. STAT CARDS */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-green-500 border border-gray-100">
           <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today Production</div>
@@ -146,7 +152,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* STOCK TOTALS */}
+      {/* 4. STOCK TOTALS */}
       <div className="bg-slate-900 text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-white/10">
         <div className="text-center">
           <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">In Stock</div>
@@ -159,7 +165,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* PERFORMANCE CHART */}
+      {/* 5. PERFORMANCE CHART */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <BarChart3 size={16} className="text-blue-600"/> Monthly Activity
@@ -171,8 +177,6 @@ const DashboardView = React.memo(({ rolls, materials }) => {
               <XAxis dataKey="date" fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
               <YAxis fontSize={9} axisLine={false} tickLine={false} />
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} 
-                formatter={(val) => val === 'Produced' ? `P (${totalProdMonth}T)` : `D (${totalDispMonth}T)`} />
               <Bar dataKey="Produced" fill="#22c55e" radius={[4, 4, 0, 0]} />
               <Bar dataKey="Dispatched" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -180,7 +184,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* RECENT ACTIVITY */}
+      {/* 6. RECENT ACTIVITY */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
@@ -206,7 +210,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* QUALITY BREAKDOWN */}
+      {/* 7. QUALITY BREAKDOWN */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <PieIcon size={16} className="text-blue-600"/> Quality Mix
@@ -224,7 +228,15 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* AGED STOCK */}
+      {/* MODAL RENDER */}
+      {showRateModal && (
+        <MarketRatesModal 
+          onClose={() => setShowRateModal(false)}
+          onUpdate={fetchData} 
+        />
+      )}
+
+      {/* 8. AGED STOCK */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-red-50/50 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
@@ -242,7 +254,7 @@ const DashboardView = React.memo(({ rolls, materials }) => {
         </div>
       </div>
 
-      {/* SHORTAGE ALERTS */}
+      {/* 9. SHORTAGE ALERTS */}
       {materials.filter(m => m.stock_quantity < m.min_level).length > 0 && (
         <div className="bg-white p-5 rounded-3xl border-l-8 border-red-500 shadow-sm border border-gray-100">
           <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-sm uppercase tracking-widest">
