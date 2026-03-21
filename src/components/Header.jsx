@@ -111,7 +111,7 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
               
-              {/* --- NEW ADMIN MODE ACCESS --- */}
+              {/* SECURITY & ADMIN SECTION */}
               <section>
                 <div className="flex items-center gap-2 mb-4 text-red-600">
                   <ShieldAlert size={16} />
@@ -120,12 +120,12 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
                 <button 
                   onClick={() => {
                     setShowSettings(false); // Close drawer
-                    onEditDeviceName();     // Open the Main Settings Modal for Password entry
+                    onEditDeviceName();     // Open the main System Settings Modal
                   }} 
                   className="w-full p-4 bg-red-50 rounded-2xl border border-red-100 text-left active:scale-95 transition-all"
                 >
-                  <span className="block text-[8px] text-red-400 font-black uppercase mb-1">Authorization</span>
-                  <span className="font-bold text-red-800 uppercase text-xs tracking-tight">Enter Admin Mode</span>
+                  <span className="block text-[8px] text-red-400 font-black uppercase mb-1">Configuration</span>
+                  <span className="font-bold text-red-800 uppercase text-xs tracking-tight">System Settings & Admin</span>
                 </button>
               </section>
 
@@ -135,7 +135,6 @@ export default function Header({ deviceName, loading, onLogout, onEditDeviceName
                   <Monitor size={16} />
                   <span className="text-[10px] font-black uppercase tracking-widest">Device Identity</span>
                 </div>
-                {/* Clicking this now also opens the main modal where rename + admin lives */}
                 <button onClick={() => { setShowSettings(false); onEditDeviceName(); }} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 text-left active:scale-95 transition-all">
                   <span className="block text-[8px] text-gray-400 font-black uppercase mb-1">Terminal Details</span>
                   <span className="font-bold text-gray-800">{deviceName}</span>
