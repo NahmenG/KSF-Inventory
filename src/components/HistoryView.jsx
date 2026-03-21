@@ -1,8 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Download, Clock, X, RefreshCw } from 'lucide-react';
+import { Download, Clock, X, RefreshCw, ChevronDown, Filter, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange }) => {
+/**
+ * HistoryView Component
+ * Manages historical records with date-range fetching, 
+ * BOPP/Laminated support, and Admin-aware UI.
+ */
+const HistoryView = React.memo(({ rolls, isAdmin, onSelectRoll, onFetchRange, activeRange }) => {
   // 1. STATE PERSISTENCE
   const [filters, setFilters] = useState(() => {
     const saved = localStorage.getItem('ksf_history_filters');
@@ -22,9 +27,10 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
     localStorage.setItem('ksf_history_filters', JSON.stringify(filters));
   }, [filters]);
 
-// 2. DATA EXTRACTION
+  // 2. DATA EXTRACTION
   const uniqueQualities = useMemo(() => {
-    const masterQualities = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric'];
+    // Added Laminated Fabric to the master list
+    const masterQualities = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
     const currentQualities = rolls.map(r => r.quality).filter(Boolean);
     
     return [...new Set([...masterQualities, ...currentQualities])].sort();
@@ -38,7 +44,6 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
   // 3. FILTERING
   const filtered = useMemo(() => {
     return rolls.filter(r => {
-      // Logic for Buyer Name or Product ID search
       const matchCustomer = !filters.customer || 
         (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
         r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
@@ -96,6 +101,10 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
           )}
 
           <div className="space-y-2">
+            <h3 className="text-[9px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-1 mb-1">
+              <Calendar size={12} /> History Filters {isAdmin && <span className="ml-2 text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Admin Mode</span>}
+            </h3>
+
             <div className="grid grid-cols-5 gap-1.5">
               <input 
                 className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none focus:ring-1 focus:ring-blue-200" 
@@ -103,14 +112,17 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
                 value={filters.customer} 
                 onChange={e => setFilters({...filters, customer: e.target.value})} 
               />
-              <select 
-                className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" 
-                value={filters.quality} 
-                onChange={e => setFilters({...filters, quality: e.target.value})}
-              >
-                <option value="">Quality</option>
-                {uniqueQualities.map(q => <option key={q} value={q}>{q}</option>)}
-              </select>
+              <div className="relative">
+                <select 
+                  className="w-full appearance-none border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" 
+                  value={filters.quality} 
+                  onChange={e => setFilters({...filters, quality: e.target.value})}
+                >
+                  <option value="">Quality</option>
+                  {uniqueQualities.map(q => <option key={q} value={q}>{q}</option>)}
+                </select>
+                <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
               <input 
                 type="number" 
                 className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" 
@@ -125,14 +137,17 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
                 value={filters.width} 
                 onChange={e => setFilters({...filters, width: e.target.value})} 
               />
-              <select 
-                className="border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" 
-                value={filters.color} 
-                onChange={e => setFilters({...filters, color: e.target.value})}
-              >
-                <option value="">Color</option>
-                {uniqueColors.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <div className="relative">
+                <select 
+                  className="w-full appearance-none border border-gray-100 p-2 rounded-xl text-[10px] font-bold bg-gray-50 outline-none" 
+                  value={filters.color} 
+                  onChange={e => setFilters({...filters, color: e.target.value})}
+                >
+                  <option value="">Color</option>
+                  {uniqueColors.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
             </div>
 
             <div className="grid grid-cols-4 gap-1.5 items-center">
@@ -190,7 +205,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
           <div 
             key={r.id} 
             onClick={() => onSelectRoll(r)} 
-            className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-all shadow-sm hover:border-blue-200 cursor-pointer"
+            className={`bg-white p-4 rounded-2xl border flex justify-between items-center active:scale-[0.98] transition-all shadow-sm cursor-pointer group ${isAdmin ? 'hover:border-green-300 border-gray-100' : 'hover:border-blue-200 border-gray-100'}`}
           >
             <div className="flex-1">
               <div className="font-black text-blue-600 text-lg flex items-center gap-2">
@@ -201,10 +216,10 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
               </div>
               <div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div>
               <div className="text-[10px] font-black mt-1 flex flex-wrap gap-2 items-center">
-                <span className="bg-slate-50 px-1.5 py-0.5 rounded text-gray-600 uppercase tracking-tighter">{r.quality}</span>
-                <span className="text-blue-500">{r.color}</span>
-                <span className="text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">{r.gsm} GSM</span>
-                <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">{r.width_inches}" Size</span>
+                <span className="bg-slate-50 px-1.5 py-0.5 rounded text-gray-600 uppercase tracking-tighter font-bold">{r.quality}</span>
+                <span className="text-blue-500 font-bold">{r.color}</span>
+                <span className="text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded uppercase tracking-tighter font-bold">{r.gsm} GSM</span>
+                <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-tighter font-bold">{r.width_inches}" Size</span>
               </div>
             </div>
             <div className="text-right flex flex-col items-end min-w-[100px]">
@@ -212,6 +227,7 @@ const HistoryView = React.memo(({ rolls, onSelectRoll, onFetchRange, activeRange
               <div className="text-[10px] font-bold text-gray-400 flex items-center gap-1 mt-2 uppercase tracking-tighter">
                  <Clock size={10} /> {new Date(r.dispatched_at || r.created_at).toLocaleDateString()}
               </div>
+              {isAdmin && <div className="mt-2 text-[7px] bg-green-50 text-green-600 px-2 py-0.5 rounded-full font-black uppercase border border-green-100">Editable</div>}
             </div>
           </div>
         ))}
