@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { X, Save, Trash2, ChevronDown } from 'lucide-react';
 
-// MASTER LISTS
+// MASTER LISTS - Ensure 'Laminated Fabric' is included
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
-export default function EditModal({ roll, onClose, onSave, onDelete }) {
+export default function EditModal({ roll, isAdmin, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState({ ...roll });
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -20,7 +20,7 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
       const q = field === 'quality' ? value : formData.quality;
       
       if (!isNaN(w) && !isNaN(g) && w > 0) {
-        // UPDATED: BOPP uses a 3kg core per 63 inches, others use 1kg per 63 inches
+        // BOPP uses a 3kg core per 63 inches, others use 1kg per 63 inches
         const coreFactor = q === 'BOPP Fabric' ? 3 : 1;
         updatedData.net_weight = (g - (coreFactor * w / 63)).toFixed(2);
       }
@@ -50,25 +50,27 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">Edit Roll Details</h2>
             <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">{roll.product_id}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white rounded-full text-gray-400"><X size={20} /></button>
+          <button onClick={onClose} className="p-2 hover:bg-white rounded-full text-gray-400 transition-colors"><X size={20} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto max-h-[75vh]">
+          {/* BUYER NAME */}
           <div className="space-y-1">
             <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Buyer Name</label>
             <input 
-              className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
               value={formData.customer_name}
               onChange={e => handleValueChange('customer_name', e.target.value)}
             />
           </div>
 
+          {/* QUALITY & COLOR */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Quality</label>
               <div className="relative">
                 <select 
-                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-500" 
+                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-500 transition-all" 
                   value={formData.quality} 
                   onChange={e => handleValueChange('quality', e.target.value)}
                 >
@@ -81,7 +83,11 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Color</label>
               <div className="relative">
-                <select className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-500" value={formData.color} onChange={e => handleValueChange('color', e.target.value)}>
+                <select 
+                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-500 transition-all" 
+                  value={formData.color} 
+                  onChange={e => handleValueChange('color', e.target.value)}
+                >
                   <option value="">Select...</option>
                   {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -90,6 +96,7 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             </div>
           </div>
 
+          {/* GSM, SIZE, LENGTH */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">GSM</label>
@@ -105,6 +112,7 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             </div>
           </div>
 
+          {/* WEIGHTS */}
           <div className="grid grid-cols-2 gap-4 pt-2">
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Gross Weight (kg)</label>
@@ -116,13 +124,26 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
             </div>
           </div>
 
+          {/* ACTION BUTTONS */}
           <div className="pt-4 space-y-3">
-            <button type="submit" className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg shadow-gray-200 active:scale-[0.98]">
+            <button 
+              type="submit" 
+              className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg shadow-gray-200 active:scale-[0.98]"
+            >
               <Save size={18} /> SAVE CHANGES
             </button>
-            <button type="button" onClick={handleDelete} disabled={isDeleting} className="w-full py-4 bg-red-50 text-red-600 rounded-[1.5rem] font-black text-xs flex items-center justify-center gap-2 hover:bg-red-100 border border-red-100 transition-all active:scale-[0.98] disabled:opacity-50 uppercase">
-              {isDeleting ? "DELETING..." : <><Trash2 size={16} /> Delete Roll Permanently</>}
-            </button>
+            
+            {/* STRICT ADMIN GUARD FOR DELETE BUTTON */}
+            {isAdmin === true && (
+              <button 
+                type="button" 
+                onClick={handleDelete} 
+                disabled={isDeleting} 
+                className="w-full py-4 bg-red-50 text-red-600 rounded-[1.5rem] font-black text-xs flex items-center justify-center gap-2 hover:bg-red-100 border border-red-100 transition-all active:scale-[0.98] disabled:opacity-50 uppercase"
+              >
+                {isDeleting ? "DELETING..." : <><Trash2 size={16} /> Delete Roll Permanently</>}
+              </button>
+            )}
           </div>
         </form>
       </div>
