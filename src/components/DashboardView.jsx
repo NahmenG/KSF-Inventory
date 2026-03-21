@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Settings2 } from 'lucide-react';
+import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Settings2, Calculator } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 // NEW: Import the costing components
@@ -127,20 +127,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
       
-      {/* 1. RATE CALCULATOR CARD (TOP PRIORITY) */}
-      <RateCalculator />
-
-      {/* 2. ADMIN: MARKET RATE UPDATE BUTTON */}
-      {isAdmin && (
-        <button 
-          onClick={() => setShowRateModal(true)}
-          className="w-full py-4 bg-white border-2 border-dashed border-blue-200 text-blue-600 rounded-[2rem] font-black text-[10px] uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
-        >
-          <Settings2 size={14} /> Update Market Material Rates
-        </button>
-      )}
-
-      {/* 3. STAT CARDS */}
+      {/* 1. STAT CARDS */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-green-500 border border-gray-100">
           <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today Production</div>
@@ -152,7 +139,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
-      {/* 4. STOCK TOTALS */}
+      {/* 2. STOCK TOTALS */}
       <div className="bg-slate-900 text-white rounded-[2rem] p-6 shadow-2xl flex justify-around items-center border border-white/10">
         <div className="text-center">
           <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">In Stock</div>
@@ -165,7 +152,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
-      {/* 5. PERFORMANCE CHART */}
+      {/* 3. PERFORMANCE CHART */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <BarChart3 size={16} className="text-blue-600"/> Monthly Activity
@@ -184,7 +171,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
-      {/* 6. RECENT ACTIVITY */}
+      {/* 4. RECENT ACTIVITY */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
@@ -210,7 +197,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
-      {/* 7. QUALITY BREAKDOWN */}
+      {/* 5. QUALITY BREAKDOWN */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <PieIcon size={16} className="text-blue-600"/> Quality Mix
@@ -228,15 +215,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
-      {/* MODAL RENDER */}
-      {showRateModal && (
-        <MarketRatesModal 
-          onClose={() => setShowRateModal(false)}
-          onUpdate={fetchData} 
-        />
-      )}
-
-      {/* 8. AGED STOCK */}
+      {/* 6. AGED STOCK */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-red-50/50 border-b flex items-center gap-2">
           <History size={16} className="text-red-500" />
@@ -254,7 +233,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
-      {/* 9. SHORTAGE ALERTS */}
+      {/* 7. SHORTAGE ALERTS */}
       {materials.filter(m => m.stock_quantity < m.min_level).length > 0 && (
         <div className="bg-white p-5 rounded-3xl border-l-8 border-red-500 shadow-sm border border-gray-100">
           <h3 className="font-black text-red-800 flex items-center gap-2 mb-3 text-sm uppercase tracking-widest">
@@ -269,6 +248,33 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
             ))}
           </div>
         </div>
+      )}
+
+      {/* --- MOVED: RATE CALCULATOR & ADMIN UPDATE (BOTTOM) --- */}
+      <div className="pt-6 border-t-2 border-slate-100 space-y-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Calculator size={18} className="text-blue-600" />
+          <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">Fabric Rate Calculator</h3>
+        </div>
+        
+        <RateCalculator />
+
+        {isAdmin && (
+          <button 
+            onClick={() => setShowRateModal(true)}
+            className="w-full py-4 bg-white border-2 border-dashed border-blue-200 text-blue-600 rounded-[2rem] font-black text-[10px] uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-95"
+          >
+            <Settings2 size={14} /> Update Market Material Rates
+          </button>
+        )}
+      </div>
+
+      {/* MODAL RENDER */}
+      {showRateModal && (
+        <MarketRatesModal 
+          onClose={() => setShowRateModal(false)}
+          onUpdate={fetchData} 
+        />
       )}
 
     </div>
