@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Package, Hash, User, Clock, RotateCcw, Loader, AlertTriangle, ChevronDown } from 'lucide-react';
 
-// ADDED 'Laminated Fabric' TO THE LIST
+// MASTER LISTS
 const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
@@ -41,15 +41,23 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // --- UPDATED VALUE CHANGE HANDLER WITH 3KG BOPP CORE LOGIC ---
   const handleValueChange = (field, value) => {
     const updatedData = { ...formData, [field]: value };
-    if (field === 'width_inches' || field === 'gross_weight') {
+    
+    // Trigger calculation if Width, Gross Weight, or Quality changes
+    if (field === 'width_inches' || field === 'gross_weight' || field === 'quality') {
       const w = parseFloat(field === 'width_inches' ? value : formData.width_inches);
       const g = parseFloat(field === 'gross_weight' ? value : formData.gross_weight);
+      const q = field === 'quality' ? value : formData.quality;
+      
       if (!isNaN(w) && !isNaN(g) && w > 0) {
-        updatedData.net_weight = (g - (w / 63)).toFixed(2);
+        // UPDATED: BOPP uses a 3kg core per 63 inches, others use 1kg per 63 inches
+        const coreFactor = q === 'BOPP Fabric' ? 3 : 1;
+        updatedData.net_weight = (g - (coreFactor * w / 63)).toFixed(2);
       }
     }
+    
     setFormData(updatedData);
     if (field === 'customer_name') setShowSuggestions(true);
     if (errorMsg) setErrorMsg('');
@@ -76,7 +84,7 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     const newRoll = { 
       product_id: fullId, 
       customer_name: String(formData.customer_name || 'Stock').trim(), 
-      quality: String(formData.quality || '').trim(), // ALLOWS BLANK
+      quality: String(formData.quality || '').trim(), 
       color: String(formData.color || 'White').trim(), 
       gsm: parseFloat(formData.gsm) || 0, 
       width_inches: parseFloat(formData.width_inches) || 0, 
@@ -182,7 +190,6 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
         <div>
           <label className="text-[11px] font-bold text-gray-400 uppercase mb-1 block">Quality</label>
           <div className="relative">
-            {/* REMOVED 'required' TO ALLOW BLANK */}
             <select className="w-full border p-3 rounded-xl bg-white outline-none appearance-none focus:ring-2 focus:ring-blue-100 font-semibold" value={formData.quality} onChange={e => handleValueChange('quality', e.target.value)}>
               <option value="">Select...</option>
               {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}

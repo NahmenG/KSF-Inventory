@@ -9,7 +9,7 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState({ ...roll });
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // --- UPDATED VALUE CHANGE HANDLER WITH BOPP CORE LOGIC ---
+  // --- UPDATED VALUE CHANGE HANDLER WITH 3KG BOPP CORE LOGIC ---
   const handleValueChange = (field, value) => {
     const updatedData = { ...formData, [field]: value };
     
@@ -20,8 +20,8 @@ export default function EditModal({ roll, onClose, onSave, onDelete }) {
       const q = field === 'quality' ? value : formData.quality;
       
       if (!isNaN(w) && !isNaN(g) && w > 0) {
-        // BOPP uses a 2kg core per 63 inches, others use 1kg per 63 inches
-        const coreFactor = q === 'BOPP Fabric' ? 2 : 1;
+        // UPDATED: BOPP uses a 3kg core per 63 inches, others use 1kg per 63 inches
+        const coreFactor = q === 'BOPP Fabric' ? 3 : 1;
         updatedData.net_weight = (g - (coreFactor * w / 63)).toFixed(2);
       }
     }
