@@ -1,67 +1,134 @@
 import React, { useState } from 'react';
-import { X, Save, Plus, Trash2 } from 'lucide-react';
-import { supabase } from '../supabaseClient';
+import { X, Save, Edit2 } from 'lucide-react';
 
-export default function BatchModal({ isAdmin, formulations, onClose, onUpdate }) {
-  const [localForm, setLocalForm] = useState(formulations);
+const BatchModal = ({ isOpen, onClose, isAdmin, initialData, onSave }) => {
+  const qualities = ['UV', 'Virgin', 'Fresh', 'Semi-Fresh', 'Semi', 'Semi-2', 'Semi-Star'];
+  const [activeTab, setActiveTab] = useState(qualities[0]);
+  const [editMode, setEditMode] = useState(false);
+  
+  // Local state for batch formulations organized by quality
+  const [formData, setFormData] = useState(initialData || {
+    'UV': [{ material: 'PP Granules', qty: 100 }, { material: 'UV Masterbatch', qty: 5 }],
+    'Virgin': [{ material: 'PP Granules', qty: 100 }],
+    'Fresh': [{ material: 'PP Granules', qty: 90 }, { material: 'Calcium MB', qty: 10 }],
+    'Semi-Fresh': [{ material: 'PP Granules', qty: 80 }, { material: 'Recycled RP', qty: 20 }],
+    'Semi': [{ material: 'PP Granules', qty: 60 }, { material: 'Recycled RP', qty: 40 }],
+    'Semi-2': [{ material: 'PP Granules', qty: 50 }, { material: 'Recycled RP', qty: 50 }],
+    'Semi-Star': [{ material: 'PP Granules', qty: 40 }, { material: 'Recycled RP', qty: 60 }],
+  });
 
-  const handleSave = async () => {
-    if (!isAdmin) return;
-    // Clears existing formulations and replaces with updated list
-    const { error } = await supabase.from('formulations').delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
-    if (!error) {
-      const { error: insErr } = await supabase.from('formulations').insert(
-        localForm.map(({quality_name, material_name, quantity_kg}) => ({ 
-          quality_name, 
-          material_name, 
-          quantity_kg: parseFloat(quantity_kg) 
-        }))
-      );
-      if (!insErr) { alert("Batch Formulations Updated!"); onUpdate(); onClose(); }
-    }
+  if (!isOpen) return null;
+
+  const handleInputChange = (quality, index, field, value) => {
+    const updatedData = { ...formData };
+    updatedData[quality][index][field] = field === 'qty' ? parseFloat(value) : value;
+    setFormData(updatedData);
+  };
+
+  const handleSave = () => {
+    onSave(formData);
+    setEditMode(false);
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in zoom-in-95">
-      <div className="bg-white w-full max-w-2xl rounded-[2.5rem] p-8 shadow-2xl relative border border-slate-100">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-black uppercase text-slate-900">Batch Formulation (Qty)</h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full"><X/></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl overflow-hidden">
+        {/* Header */}
+        <div className="bg-slate-800 p-4 flex justify-between items-center">
+          <h2 className="text-white font-bold text-lg">Batch Formulations</h2>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <button 
+                onClick={() => editMode ? handleSave() : setEditMode(true)}
+                className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md flex items-center gap-2 transition-colors"
+              >
+                {editMode ? <><Save size={18} /> Save</> : <><Edit2 size={18} /> Edit Mode</>}
+              </button>
+            )}
+            <button onClick={onClose} className="text-white hover:text-gray-300">
+              <X size={24} />
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 mb-6">
-          <div className="grid grid-cols-3 gap-2 px-3 text-[9px] font-black text-slate-400 uppercase">
-            <span>Quality Name</span>
-            <span>Raw Material</span>
-            <span>Quantity (KG)</span>
-          </div>
-          {localForm.map((f, i) => (
-            <div key={i} className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-3 rounded-2xl">
-              <input disabled={!isAdmin} className="bg-white px-3 py-2 rounded-xl text-xs font-black outline-none border border-slate-100 focus:border-blue-500" value={f.quality_name} onChange={e => { let n = [...localForm]; n[i].quality_name = e.target.value; setLocalForm(n); }} />
-              <input disabled={!isAdmin} className="bg-white px-3 py-2 rounded-xl text-xs font-bold outline-none border border-slate-100 focus:border-blue-500" value={f.material_name} onChange={e => { let n = [...localForm]; n[i].material_name = e.target.value; setLocalForm(n); }} />
-              <div className="flex items-center gap-2">
-                <input type="number" disabled={!isAdmin} className="w-full bg-white px-3 py-2 rounded-xl text-xs font-black text-blue-600 outline-none border border-slate-100 focus:border-blue-500" value={f.quantity_kg} onChange={e => { let n = [...localForm]; n[i].quantity_kg = e.target.value; setLocalForm(n); }} />
-                {isAdmin && <button onClick={() => setLocalForm(localForm.filter((_, idx) => idx !== i))} className="text-red-400 hover:bg-red-50 p-1 rounded-md"><Trash2 size={14}/></button>}
-              </div>
-            </div>
+        {/* Quality Tabs */}
+        <div className="flex border-b overflow-x-auto bg-gray-50">
+          {qualities.map((q) => (
+            <button
+              key={q}
+              onClick={() => setActiveTab(q)}
+              className={`px-4 py-3 text-sm font-semibold whitespace-nowrap transition-colors ${
+                activeTab === q 
+                ? 'border-b-2 border-blue-600 text-blue-600 bg-white' 
+                : 'text-gray-500 hover:text-blue-500'
+              }`}
+            >
+              {q}
+            </button>
           ))}
-          {isAdmin && (
-            <button onClick={() => setLocalForm([...localForm, { quality_name: 'New Quality', material_name: 'New Material', quantity_kg: 0 }])} className="w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors">
-              <Plus size={14}/> Add New Batch Row
+        </div>
+
+        {/* Content Table */}
+        <div className="p-6 max-h-[60vh] overflow-y-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b-2 border-gray-200">
+                <th className="py-2 font-bold text-gray-700">Raw Material</th>
+                <th className="py-2 font-bold text-gray-700 w-32 text-right">Quantity (kg)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {formData[activeTab].map((item, idx) => (
+                <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3">
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={item.material}
+                        onChange={(e) => handleInputChange(activeTab, idx, 'material', e.target.value)}
+                        className="w-full border rounded px-2 py-1 focus:outline-blue-500"
+                      />
+                    ) : (
+                      <span className="text-gray-800">{item.material}</span>
+                    )}
+                  </td>
+                  <td className="py-3 text-right">
+                    {editMode ? (
+                      <input
+                        type="number"
+                        value={item.qty}
+                        onChange={(e) => handleInputChange(activeTab, idx, 'qty', e.target.value)}
+                        className="w-24 border rounded px-2 py-1 text-right focus:outline-blue-500"
+                      />
+                    ) : (
+                      <span className="font-mono font-medium">{item.qty}</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          
+          {editMode && (
+            <button 
+              onClick={() => {
+                const updated = {...formData};
+                updated[activeTab].push({ material: '', qty: 0 });
+                setFormData(updated);
+              }}
+              className="mt-4 text-sm text-blue-600 font-bold hover:underline"
+            >
+              + Add Material to {activeTab}
             </button>
           )}
         </div>
 
-        {isAdmin ? (
-          <button onClick={handleSave} className="w-full py-5 bg-green-600 text-white rounded-2xl font-black shadow-xl hover:bg-green-700 active:scale-95 transition-all">
-            UPDATE FORMULATIONS
-          </button>
-        ) : (
-          <div className="text-center p-4 bg-amber-50 rounded-2xl border border-amber-100">
-            <p className="text-[10px] font-black text-amber-700 uppercase">View Only: Admin Mode Required to Edit</p>
-          </div>
-        )}
+        <div className="p-4 bg-gray-50 border-t text-right text-xs text-gray-400">
+          * Editing restricted to Authorized Admin Mode
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default BatchModal;
