@@ -195,7 +195,9 @@ export default function App() {
       />
       
       <main className="max-w-7xl mx-auto p-4 md:p-8">
+        {/* FIXED: PASSING isAdmin AND fetchData TO DashboardView */}
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} isAdmin={isAdmin} fetchData={fetchData} />}
+        
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={(roll) => setPrintData(roll)} />}
         {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={(roll) => setPrintData(roll)} onSelectRoll={(r) => setEditRoll({...r})} />}
         {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
@@ -212,7 +214,6 @@ export default function App() {
               <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Admin Mode Access</h2>
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
             </div>
-
             <div className="space-y-4">
               <div className={`p-5 rounded-2xl border transition-all duration-300 ${isAdmin ? 'bg-green-50 border-green-100 shadow-inner' : 'bg-red-50 border-red-100 shadow-sm'}`}>
                 <div className="flex items-center gap-2 mb-4">
@@ -221,13 +222,12 @@ export default function App() {
                     {isAdmin ? "Admin Access Active" : "Admin Restrictions"}
                   </span>
                 </div>
-
                 {!isAdmin ? (
                   <button onClick={() => setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-100 active:scale-95 transition-all">Enter Admin Mode</button>
                 ) : (
                   <div className="space-y-3">
                     <button onClick={handleExitAdmin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"><LogOut size={16} /> Exit Admin Mode</button>
-                    <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-green-200 text-green-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-green-100/50 transition-colors"><KeyRound size={14} /> Change Password</button>
+                    <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-green-200 text-green-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-green-100/50"><KeyRound size={14} /> Change Password</button>
                   </div>
                 )}
               </div>
@@ -242,8 +242,8 @@ export default function App() {
             <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Enter Admin Password</h3>
             <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400 hover:bg-slate-50 rounded-xl transition-colors">Cancel</button>
-              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center hover:bg-blue-700 transition-colors shadow-lg">Unlock</button>
+              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
+              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center">Unlock</button>
             </div>
           </div>
         </div>
@@ -258,8 +258,8 @@ export default function App() {
               <input type="password" placeholder="New Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold outline-none focus:border-blue-500" value={newPassInput} onChange={e => setNewPassInput(e.target.value)} />
             </div>
             <div className="flex gap-2 mt-6">
-              <button onClick={() => { setIsChangingPass(false); setVerifyOldPassInput(''); setNewPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400 hover:bg-slate-50 rounded-xl transition-colors">Cancel</button>
-              <button onClick={handleChangePassword} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-[10px] uppercase text-center hover:bg-green-700 transition-colors shadow-lg">Save</button>
+              <button onClick={() => { setIsChangingPass(false); setVerifyOldPassInput(''); setNewPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
+              <button onClick={handleChangePassword} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-[10px] uppercase text-center">Save</button>
             </div>
           </div>
         </div>
