@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Settings2, Calculator } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
-// NEW: Import the costing components
+// Components
 import RateCalculator from './RateCalculator';
 import MarketRatesModal from './MarketRatesModal';
 
@@ -29,7 +29,6 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
   const todayDate = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
   
-  // 1. MASTER DATA PROCESSOR
   const processedData = useMemo(() => {
     const inStock = [];
     const producedToday = [];
@@ -250,7 +249,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       )}
 
-      {/* --- MOVED: RATE CALCULATOR & ADMIN UPDATE (BOTTOM) --- */}
+      {/* --- RATE CALCULATOR AT THE BOTTOM --- */}
       <div className="pt-6 border-t-2 border-slate-100 space-y-4">
         <div className="flex items-center gap-2 mb-2">
           <Calculator size={18} className="text-blue-600" />
@@ -259,12 +258,13 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         
         <RateCalculator />
 
+        {/* FIXED ADMIN VISIBILITY */}
         {isAdmin && (
           <button 
             onClick={() => setShowRateModal(true)}
-            className="w-full py-4 bg-white border-2 border-dashed border-blue-200 text-blue-600 rounded-[2rem] font-black text-[10px] uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-95"
+            className="w-full py-5 bg-white border-2 border-dashed border-blue-200 text-blue-600 rounded-[2rem] font-black text-[11px] uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-sm"
           >
-            <Settings2 size={14} /> Update Market Material Rates
+            <Settings2 size={16} /> Update Market Material Rates
           </button>
         )}
       </div>

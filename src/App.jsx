@@ -59,8 +59,8 @@ export default function App() {
     if (passInput === adminPassword) {
       setIsAdmin(true);
       setPassInput('');
-      setShowAdminLogin(false); // Close Password Popup
-      setShowSettings(false);   // Close Admin Access Modal
+      setShowAdminLogin(false);
+      setShowSettings(false);
     } else {
       alert("Incorrect Admin Password");
     }
@@ -69,7 +69,7 @@ export default function App() {
   const handleExitAdmin = () => {
     setIsAdmin(false);
     setIsChangingPass(false);
-    setShowSettings(false); // Auto-close modal on exit
+    setShowSettings(false);
   };
 
   const handleChangePassword = () => {
@@ -79,11 +79,10 @@ export default function App() {
     setAdminPassword(newPassInput);
     localStorage.setItem('ksf_admin_password', newPassInput);
     setNewPassInput(''); setVerifyOldPassInput(''); 
-    setIsChangingPass(false); // Close password change popup
+    setIsChangingPass(false);
     alert("Admin password updated!");
   };
 
-  // --- RE-SYNC & DATA LOGIC (UNCHANGED) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     const unsyncedRolls = await db.rolls.where({ synced: 0 }).toArray();
@@ -197,7 +196,9 @@ export default function App() {
       />
       
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} />}
+        {/* FIXED PROPS HERE */}
+        {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} isAdmin={isAdmin} fetchData={fetchData} />}
+        
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={(roll) => setPrintData(roll)} />}
         {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={(roll) => setPrintData(roll)} onSelectRoll={(r) => setEditRoll({...r})} />}
         {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
@@ -207,18 +208,14 @@ export default function App() {
 
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
       
-      {/* --- ADMIN MODE ACCESS MODAL --- */}
       {showSettings && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl relative border border-gray-100">
             <div className="flex justify-between items-center mb-6">
-              {/* FIXED HEADING */}
               <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Admin Mode Access</h2>
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
             </div>
-
             <div className="space-y-4">
-              {/* ADMIN OPTION CARD - REMOVED TERMINAL DETAILS BLOCK */}
               <div className={`p-5 rounded-2xl border transition-all duration-300 ${isAdmin ? 'bg-green-50 border-green-100 shadow-inner' : 'bg-red-50 border-red-100 shadow-sm'}`}>
                 <div className="flex items-center gap-2 mb-4">
                   <ShieldAlert className={isAdmin ? "text-green-600" : "text-red-500"} size={18} />
@@ -226,28 +223,12 @@ export default function App() {
                     {isAdmin ? "Admin Access Active" : "Admin Restrictions"}
                   </span>
                 </div>
-
                 {!isAdmin ? (
-                  <button 
-                    onClick={() => setShowAdminLogin(true)}
-                    className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-100 active:scale-95 transition-all"
-                  >
-                    Enter Admin Mode
-                  </button>
+                  <button onClick={() => setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-100 active:scale-95 transition-all">Enter Admin Mode</button>
                 ) : (
                   <div className="space-y-3">
-                    <button 
-                      onClick={handleExitAdmin}
-                      className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"
-                    >
-                      <LogOut size={16} /> Exit Admin Mode
-                    </button>
-                    <button 
-                      onClick={() => setIsChangingPass(true)}
-                      className="w-full py-3 border-2 border-dashed border-green-200 text-green-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-green-100/50"
-                    >
-                      <KeyRound size={14} /> Change Password
-                    </button>
+                    <button onClick={handleExitAdmin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"><LogOut size={16} /> Exit Admin Mode</button>
+                    <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-green-200 text-green-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-green-100/50"><KeyRound size={14} /> Change Password</button>
                   </div>
                 )}
               </div>
@@ -256,19 +237,13 @@ export default function App() {
         </div>
       )}
 
-      {/* POPUPS (LOGIN & CHANGE PASS) */}
       {showAdminLogin && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl">
-            <h3 className="text-xs font-black uppercase mb-4">Enter Password</h3>
-            <input 
-              autoFocus type="password" 
-              className="w-full p-4 rounded-xl border-2 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500"
-              value={passInput} onChange={e => setPassInput(e.target.value)}
-              onKeyPress={e => e.key === 'Enter' && handleAdminLogin()}
-            />
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
+            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Enter Admin Password</h3>
+            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowAdminLogin(false)} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
+              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
               <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center">Unlock</button>
             </div>
           </div>
@@ -276,18 +251,12 @@ export default function App() {
       )}
 
       {isChangingPass && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl">
-            <h3 className="text-xs font-black uppercase mb-4">Update Security Key</h3>
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
+            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><KeyRound size={14}/> Update Security Key</h3>
             <div className="space-y-3">
-              <input type="password" placeholder="Current Password" 
-                className="w-full p-3 rounded-xl border bg-slate-50 font-bold"
-                value={verifyOldPassInput} onChange={e => setVerifyOldPassInput(e.target.value)}
-              />
-              <input type="password" placeholder="New Password" 
-                className="w-full p-3 rounded-xl border bg-slate-50 font-bold"
-                value={newPassInput} onChange={e => setNewPassInput(e.target.value)}
-              />
+              <input type="password" placeholder="Current Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold" value={verifyOldPassInput} onChange={e => setVerifyOldPassInput(e.target.value)} />
+              <input type="password" placeholder="New Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold" value={newPassInput} onChange={e => setNewPassInput(e.target.value)} />
             </div>
             <div className="flex gap-2 mt-6">
               <button onClick={() => { setIsChangingPass(false); setVerifyOldPassInput(''); setNewPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
@@ -298,8 +267,7 @@ export default function App() {
       )}
       
       {editRoll && (
-        <EditModal roll={editRoll} isAdmin={isAdmin} onClose={() => setEditRoll(null)} 
-          onSave={async (updated) => { setEditRoll(null); await handleLocalSave(updated); }} 
+        <EditModal roll={editRoll} isAdmin={isAdmin} onClose={() => setEditRoll(null)} onSave={async (updated) => { setEditRoll(null); await handleLocalSave(updated); }} 
           onDelete={async (productId) => {
             if (isDeleting.current) return; isDeleting.current = true; setEditRoll(null);
             try {
