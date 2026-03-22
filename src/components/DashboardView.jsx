@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Settings2, Calculator } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
-// Components
+// Costing components
 import RateCalculator from './RateCalculator';
 import MarketRatesModal from './MarketRatesModal';
 
@@ -76,6 +76,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     return { inStock, producedToday, dispatchedToday, agedMap, totalAgedWeight, dateMap };
   }, [rolls, todayStr, todayDate]);
 
+  // RESTORED: SUMMATION LOGIC FOR LEGEND
   const { timelineData, totalProdMonth, totalDispMonth } = useMemo(() => {
     const data = [];
     let pSum = 0; let dSum = 0;
@@ -163,6 +164,15 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
               <XAxis dataKey="date" fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
               <YAxis fontSize={9} axisLine={false} tickLine={false} />
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+              
+              {/* RESTORED: Legend Summation Logic */}
+              <Legend 
+                verticalAlign="top" 
+                align="right" 
+                wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} 
+                formatter={(val) => val === 'Produced' ? `P (${totalProdMonth}T)` : `D (${totalDispMonth}T)`} 
+              />
+
               <Bar dataKey="Produced" fill="#22c55e" radius={[4, 4, 0, 0]} />
               <Bar dataKey="Dispatched" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -258,7 +268,6 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         
         <RateCalculator />
 
-        {/* FIXED ADMIN VISIBILITY */}
         {isAdmin && (
           <button 
             onClick={() => setShowRateModal(true)}
@@ -269,7 +278,6 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         )}
       </div>
 
-      {/* MODAL RENDER */}
       {showRateModal && (
         <MarketRatesModal 
           onClose={() => setShowRateModal(false)}
