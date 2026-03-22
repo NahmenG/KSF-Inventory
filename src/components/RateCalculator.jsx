@@ -1,130 +1,111 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { History, ChevronRight, Calculator, Settings2 } from 'lucide-react';
+import { History, Settings2, Beaker, Loader2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import MarketRatesModal from './MarketRatesModal';
+import BatchModal from './BatchModal';
 
 export default function RateCalculator({ isAdmin, fetchData }) {
   const [marketRates, setMarketRates] = useState([]);
+  const [formulations, setFormulations] = useState([]);
   const [showRateModal, setShowRateModal] = useState(false);
+  const [showBatchModal, setShowBatchModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const CONVERSION_COST = 20; // Fixed: Electricity, Labour, Packing
+  const CONVERSION_COST = 20;
 
-  // 1. RECIPES (Based on your 100kg Strategy)
-  const recipes = {
-    "Virgin": { "PP Virgin": 100, "UV Additive": 2, "Color MB": 1 },
-    "Fresh": { "PP Virgin": 80, "Filler": 20, "Vistamaxx": 2, "Color MB": 1, "Additives": 2 },
-    "Semi-Fresh": { "PP Virgin": 65, "Filler": 35, "Vistamaxx": 1, "Color MB": 1, "Additives": 2 },
-    "Semi": { "PP Virgin": 50, "Filler": 50, "Color MB": 1, "Additives": 2 },
-    "Semi 2": { "PP Virgin": 40, "Filler": 60, "Color MB": 1, "Additives": 2 },
-    "Semi Star": { "PP Virgin": 15, "RPP": 25, "Filler": 70, "Color MB": 1, "Additives": 2 },
-    "Laminated": { "PP Virgin": 90, "LDPE": 10, "Color MB": 1, "Additives": 2 }
-  };
-
-  // 2. FETCH LATEST RATES
   useEffect(() => {
-    const fetchRates = async () => {
-      const { data, error } = await supabase
-        .from('market_rates')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (!error && data) {
-        const latest = [];
-        const seen = new Set();
-        data.forEach(item => {
-          if (!seen.has(item.material_name)) {
-            latest.push(item);
-            seen.add(item.material_name);
-          }
-        });
-        setMarketRates(latest);
+    const loadData = async () => {
+      try {
+        const [ratesRes, batchRes] = await Promise.all([
+          supabase.from('market_rates').select('*').order('created_at', { ascending: false }),
+          supabase.from('formulations').select('*').order('quality_name')
+        ]);
+        
+        if (ratesRes.data) {
+          const latest = [];
+          const seen = new Set();
+          ratesRes.data.forEach(item => {
+            if (!seen.has(item.material_name)) { latest.push(item); seen.add(item.material_name); }
+          });
+          setMarketRates(latest);
+        }
+        if (batchRes.data) setFormulations(batchRes.data);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
-    fetchRates();
+    loadData();
   }, []);
 
-  // 3. AUTOMATIC PRICING LOGIC (Base + Conversion + 5% GST)
   const pricing = useMemo(() => {
     const results = {};
-    Object.keys(recipes).forEach(qName => {
-      const recipe = recipes[qName];
+    const qualities = [...new Set(formulations.map(f => f.quality_name))];
+    
+    qualities.forEach(qName => {
+      const recipeItems = formulations.filter(f => f.quality_name === qName);
       let totalMaterialCost = 0;
       let totalWeight = 0;
 
-      Object.entries(recipe).forEach(([matName, kg]) => {
-        const rateObj = marketRates.find(r => r.material_name === matName);
-        const rate = rateObj ? rateObj.rate : 0;
-        totalMaterialCost += (kg * rate);
-        totalWeight += kg;
+      recipeItems.forEach(item => {
+        const rate = marketRates.find(r => r.material_name === item.material_name)?.rate || 0;
+        totalMaterialCost += (item.quantity_kg * rate);
+        totalWeight += item.quantity_kg;
       });
 
-      const baseCost = (totalMaterialCost / totalWeight) + CONVERSION_COST;
-      // Add 5% GST to the final per kg rate
-      results[qName] = baseCost * 1.05;
+      if (totalWeight > 0) {
+        const base = (totalMaterialCost / totalWeight) + CONVERSION_COST;
+        results[qName] = base * 1.05; // Final rate including 5% GST
+      }
     });
     return results;
-  }, [marketRates]);
+  }, [marketRates, formulations]);
 
   return (
     <div className="space-y-4">
-      {/* SECTION 1: AUTO-PRICING CARDS */}
+      {/* 1. QUALITY RATE CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {Object.keys(recipes).map(q => (
-          <div 
-            key={q}
-            className="p-4 rounded-[1.5rem] border bg-white border-slate-100 shadow-sm transition-all"
-          >
-            <div className="text-[8px] font-black uppercase tracking-widest mb-1 text-slate-400">{q}</div>
-            <div className="text-xl font-black text-slate-900">₹{pricing[q]?.toFixed(1)}</div>
-            <div className="text-[7px] font-bold uppercase text-slate-300 italic">per kg (incl. 5% GST)</div>
-          </div>
-        ))}
+        {loading ? [...Array(4)].map((_, i) => <div key={i} className="p-4 h-24 bg-white rounded-3xl animate-pulse border border-slate-100" />) :
+          Object.entries(pricing).map(([q, price]) => (
+            <div key={q} className="p-4 rounded-[1.5rem] border bg-white border-slate-100 shadow-sm">
+              <div className="text-[8px] font-black uppercase text-slate-400 mb-1">{q}</div>
+              <div className="text-xl font-black text-slate-900">₹{price.toFixed(1)}</div>
+              <div className="text-[7px] font-bold uppercase text-slate-300 italic">per kg (incl. 5% GST)</div>
+            </div>
+          ))
+        }
       </div>
 
-      {/* SECTION 2: LIVE MARKET INDEX & UPDATE BUTTON */}
+      {/* 2. FOOTER INDEX & CONTROL BUTTONS */}
       <div className="bg-slate-50 p-4 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between border border-slate-100">
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-blue-600 shadow-sm">
-            <History size={16} />
-          </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-blue-600 shadow-sm"><History size={16}/></div>
           <div>
             <div className="text-[10px] font-black uppercase text-slate-400 tracking-tight leading-none mb-1">Live Market Index</div>
-            <div className="text-[12px] font-bold text-slate-700">
-               PP Virgin: <span className="text-blue-600">₹{marketRates.find(r => r.material_name === 'PP Virgin')?.rate || '0'}</span>
-            </div>
+            <div className="text-[12px] font-bold text-slate-700">PP Virgin: <span className="text-blue-600">₹{marketRates.find(r => r.material_name === 'Polypropylene(PP)')?.rate || '0'}</span></div>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-          <div className="text-[8px] font-black text-slate-300 uppercase italic text-left md:text-right leading-tight">
-            Prices calculated from<br/>100kg batch recipe
-          </div>
+        <div className="flex items-center gap-2">
+          {/* Batch Formulation Button */}
+          <button 
+            onClick={() => setShowBatchModal(true)}
+            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-[10px] uppercase flex items-center gap-2 hover:bg-blue-50 transition-all active:scale-95"
+          >
+            <Beaker size={14}/> {isAdmin ? "Edit Batches" : "View Batches"}
+          </button>
           
-          {/* RESTORED: Update Rates Popup Button */}
-          {isAdmin && (
-            <button 
-              onClick={() => setShowRateModal(true)}
-              className="px-4 py-2 bg-white border border-blue-200 text-blue-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center gap-2 active:scale-95 shadow-sm"
-            >
-              <Settings2 size={14} /> Update Rates
-            </button>
-          )}
+          {/* Market Rates Button */}
+          <button 
+            onClick={() => setShowRateModal(true)}
+            className="px-4 py-2.5 bg-white border border-blue-200 text-blue-600 rounded-xl font-black text-[10px] uppercase flex items-center gap-2 hover:bg-blue-600 hover:text-white transition-all active:scale-95 shadow-sm"
+          >
+            <Settings2 size={14}/> {isAdmin ? "Update Rates" : "View Rates"}
+          </button>
         </div>
       </div>
 
-      {/* MODAL RENDER */}
-      {showRateModal && (
-        <MarketRatesModal 
-          onClose={() => setShowRateModal(false)}
-          onUpdate={() => {
-            // Trigger refresh in dashboard if needed
-            if(fetchData) fetchData();
-            window.location.reload(); // Hard refresh to update local pricing state
-          }} 
-        />
-      )}
+      {showRateModal && <MarketRatesModal isAdmin={isAdmin} onClose={() => setShowRateModal(false)} onUpdate={() => window.location.reload()} />}
+      {showBatchModal && <BatchModal isAdmin={isAdmin} formulations={formulations} onClose={() => setShowBatchModal(false)} onUpdate={() => window.location.reload()} />}
     </div>
   );
 }
