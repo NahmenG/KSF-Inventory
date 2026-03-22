@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Settings2, Calculator } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
-// Costing components
+// Components
 import RateCalculator from './RateCalculator';
 import MarketRatesModal from './MarketRatesModal';
 
@@ -29,6 +29,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
   const todayDate = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
   
+  // 1. MASTER DATA PROCESSOR
   const processedData = useMemo(() => {
     const inStock = [];
     const producedToday = [];
@@ -122,6 +123,12 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     return Object.entries(c).map(([name, w]) => ({ name: `${name} (${(w/1000).toFixed(2)}T)`, value: w }));
   }, [processedData.inStock]);
 
+  const colorData = useMemo(() => {
+    const c = {}; processedData.inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
+    return Object.entries(c).map(([n, w]) => ({ name: abbreviateColor(n), weight: parseFloat(w.toFixed(1)) }))
+      .sort((a, b) => b.weight - a.weight).slice(0, 10);
+  }, [processedData.inStock]);
+
   const weightKg = processedData.inStock.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
 
   return (
@@ -165,7 +172,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
               <YAxis fontSize={9} axisLine={false} tickLine={false} />
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
               
-              {/* RESTORED: Legend Summation Logic */}
+              {/* RESTORED: Monthly Summation Legends */}
               <Legend 
                 verticalAlign="top" 
                 align="right" 
@@ -206,7 +213,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
-      {/* 5. QUALITY BREAKDOWN */}
+      {/* 5. QUALITY MIX BREAKDOWN */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
           <PieIcon size={16} className="text-blue-600"/> Quality Mix
