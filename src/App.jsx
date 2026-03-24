@@ -68,7 +68,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- REINFORCED SYNC LOGIC (Matches Schema: device_name, dispatched_by) ---
+  // --- 1. THE PAYLOAD SCRUBBER (Kills PGRST204 Error) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -79,21 +79,28 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        // CLEAN HANDSHAKE: 
-        // 1. We remove 'id' because it's a numeric local key, Supabase uses UUID.
-        // 2. We remove 'synced' to avoid sending local-only flags.
-        // 3. We ensure no legacy 'dispatched_by_device' is sent.
-        const { id, synced, dispatched_by_device, ...dataToUpload } = roll;
+        // We only allow columns that exist in your Supabase Schema
+        const validSchemaColumns = [
+          'product_id', 'customer_name', 'quality', 'gsm', 'color', 
+          'width_inches', 'length_meters', 'net_weight', 'gross_weight', 
+          'status', 'created_at', 'dispatched_at', 'device_name', 
+          'updated_at', 'dispatched_by'
+        ];
+
+        const cleanData = {};
+        validSchemaColumns.forEach(col => {
+          if (roll[col] !== undefined) cleanData[col] = roll[col];
+        });
 
         const { error } = await supabase
           .from('rolls')
-          .upsert(dataToUpload, { onConflict: 'product_id' });
+          .upsert(cleanData, { onConflict: 'product_id' });
         
         if (!error || error.code === '23505') {
-          // Success: Use product_id to anchor the local update
+          // Use product_id as the key to mark local as synced
           await db.rolls.update(roll.product_id, { synced: 1 });
         } else {
-          console.error(`Sync error for ${roll.product_id}:`, error.message);
+          console.error(`Sync Blocked for ${roll.product_id}:`, error.message);
         }
       }
     } finally {
@@ -105,27 +112,33 @@ export default function App() {
     }
   }, [loading]);
 
+  // --- 2. THE LOCAL SAVE HANDLER (The Duplicate Killer) ---
   const handleLocalSave = async (updatedRoll) => {
-    // Schema Alignment: Ensure created items have device_name and dispatched items have dispatched_by
-    const schemaCorrected = {
+    // Determine Terminal Tracking
+    const rollWithTracking = {
       ...updatedRoll,
       device_name: updatedRoll.device_name || deviceName,
       dispatched_by: updatedRoll.status === 'dispatched' ? deviceName : (updatedRoll.dispatched_by || null)
     };
 
-    await db.rolls.put({ ...schemaCorrected, synced: 0 });
+    // Save to Dexie. Using product_id ensures duplicates are impossible locally.
+    await db.rolls.put({ ...rollWithTracking, synced: 0 });
+    
+    // Refresh UI
     const allLocal = await db.rolls.toArray();
     setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    
+    // Trigger instant sync
     if (navigator.onLine) syncOfflineData();
   };
 
   useEffect(() => {
-    const handleStatus = () => { setIsOnline(navigator.onLine); if (navigator.onLine) syncOfflineData(); };
+    const handleStatus = () => { setIsOnline(navigator.onLine); if(navigator.onLine) syncOfflineData(); };
     window.addEventListener('online', handleStatus); window.addEventListener('offline', handleStatus);
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
-  // --- FETCH DATA WITH LOCAL-FIRST PROTECTION ---
+  // --- 3. FETCH DATA (With Reconciliation) ---
   const fetchData = useCallback(async () => {
     const cached = await db.rolls.toArray();
     const pending = await db.rolls.where({ synced: 0 }).toArray();
@@ -150,19 +163,18 @@ export default function App() {
       }
       
       if (allRemoteData.length > 0) {
-        // PROTECTION: Don't let Cloud data overwrite rolls that are currently 'Pending' locally
         const pendingIds = new Set(pending.map(p => p.product_id));
+        
+        // Reconciliation: Only merge cloud data if it's NOT pending locally
         const dataToSave = allRemoteData.map(r => ({
           ...r,
           synced: pendingIds.has(r.product_id) ? 0 : 1
         }));
 
-        // bulkPut uses product_id to merge, killing duplicates
         await db.rolls.bulkPut(dataToSave);
         const final = await db.rolls.toArray();
         setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       }
-      
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
     } finally { setLoading(false); }
@@ -193,7 +205,7 @@ export default function App() {
           <img src="/logo.png" alt="Logo" className="w-40 h-40 mx-auto mb-1 object-contain" />
           <h1 className="text-base font-bold text-gray-500 mb-10 tracking-tight">Inventory Manager</h1>
           <div className="space-y-3">
-            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black">Google Login</button>
+            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black shadow-xl">Google Login</button>
             <button onClick={() => setIsGuest(true)} className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100">Guest Mode</button>
           </div>
         </div>
@@ -216,7 +228,19 @@ export default function App() {
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} isAdmin={isAdmin} fetchData={fetchData} onOpenSyncList={() => setShowUnsyncedList(true)} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
         {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
-        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={(roll) => handleLocalSave({...roll, status: 'dispatched', dispatched_at: new Date().toISOString()})} />}
+        
+        {activeTab === 'dispatch' && (
+          <DispatchView 
+            rolls={rolls} 
+            deviceName={deviceName} 
+            onDispatch={(roll) => {
+              // This function handles BOTH Dispatch (status: dispatched) 
+              // and Return to Stock (status: in_stock)
+              handleLocalSave(roll);
+            }} 
+          />
+        )}
+        
         {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} isAdmin={isAdmin} onSelectRoll={setEditRoll} onFetchRange={fetchData} activeRange={activeRange} />}
         {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
@@ -230,7 +254,7 @@ export default function App() {
               <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
                 <WifiOff size={18} className="text-amber-500"/> Unsynced Data
               </h3>
-              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
+              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
             </div>
             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-2">
