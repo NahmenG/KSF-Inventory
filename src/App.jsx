@@ -68,7 +68,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- 1. THE PAYLOAD SCRUBBER (Kills PGRST204 Error) ---
+  // --- 1. THE PAYLOAD SCRUBBER (Kills Rejection Errors) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -79,7 +79,7 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        // We only allow columns that exist in your Supabase Schema
+        // We only allow columns that exist in your provided Supabase Schema
         const validSchemaColumns = [
           'product_id', 'customer_name', 'quality', 'gsm', 'color', 
           'width_inches', 'length_meters', 'net_weight', 'gross_weight', 
@@ -92,12 +92,15 @@ export default function App() {
           if (roll[col] !== undefined) cleanData[col] = roll[col];
         });
 
+        // Add 'synced: 1' to the cloud data
+        const payload = { ...cleanData, synced: 1 };
+
         const { error } = await supabase
           .from('rolls')
-          .upsert(cleanData, { onConflict: 'product_id' });
+          .upsert(payload, { onConflict: 'product_id' });
         
         if (!error || error.code === '23505') {
-          // Use product_id as the key to mark local as synced
+          // Success: Use product_id (PK) to mark as synced locally
           await db.rolls.update(roll.product_id, { synced: 1 });
         } else {
           console.error(`Sync Blocked for ${roll.product_id}:`, error.message);
@@ -112,28 +115,26 @@ export default function App() {
     }
   }, [loading]);
 
-  // --- 2. THE LOCAL SAVE HANDLER (The Duplicate Killer) ---
+  // --- 2. THE LOCAL SAVE HANDLER (Duplicate Killer) ---
   const handleLocalSave = async (updatedRoll) => {
-    // Determine Terminal Tracking
-    const rollWithTracking = {
+    // Tracking Logic
+    const finalRoll = {
       ...updatedRoll,
       device_name: updatedRoll.device_name || deviceName,
-      dispatched_by: updatedRoll.status === 'dispatched' ? deviceName : (updatedRoll.dispatched_by || null)
+      dispatched_by: updatedRoll.status === 'dispatched' ? deviceName : (updatedRoll.dispatched_by || null),
+      updated_at: new Date().toISOString()
     };
 
-    // Save to Dexie. Using product_id ensures duplicates are impossible locally.
-    await db.rolls.put({ ...rollWithTracking, synced: 0 });
+    // 'put' with product_id as the PK means it overwrites instead of duplicating
+    await db.rolls.put({ ...finalRoll, synced: 0 });
     
-    // Refresh UI
     const allLocal = await db.rolls.toArray();
     setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    
-    // Trigger instant sync
     if (navigator.onLine) syncOfflineData();
   };
 
   useEffect(() => {
-    const handleStatus = () => { setIsOnline(navigator.onLine); if(navigator.onLine) syncOfflineData(); };
+    const handleStatus = () => { setIsOnline(navigator.onLine); if (navigator.onLine) syncOfflineData(); };
     window.addEventListener('online', handleStatus); window.addEventListener('offline', handleStatus);
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
@@ -165,7 +166,7 @@ export default function App() {
       if (allRemoteData.length > 0) {
         const pendingIds = new Set(pending.map(p => p.product_id));
         
-        // Reconciliation: Only merge cloud data if it's NOT pending locally
+        // Don't let Cloud data overwrite rolls that are currently 'Pending' locally
         const dataToSave = allRemoteData.map(r => ({
           ...r,
           synced: pendingIds.has(r.product_id) ? 0 : 1
@@ -234,8 +235,7 @@ export default function App() {
             rolls={rolls} 
             deviceName={deviceName} 
             onDispatch={(roll) => {
-              // This function handles BOTH Dispatch (status: dispatched) 
-              // and Return to Stock (status: in_stock)
+              // This function now correctly handles both status: 'dispatched' and 'in_stock'
               handleLocalSave(roll);
             }} 
           />
@@ -254,9 +254,9 @@ export default function App() {
               <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
                 <WifiOff size={18} className="text-amber-500"/> Unsynced Data
               </h3>
-              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
             </div>
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto pr-1">
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto">
               <div className="grid grid-cols-2 gap-2">
                 {unsyncedRolls.map(r => (
                   <div key={r.product_id} className="bg-white border border-slate-200 py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black text-slate-600">
@@ -278,7 +278,7 @@ export default function App() {
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
             </div>
             <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
-                <button onClick={() => isAdmin ? handleExitAdmin() : setShowAdminLogin(true)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
+                <button onClick={() => isAdmin ? handleExitAdmin() : setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all">
                   {isAdmin ? "Exit Admin Mode" : "Enter Admin Mode"}
                 </button>
             </div>
