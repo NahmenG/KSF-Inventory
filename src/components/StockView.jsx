@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Printer, Download, ArrowDown, ArrowUp, Clock, Filter, X, ChevronDown } from 'lucide-react';
+import { Printer, Download, ArrowDown, ArrowUp, Filter, X, ChevronDown, Cloud, CloudOff } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 /**
@@ -219,16 +219,25 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
         ) : (
           filtered.map(r => (
             <div 
-              key={r.id} 
+              key={r.product_id} 
               onClick={() => onSelectRoll(r)} 
               className={`bg-white p-4 rounded-2xl border flex justify-between items-center active:scale-[0.98] transition-all shadow-sm cursor-pointer group ${isAdmin ? 'hover:border-green-300 border-gray-100' : 'hover:border-blue-200 border-gray-100'}`}
             >
               <div className="flex-1">
                 <div className="font-black text-blue-600 text-lg flex items-center gap-2">
                   {r.product_id}
-                  <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-lg flex items-center gap-1 font-black">
-                    <Clock size={10} /> {new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                  {/* REPLACED TIMESTAMP WITH CLOUD SYNC ICON */}
+                  {r.synced === 0 ? (
+                    <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg flex items-center gap-1 animate-pulse border border-amber-100">
+                      <CloudOff size={10} />
+                      <span className="text-[8px] font-black uppercase tracking-tighter">Pending</span>
+                    </span>
+                  ) : (
+                    <span className="bg-blue-50 text-blue-500 px-2 py-0.5 rounded-lg flex items-center gap-1 border border-blue-100">
+                      <Cloud size={10} />
+                      <span className="text-[8px] font-black uppercase tracking-tighter">Cloud</span>
+                    </span>
+                  )}
                 </div>
                 <div className="text-sm font-black text-gray-800 mt-1">{r.customer_name || 'Generic Stock'}</div>
                 <div className="text-[10px] text-gray-400 uppercase font-black mt-1 flex flex-wrap gap-2">
