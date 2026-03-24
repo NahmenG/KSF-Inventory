@@ -35,7 +35,6 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
 
   // 2. DYNAMIC DROPDOWN DATA EXTRACTION
   const uniqueQualities = useMemo(() => {
-    // Master list updated to include Laminated Fabric
     const masterQualities = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
     const currentQualities = rolls
       .filter(r => r.status === 'in_stock')
@@ -226,16 +225,14 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
               <div className="flex-1">
                 <div className="font-black text-blue-600 text-lg flex items-center gap-2">
                   {r.product_id}
-                  {/* REPLACED TIMESTAMP WITH CLOUD SYNC ICON */}
+                  {/* STANDALONE SYNC STATUS ICONS */}
                   {r.synced === 0 ? (
-                    <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg flex items-center gap-1 animate-pulse border border-amber-100">
+                    <span className="bg-amber-50 text-amber-600 p-1 rounded-lg flex items-center animate-pulse border border-amber-100">
                       <CloudOff size={10} />
-                      <span className="text-[8px] font-black uppercase tracking-tighter">Pending</span>
                     </span>
                   ) : (
-                    <span className="bg-blue-50 text-blue-500 px-2 py-0.5 rounded-lg flex items-center gap-1 border border-blue-100">
+                    <span className="bg-blue-50 text-blue-500 p-1 rounded-lg flex items-center border border-blue-100">
                       <Cloud size={10} />
-                      <span className="text-[8px] font-black uppercase tracking-tighter">Cloud</span>
                     </span>
                   )}
                 </div>
