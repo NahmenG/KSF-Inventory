@@ -68,7 +68,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- REINFORCED SYNC LOGIC (The "No-Duplicate" Fix) ---
+  // --- REINFORCED SYNC LOGIC ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -79,8 +79,7 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        // STRIP LOCAL FIELDS: This is why sync was failing!
-        // We remove 'id' (local number) and 'synced' so Supabase accepts the row.
+        // Remove local Dexie internal ID and current synced status before upload
         const { id, synced, ...dataToUpload } = roll;
 
         const { error } = await supabase
@@ -88,7 +87,6 @@ export default function App() {
           .upsert(dataToUpload, { onConflict: 'product_id' });
         
         if (!error) {
-          // Success: Update local DB using product_id as the key
           await db.rolls.update(roll.product_id, { synced: 1 });
         } else {
           console.error(`Sync error for ${roll.product_id}:`, error.message);
@@ -104,14 +102,9 @@ export default function App() {
   }, [loading]);
 
   const handleLocalSave = async (updatedRoll) => {
-    // 1. Save locally with synced: 0
     await db.rolls.put({ ...updatedRoll, synced: 0 });
-    
-    // 2. Refresh UI immediately
     const allLocal = await db.rolls.toArray();
     setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    
-    // 3. Trigger sync
     if (navigator.onLine) syncOfflineData();
   };
 
@@ -121,16 +114,16 @@ export default function App() {
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
-  // --- FETCH DATA WITH DUPLICATE PROTECTION ---
+  // --- FETCH DATA WITH "LOCAL OVERRIDE" PROTECTION ---
   const fetchData = useCallback(async () => {
     const cached = await db.rolls.toArray();
     const pending = await db.rolls.where({ synced: 0 }).toArray();
     setUnsyncedRolls(pending);
-    if (cached.length > 0) setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     
+    if (cached.length > 0) setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     if (!navigator.onLine) return;
+    
     setLoading(true);
-
     try {
       const startOfMonth = new Date(); 
       startOfMonth.setDate(1); 
@@ -156,17 +149,16 @@ export default function App() {
       }
       
       if (allRemoteData.length > 0) {
-        // DUPLICATE PROTECTION: 
-        // If we have a local roll marked 'unsynced', do NOT let the cloud version overwrite it.
+        // PROTECTION: Identify IDs that are currently pending a change on this device
         const pendingIds = new Set(pending.map(p => p.product_id));
         
         const dataToUpdateLocally = allRemoteData.map(r => ({
           ...r,
-          // If this ID is in our pending list, keep synced as 0, otherwise 1
+          // If roll is pending locally, keep its status as 0 so it doesn't get overwritten
           synced: pendingIds.has(r.product_id) ? 0 : 1
         }));
 
-        // bulkPut uses the primary key (product_id) to MERGE rows instead of duplicating
+        // Merge cloud data into local db without overwriting pending local changes
         await db.rolls.bulkPut(dataToUpdateLocally);
         
         const final = await db.rolls.toArray();
@@ -205,13 +197,13 @@ export default function App() {
 
   if (!user && !isGuest) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
+      <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100">
           <img src="/logo.png" alt="Logo" className="w-40 h-40 mx-auto mb-1 object-contain" />
           <h1 className="text-base font-bold text-gray-500 mb-10 tracking-tight">Inventory Manager</h1>
           <div className="space-y-3">
             <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black">Google Login</button>
-            <button onClick={() => setIsGuest(true)} className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold">Guest Mode</button>
+            <button onClick={() => setIsGuest(true)} className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100">Guest Mode</button>
           </div>
         </div>
       </div>
@@ -242,7 +234,7 @@ export default function App() {
       
       {showUnsyncedList && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
+          <div className="bg-white w-full max-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
                 <WifiOff size={18} className="text-amber-500"/> Unsynced Data
