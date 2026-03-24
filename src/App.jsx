@@ -68,7 +68,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- REINFORCED SYNC LOGIC ---
+  // --- REINFORCED SYNC LOGIC (The "No-Duplicate" Fix) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -79,7 +79,8 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        // Remove local Dexie internal ID and current synced status before upload
+        // IMPORTANT: We strip 'id' and 'synced' so Supabase doesn't see a numeric ID conflict.
+        // It will use product_id (onConflict) to find the existing row and update it.
         const { id, synced, ...dataToUpload } = roll;
 
         const { error } = await supabase
@@ -114,16 +115,16 @@ export default function App() {
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
-  // --- FETCH DATA WITH "LOCAL OVERRIDE" PROTECTION ---
+  // --- FETCH DATA WITH AUTO-RECONCILIATION ---
   const fetchData = useCallback(async () => {
     const cached = await db.rolls.toArray();
     const pending = await db.rolls.where({ synced: 0 }).toArray();
     setUnsyncedRolls(pending);
-    
     if (cached.length > 0) setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    if (!navigator.onLine) return;
     
+    if (!navigator.onLine) return;
     setLoading(true);
+
     try {
       const startOfMonth = new Date(); 
       startOfMonth.setDate(1); 
@@ -149,18 +150,15 @@ export default function App() {
       }
       
       if (allRemoteData.length > 0) {
-        // PROTECTION: Identify IDs that are currently pending a change on this device
         const pendingIds = new Set(pending.map(p => p.product_id));
         
-        const dataToUpdateLocally = allRemoteData.map(r => ({
+        const dataToSave = allRemoteData.map(r => ({
           ...r,
-          // If roll is pending locally, keep its status as 0 so it doesn't get overwritten
+          // Protect local pending changes from being overwritten by old cloud data
           synced: pendingIds.has(r.product_id) ? 0 : 1
         }));
 
-        // Merge cloud data into local db without overwriting pending local changes
-        await db.rolls.bulkPut(dataToUpdateLocally);
-        
+        await db.rolls.bulkPut(dataToSave);
         const final = await db.rolls.toArray();
         setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       }
@@ -234,15 +232,15 @@ export default function App() {
       
       {showUnsyncedList && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
                 <WifiOff size={18} className="text-amber-500"/> Unsynced Data
               </h3>
-              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
             </div>
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto">
-              <div className="grid grid-cols-2 gap-2">
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
                 {unsyncedRolls.map(r => (
                   <div key={r.product_id} className="bg-white border border-slate-200 py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black text-slate-600">
                     {r.product_id}
@@ -260,7 +258,7 @@ export default function App() {
           <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">System Settings</h2>
-              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
             </div>
             <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
                 {!isAdmin ? (
@@ -277,13 +275,13 @@ export default function App() {
       )}
 
       {showAdminLogin && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
           <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
             <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Unlock Admin</h3>
-            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
+            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
             <div className="flex gap-2 mt-4">
               <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
-              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg">Unlock</button>
+              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg transition-all">Unlock</button>
             </div>
           </div>
         </div>
