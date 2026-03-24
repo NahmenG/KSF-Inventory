@@ -68,7 +68,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- OPTIMIZED SYNC LOGIC (Aligned with new Schema) ---
+  // --- REINFORCED SYNC LOGIC (Matches Original Schema) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     const pending = await db.rolls.where({ synced: 0 }).toArray();
@@ -78,17 +78,16 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        // Since schema now includes 'synced', we send the full object
-        const { error } = await supabase
-          .from('rolls')
-          .upsert(roll, { onConflict: 'product_id' });
-          
+        // We REMOVE 'id' and 'synced' before sending to Supabase if you haven't added the columns yet.
+        // If you HAVE added them, Supabase will just accept them.
+        const { id, synced, ...dataToUpload } = roll;
+
+        const { error } = await supabase.from('rolls').upsert(dataToUpload, { onConflict: 'product_id' });
+        
         if (!error || error.code === '23505') {
           await db.rolls.update(roll.product_id, { synced: 1 });
         }
       }
-    } catch (err) {
-      console.error("Sync loop error:", err);
     } finally {
       const finalPending = await db.rolls.where({ synced: 0 }).toArray();
       setUnsyncedRolls(finalPending);
@@ -99,15 +98,10 @@ export default function App() {
   }, [loading]);
 
   const handleLocalSave = async (updatedRoll) => {
-    // 1. Save locally as unsynced
     await db.rolls.put({ ...updatedRoll, synced: 0 });
     const allLocal = await db.rolls.toArray();
     setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    
-    // 2. Immediate push if online
-    if (navigator.onLine) {
-        syncOfflineData();
-    }
+    if (navigator.onLine) syncOfflineData();
   };
 
   useEffect(() => {
@@ -116,23 +110,30 @@ export default function App() {
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
+  // --- FIXED FETCH DATA: Pulls everything up to Roll 1205 ---
   const fetchData = useCallback(async () => {
     const cached = await db.rolls.toArray();
-    const pending = await db.rolls.where({ synced: 0 }).toArray();
-    setUnsyncedRolls(pending);
+    const pendingCount = await db.rolls.where({ synced: 0 }).toArray();
+    setUnsyncedRolls(pendingCount);
     if (cached.length > 0) setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     
     if (!navigator.onLine) return;
     setLoading(true);
-    try {
-      const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
-      const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
 
+    try {
+      // We look back 48 hours for production to ensure we don't miss rolls like 1205
+      const recentBuffer = new Date(); 
+      recentBuffer.setHours(recentBuffer.getHours() - 48);
+
+      const startOfMonth = new Date(); 
+      startOfMonth.setDate(1); 
+      startOfMonth.setHours(0,0,0,0);
+
+      // 1. Fetch ALL In-Stock rolls + Recent Production + Month History
       const { data, error } = await supabase.from('rolls').select('*')
-        .or(`status.eq.in_stock,created_at.gte.${startOfDay.toISOString()},dispatched_at.gte.${startOfMonth.toISOString()}`);
+        .or(`status.eq.in_stock,created_at.gte.${recentBuffer.toISOString()},dispatched_at.gte.${startOfMonth.toISOString()}`);
       
       if (!error && data) {
-        // Any roll coming from cloud is by definition synced
         await db.rolls.bulkPut(data.map(r => ({ ...r, synced: 1 })));
         const final = await db.rolls.toArray();
         setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -140,6 +141,7 @@ export default function App() {
         const cleanPending = await db.rolls.where({ synced: 0 }).toArray();
         setUnsyncedRolls(cleanPending);
       }
+      
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
     } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -156,14 +158,7 @@ export default function App() {
   }, [fetchData]);
 
   const handleLogout = async () => {
-    if(confirm("Logout and clear cache?")) { 
-      await supabase.auth.signOut(); 
-      await db.rolls.clear(); 
-      await db.materials.clear(); 
-      setUser(null); 
-      setIsGuest(false); 
-      window.location.reload(); 
-    }
+    if(confirm("Logout and clear local cache?")) { await supabase.auth.signOut(); await db.rolls.clear(); await db.materials.clear(); setUser(null); setIsGuest(false); window.location.reload(); }
   };
 
   useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
@@ -195,15 +190,7 @@ export default function App() {
       />
       
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {activeTab === 'dashboard' && (
-          <DashboardView 
-            rolls={rolls} 
-            materials={materials} 
-            isAdmin={isAdmin} 
-            fetchData={fetchData} 
-            onOpenSyncList={() => setShowUnsyncedList(true)}
-          />
-        )}
+        {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} isAdmin={isAdmin} fetchData={fetchData} onOpenSyncList={() => setShowUnsyncedList(true)} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
         {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
         {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
@@ -222,7 +209,6 @@ export default function App() {
               </h3>
               <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
             </div>
-            
             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto pr-1 scrollbar-hide">
               <div className="grid grid-cols-2 gap-2">
                 {unsyncedRolls.map(r => (
@@ -232,7 +218,6 @@ export default function App() {
                 ))}
               </div>
             </div>
-
             <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Close</button>
           </div>
         </div>
@@ -240,27 +225,20 @@ export default function App() {
 
       {showSettings && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100 overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">System Settings</h2>
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
             </div>
-
             <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
-              <div className="flex items-center gap-2 mb-4">
-                <ShieldAlert className={isAdmin ? "text-blue-600" : "text-red-500"} size={18} />
-                <span className={`text-[11px] font-black uppercase tracking-widest ${isAdmin ? "text-blue-700" : "text-red-700"}`}>
-                  {isAdmin ? "Admin Access Active" : "Admin Restrictions"}
-                </span>
-              </div>
-              {!isAdmin ? (
-                <button onClick={() => setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl active:scale-95 transition-all">Enter Admin Mode</button>
-              ) : (
-                <div className="space-y-3">
-                  <button onClick={handleExitAdmin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"><LogOut size={16} /> Exit Admin</button>
-                  <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-blue-200 text-blue-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-blue-100/50 transition-colors"><KeyRound size={14} /> Change Password</button>
-                </div>
-              )}
+                {!isAdmin ? (
+                  <button onClick={() => setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl">Enter Admin Mode</button>
+                ) : (
+                  <div className="space-y-3">
+                    <button onClick={handleExitAdmin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"><LogOut size={16} /> Exit Admin</button>
+                    <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-blue-200 text-blue-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-blue-100/50 transition-colors"><KeyRound size={14} /> Change Password</button>
+                  </div>
+                )}
             </div>
           </div>
         </div>
@@ -270,7 +248,7 @@ export default function App() {
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
           <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
             <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Unlock Admin</h3>
-            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
+            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
             <div className="flex gap-2 mt-4">
               <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
               <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg">Unlock</button>
@@ -279,22 +257,6 @@ export default function App() {
         </div>
       )}
 
-      {isChangingPass && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl">
-            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><KeyRound size={14}/> Security Key</h3>
-            <div className="space-y-3">
-              <input type="password" placeholder="Old Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold outline-none" value={verifyOldPassInput} onChange={e => setVerifyOldPassInput(e.target.value)} />
-              <input type="password" placeholder="New Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold outline-none" value={newPassInput} onChange={e => setNewPassInput(e.target.value)} />
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button onClick={() => { setIsChangingPass(false); setVerifyOldPassInput(''); setNewPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
-              <button onClick={handleChangePassword} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {editRoll && (
         <EditModal roll={editRoll} isAdmin={isAdmin} onClose={() => setEditRoll(null)} onSave={async (updated) => { setEditRoll(null); await handleLocalSave(updated); }} 
           onDelete={async (productId) => {
