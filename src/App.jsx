@@ -68,7 +68,6 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- REINFORCED SYNC LOGIC (Matches Original Schema) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     const pending = await db.rolls.where({ synced: 0 }).toArray();
@@ -78,12 +77,8 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        // We REMOVE 'id' and 'synced' before sending to Supabase if you haven't added the columns yet.
-        // If you HAVE added them, Supabase will just accept them.
         const { id, synced, ...dataToUpload } = roll;
-
         const { error } = await supabase.from('rolls').upsert(dataToUpload, { onConflict: 'product_id' });
-        
         if (!error || error.code === '23505') {
           await db.rolls.update(roll.product_id, { synced: 1 });
         }
@@ -110,7 +105,7 @@ export default function App() {
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
-  // --- FIXED FETCH DATA: Pulls everything up to Roll 1205 ---
+  // --- RECURSIVE FETCH: Bypasses the 1000 Row Limit ---
   const fetchData = useCallback(async () => {
     const cached = await db.rolls.toArray();
     const pendingCount = await db.rolls.where({ synced: 0 }).toArray();
@@ -121,20 +116,35 @@ export default function App() {
     setLoading(true);
 
     try {
-      // We look back 48 hours for production to ensure we don't miss rolls like 1205
-      const recentBuffer = new Date(); 
-      recentBuffer.setHours(recentBuffer.getHours() - 48);
-
       const startOfMonth = new Date(); 
       startOfMonth.setDate(1); 
       startOfMonth.setHours(0,0,0,0);
 
-      // 1. Fetch ALL In-Stock rolls + Recent Production + Month History
-      const { data, error } = await supabase.from('rolls').select('*')
-        .or(`status.eq.in_stock,created_at.gte.${recentBuffer.toISOString()},dispatched_at.gte.${startOfMonth.toISOString()}`);
+      let allRemoteData = [];
+      let from = 0;
+      const step = 1000;
+
+      // The loop: keep asking until we get everything
+      while (true) {
+        const { data, error } = await supabase
+          .from('rolls')
+          .select('*')
+          .or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`)
+          .order('created_at', { ascending: false })
+          .range(from, from + step - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        allRemoteData = [...allRemoteData, ...data];
+        
+        // If we got fewer than 1000, we reached the end
+        if (data.length < step) break;
+        from += step;
+      }
       
-      if (!error && data) {
-        await db.rolls.bulkPut(data.map(r => ({ ...r, synced: 1 })));
+      if (allRemoteData.length > 0) {
+        await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
         const final = await db.rolls.toArray();
         setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
         
@@ -144,7 +154,12 @@ export default function App() {
       
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+    } catch (e) { 
+      console.error("Fetch failed:", e);
+      alert("Database error: Could not load all rolls.");
+    } finally { 
+      setLoading(false); 
+    }
   }, []);
 
   useEffect(() => {
@@ -158,21 +173,25 @@ export default function App() {
   }, [fetchData]);
 
   const handleLogout = async () => {
-    if(confirm("Logout and clear local cache?")) { await supabase.auth.signOut(); await db.rolls.clear(); await db.materials.clear(); setUser(null); setIsGuest(false); window.location.reload(); }
+    if(confirm("Logout and clear local cache?")) { 
+      await supabase.auth.signOut(); 
+      await db.rolls.clear(); 
+      await db.materials.clear(); 
+      setUser(null); 
+      setIsGuest(false); 
+      window.location.reload(); 
+    }
   };
 
   useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
 
   if (!user && !isGuest) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
-        <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100">
+      <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center">
           <img src="/logo.png" alt="Logo" className="w-40 h-40 mx-auto mb-1 object-contain" />
-          <h1 className="text-base font-bold text-gray-500 mb-10 tracking-tight">Inventory Manager</h1>
-          <div className="space-y-3">
-            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black">Google Login</button>
-            <button onClick={() => setIsGuest(true)} className="w-full bg-slate-50 text-gray-500 py-4 rounded-2xl font-bold border border-slate-100">Guest Mode</button>
-          </div>
+          <h1 className="text-base font-bold text-gray-500 mb-10">Inventory Manager</h1>
+          <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })} className="w-full bg-[#1e40af] text-white py-5 rounded-2xl font-black">Google Login</button>
         </div>
       </div>
     );
@@ -202,57 +221,41 @@ export default function App() {
       
       {showUnsyncedList && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
                 <WifiOff size={18} className="text-amber-500"/> Unsynced Data
               </h3>
               <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
             </div>
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto pr-1 scrollbar-hide">
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-2">
                 {unsyncedRolls.map(r => (
-                  <div key={r.product_id} className="bg-white border border-slate-200 py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black text-slate-600">
-                    {r.product_id}
-                  </div>
+                  <div key={r.product_id} className="bg-white border py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black">{r.product_id}</div>
                 ))}
               </div>
             </div>
-            <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Close</button>
+            <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px]">Close</button>
           </div>
         </div>
       )}
 
       {showSettings && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100 overflow-y-auto max-h-[90vh]">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">System Settings</h2>
-              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
-            </div>
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100">
+            <h2 className="text-xl font-black uppercase text-slate-900 mb-6">Settings</h2>
             <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
-                {!isAdmin ? (
-                  <button onClick={() => setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl">Enter Admin Mode</button>
-                ) : (
-                  <div className="space-y-3">
-                    <button onClick={handleExitAdmin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"><LogOut size={16} /> Exit Admin</button>
-                    <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-blue-200 text-blue-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-blue-100/50 transition-colors"><KeyRound size={14} /> Change Password</button>
-                  </div>
-                )}
+              <button onClick={() => isAdmin ? handleExitAdmin() : setShowAdminLogin(true)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs">{isAdmin ? "Exit Admin" : "Enter Admin Mode"}</button>
             </div>
           </div>
         </div>
       )}
 
       {showAdminLogin && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
-          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
-            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Unlock Admin</h3>
-            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
-              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg">Unlock</button>
-            </div>
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl">
+            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 font-bold text-center text-lg" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
+            <button onClick={handleAdminLogin} className="w-full mt-4 py-3 bg-blue-600 text-white rounded-xl font-black uppercase">Unlock</button>
           </div>
         </div>
       )}
