@@ -68,7 +68,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- 1. REINFORCED SYNC LOGIC (The Duplicate Killer) ---
+  // --- 1. THE PAYLOAD SCRUBBER (Kills Rejection Errors) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -79,18 +79,31 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        // Schema Alignment: Only send valid Supabase columns
-        const { id, synced, ...dataToUpload } = roll;
+        // We only allow columns that exist in your provided Supabase Schema
+        const validSchemaColumns = [
+          'product_id', 'customer_name', 'quality', 'gsm', 'color', 
+          'width_inches', 'length_meters', 'net_weight', 'gross_weight', 
+          'status', 'created_at', 'dispatched_at', 'device_name', 
+          'updated_at', 'dispatched_by'
+        ];
+
+        const cleanData = {};
+        validSchemaColumns.forEach(col => {
+          if (roll[col] !== undefined) cleanData[col] = roll[col];
+        });
+
+        // Add 'synced: 1' to the cloud data
+        const payload = { ...cleanData, synced: 1 };
 
         const { error } = await supabase
           .from('rolls')
-          .upsert(dataToUpload, { onConflict: 'product_id' });
+          .upsert(payload, { onConflict: 'product_id' });
         
         if (!error || error.code === '23505') {
-          // Mark local as synced using the product_id anchor
+          // Success: Use product_id (PK) to mark as synced locally
           await db.rolls.update(roll.product_id, { synced: 1 });
         } else {
-          console.error(`Sync error for ${roll.product_id}:`, error.message);
+          console.error(`Sync Blocked for ${roll.product_id}:`, error.message);
         }
       }
     } finally {
@@ -102,8 +115,9 @@ export default function App() {
     }
   }, [loading]);
 
-  // --- 2. THE LOCAL SAVE HANDLER ---
+  // --- 2. THE LOCAL SAVE HANDLER (Duplicate Killer) ---
   const handleLocalSave = async (updatedRoll) => {
+    // Tracking Logic
     const finalRoll = {
       ...updatedRoll,
       device_name: updatedRoll.device_name || deviceName,
@@ -111,7 +125,7 @@ export default function App() {
       updated_at: new Date().toISOString()
     };
 
-    // 'put' overwrites based on product_id primary key, preventing duplicates
+    // 'put' with product_id as the PK means it overwrites instead of duplicating
     await db.rolls.put({ ...finalRoll, synced: 0 });
     
     const allLocal = await db.rolls.toArray();
@@ -152,7 +166,7 @@ export default function App() {
       if (allRemoteData.length > 0) {
         const pendingIds = new Set(pending.map(p => p.product_id));
         
-        // Don't let Cloud data overwrite rolls currently sitting as 'Pending' locally
+        // Don't let Cloud data overwrite rolls that are currently 'Pending' locally
         const dataToSave = allRemoteData.map(r => ({
           ...r,
           synced: pendingIds.has(r.product_id) ? 0 : 1
@@ -220,7 +234,10 @@ export default function App() {
           <DispatchView 
             rolls={rolls} 
             deviceName={deviceName} 
-            onDispatch={(roll) => handleLocalSave(roll)} 
+            onDispatch={(roll) => {
+              // This function now correctly handles both status: 'dispatched' and 'in_stock'
+              handleLocalSave(roll);
+            }} 
           />
         )}
         
@@ -260,15 +277,10 @@ export default function App() {
               <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight text-center">Settings</h2>
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
             </div>
-            <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100 shadow-inner' : 'bg-red-50 border-red-100'}`}>
-                <div className="space-y-3">
-                  <button onClick={() => isAdmin ? handleExitAdmin() : setShowAdminLogin(true)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
-                    {isAdmin ? "Exit Admin Mode" : "Enter Admin Mode"}
-                  </button>
-                  {isAdmin && (
-                    <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-blue-200 text-blue-700 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-blue-100/50 transition-colors"><KeyRound size={14} /> Change Password</button>
-                  )}
-                </div>
+            <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
+                <button onClick={() => isAdmin ? handleExitAdmin() : setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all">
+                  {isAdmin ? "Exit Admin Mode" : "Enter Admin Mode"}
+                </button>
             </div>
           </div>
         </div>
@@ -280,24 +292,8 @@ export default function App() {
             <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Unlock Admin</h3>
             <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
+              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
               <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg transition-all">Unlock</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isChangingPass && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
-          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
-            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><KeyRound size={14}/> Security Key</h3>
-            <div className="space-y-3">
-              <input type="password" placeholder="Current Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold outline-none focus:border-blue-500" value={verifyOldPassInput} onChange={e => setVerifyOldPassInput(e.target.value)} />
-              <input type="password" placeholder="New Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold outline-none focus:border-blue-500" value={newPassInput} onChange={e => setNewPassInput(e.target.value)} />
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button onClick={() => { setIsChangingPass(false); setVerifyOldPassInput(''); setNewPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-              <button onClick={handleChangePassword} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-[10px] uppercase text-center hover:bg-green-700 shadow-lg transition-all">Save Key</button>
             </div>
           </div>
         </div>
