@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { db } from './db'; 
 
-// Full Component Imports
+// Components
 import Header from './components/Header.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import DashboardView from './components/DashboardView.jsx';
@@ -15,19 +15,17 @@ import EditModal from './components/EditModal.jsx';
 import LabelPrint from './components/LabelPrint.jsx';
 
 // Icons
-import { X, Lock, ShieldCheck, KeyRound, LogOut, ShieldAlert } from 'lucide-react';
+import { X, Lock, ShieldCheck, KeyRound, LogOut, ShieldAlert, WifiOff, CheckCircle2, TrendingUp } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [deviceName, setDeviceName] = useState(() => localStorage.getItem('ksf_device_name') || 'Factory_Main');
 
-  // --- ADMIN MODE STATE ---
   const [isAdmin, setIsAdmin] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false); 
   const [isChangingPass, setIsChangingPass] = useState(false);
-  
   const [adminPassword, setAdminPassword] = useState(() => localStorage.getItem('ksf_admin_password') || '1234');
   
   const [passInput, setPassInput] = useState('');
@@ -37,6 +35,9 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [rolls, setRolls] = useState([]);
   const [materials, setMaterials] = useState([]);
+  const [unsyncedRolls, setUnsyncedRolls] = useState([]);
+  const [showUnsyncedList, setShowUnsyncedList] = useState(false);
+
   const [printData, setPrintData] = useState(null);
   const [editRoll, setEditRoll] = useState(null);
   const [activeRange, setActiveRange] = useState('current_month'); 
@@ -48,102 +49,109 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(() => {
     try {
       const savedTab = localStorage.getItem('ksf_active_tab');
-      const lastActivity = localStorage.getItem('ksf_last_activity');
-      if (savedTab && lastActivity && (Date.now() - parseInt(lastActivity) < 1800000)) return savedTab;
+      if (savedTab) return savedTab;
     } catch (e) {}
     return 'dashboard';
   });
 
-  // --- ADMIN FUNCTIONS ---
   const handleAdminLogin = () => {
-    if (passInput === adminPassword) {
-      setIsAdmin(true);
-      setPassInput('');
-      setShowAdminLogin(false);
-      setShowSettings(false);
-    } else {
-      alert("Incorrect Admin Password");
-    }
+    if (passInput === adminPassword) { setIsAdmin(true); setPassInput(''); setShowAdminLogin(false); setShowSettings(false); }
+    else { alert("Incorrect Admin Password"); }
   };
 
-  const handleExitAdmin = () => {
-    setIsAdmin(false);
-    setIsChangingPass(false);
-    setShowSettings(false);
-  };
+  const handleExitAdmin = () => { setIsAdmin(false); setIsChangingPass(false); setShowSettings(false); };
 
   const handleChangePassword = () => {
     if (verifyOldPassInput !== adminPassword) return alert("Current password is incorrect.");
     if (newPassInput.length < 4) return alert("New password must be at least 4 digits");
-    setAdminPassword(newPassInput);
-    localStorage.setItem('ksf_admin_password', newPassInput);
-    setNewPassInput(''); setVerifyOldPassInput(''); 
-    setIsChangingPass(false);
-    alert("Admin password updated!");
+    setAdminPassword(newPassInput); localStorage.setItem('ksf_admin_password', newPassInput);
+    setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
+  // --- REINFORCED SYNC LOGIC (The Duplicate Fix) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
-    const unsyncedRolls = await db.rolls.where({ synced: 0 }).toArray();
-    if (unsyncedRolls.length === 0) return;
+    const pending = await db.rolls.where({ synced: 0 }).toArray();
+    setUnsyncedRolls(pending);
+    if (pending.length === 0) return;
+
     setLoading(true);
-    for (const roll of unsyncedRolls) {
-      const { id, synced, ...dataToUpload } = roll;
-      const { error } = await supabase.from('rolls').upsert(dataToUpload, { onConflict: 'product_id' });
-      if (!error || error.code === '23505' || error.message?.includes('already exists')) {
-        await db.rolls.update(roll.product_id, { synced: 1 });
+    try {
+      for (const roll of pending) {
+        const { id, synced, ...dataToUpload } = roll;
+        
+        // Handshake Check: Does it already exist in the cloud?
+        const { data: cloudCheck } = await supabase
+          .from('rolls')
+          .select('product_id')
+          .eq('product_id', roll.product_id)
+          .single();
+
+        if (cloudCheck) {
+          // It's already there! Just mark local as synced.
+          await db.rolls.update(roll.product_id, { synced: 1 });
+          continue;
+        }
+
+        const { error } = await supabase.from('rolls').upsert(dataToUpload, { onConflict: 'product_id' });
+        if (!error || error.code === '23505') {
+          await db.rolls.update(roll.product_id, { synced: 1 });
+        }
       }
+    } catch (err) {
+      console.error("Sync loop error:", err);
+    } finally {
+      const finalPending = await db.rolls.where({ synced: 0 }).toArray();
+      setUnsyncedRolls(finalPending);
+      const refreshed = await db.rolls.toArray();
+      setRolls(refreshed.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      setLoading(false);
     }
-    const refreshedLocal = await db.rolls.toArray();
-    setRolls(refreshedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    setLoading(false);
   }, [loading]);
 
   const handleLocalSave = async (updatedRoll) => {
-    try {
-      await db.rolls.put({ ...updatedRoll, synced: 0 });
-      const allLocal = await db.rolls.toArray();
-      setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-      if (navigator.onLine) {
-        const { id, synced, ...dataToUpload } = updatedRoll;
-        const { error } = await supabase.from('rolls').upsert(dataToUpload, { onConflict: 'product_id' });
-        if (!error || error.code === '23505') {
-          await db.rolls.update(updatedRoll.product_id, { synced: 1 });
-          const syncedLocal = await db.rolls.toArray();
-          setRolls(syncedLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-        }
-      }
-    } catch (err) { console.error(err); throw err; }
+    // Put locally first
+    await db.rolls.put({ ...updatedRoll, synced: 0 });
+    const allLocal = await db.rolls.toArray();
+    setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    
+    // Trigger sync
+    if (navigator.onLine) {
+        syncOfflineData();
+    }
   };
 
   useEffect(() => {
-    const handleStatus = () => { setIsOnline(navigator.onLine); if (navigator.onLine) syncOfflineData(); };
-    window.addEventListener('online', handleStatus);
-    window.addEventListener('offline', handleStatus);
+    const handleStatus = () => { setIsOnline(navigator.onLine); if(navigator.onLine) syncOfflineData(); };
+    window.addEventListener('online', handleStatus); window.addEventListener('offline', handleStatus);
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
   const fetchData = useCallback(async () => {
-    const cachedRolls = await db.rolls.toArray();
-    if (cachedRolls.length > 0) setRolls(cachedRolls.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    const cached = await db.rolls.toArray();
+    const pending = await db.rolls.where({ synced: 0 }).toArray();
+    setUnsyncedRolls(pending);
+    if (cached.length > 0) setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    
     if (!navigator.onLine) return;
     setLoading(true);
     try {
+      const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
       const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
-      let allRemoteData = []; let from = 0; const step = 1000;
-      while (true) {
-        const { data, error } = await supabase.from('rolls').select('*').or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`).range(from, from + step - 1);
-        if (error) throw error; if (!data || data.length === 0) break;
-        allRemoteData = [...allRemoteData, ...data];
-        if (data.length < step) break; from += step;
-      }
-      if (allRemoteData.length > 0) {
-        const unsynced = await db.rolls.where('synced').equals(0).toArray();
-        const unsyncedIds = new Set(unsynced.map(r => r.product_id));
-        for (const remoteRoll of allRemoteData) { if (unsyncedIds.has(remoteRoll.product_id)) await db.rolls.update(remoteRoll.product_id, { synced: 1 }); }
-        await db.rolls.bulkPut(allRemoteData.map(r => ({ ...r, synced: 1 })));
-        const finalLocal = await db.rolls.toArray();
-        setRolls(finalLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+
+      // Fetch broad enough range to ensure today's counts are correct
+      const { data, error } = await supabase.from('rolls').select('*')
+        .or(`status.eq.in_stock,created_at.gte.${startOfDay.toISOString()},dispatched_at.gte.${startOfMonth.toISOString()}`);
+      
+      if (!error && data) {
+        // GHOST CLEANUP: Overwrite local with cloud data (forces synced: 1)
+        await db.rolls.bulkPut(data.map(r => ({ ...r, synced: 1 })));
+        const final = await db.rolls.toArray();
+        setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+        
+        // Refresh unsynced count after cleanup
+        const cleanPending = await db.rolls.where({ synced: 0 }).toArray();
+        setUnsyncedRolls(cleanPending);
       }
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
@@ -153,21 +161,18 @@ export default function App() {
   useEffect(() => {
     const startUp = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session && !initialFetchDone.current) { setUser(session.user); initialFetchDone.current = true; fetchData(); syncOfflineData(); }
+      if (session && !initialFetchDone.current) { setUser(session.user); initialFetchDone.current = true; fetchData(); }
     };
     startUp();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); });
     return () => subscription.unsubscribe();
-  }, [fetchData, syncOfflineData]);
+  }, [fetchData]);
 
   const handleLogout = async () => {
-    if(confirm("Logout and clear local cache?")) { await supabase.auth.signOut(); await db.rolls.clear(); await db.materials.clear(); setUser(null); setIsGuest(false); window.location.reload(); }
+    if(confirm("Logout and clear cache?")) { await supabase.auth.signOut(); await db.rolls.clear(); await db.materials.clear(); setUser(null); setIsGuest(false); window.location.reload(); }
   };
 
-  useEffect(() => {
-    localStorage.setItem('ksf_active_tab', activeTab);
-    localStorage.setItem('ksf_last_activity', Date.now().toString());
-  }, [activeTab]);
+  useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
 
   if (!user && !isGuest) {
     return (
@@ -187,50 +192,84 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 pt-16 pb-24 font-sans text-slate-900">
       <Header 
-        deviceName={deviceName} loading={loading} onLogout={handleLogout} 
+        deviceName={deviceName} loading={loading} onLogout={handleLogout}
         onEditDeviceName={() => setShowSettings(true)} 
         onRenameTerminal={(name) => { setDeviceName(name); localStorage.setItem('ksf_device_name', name); }}
         onLogoClick={() => setActiveTab('dashboard')} onManualSync={syncOfflineData}
         rolls={rolls} materials={materials}
+        unsyncedCount={unsyncedRolls.length}
       />
       
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {/* IMPORTANT: isAdmin and fetchData passed here to enable the update market rate button in Dashboard */}
-        {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} isAdmin={isAdmin} fetchData={fetchData} />}
-        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={(roll) => setPrintData(roll)} />}
-        {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={(roll) => setPrintData(roll)} onSelectRoll={(r) => setEditRoll({...r})} />}
+        {activeTab === 'dashboard' && (
+          <DashboardView 
+            rolls={rolls} 
+            materials={materials} 
+            isAdmin={isAdmin} 
+            fetchData={fetchData} 
+            onOpenSyncList={() => setShowUnsyncedList(true)}
+          />
+        )}
+        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
+        {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
         {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
-        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} isAdmin={isAdmin} onSelectRoll={(r) => setEditRoll({...r})} onFetchRange={fetchData} activeRange={activeRange} />}
+        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} isAdmin={isAdmin} onSelectRoll={setEditRoll} onFetchRange={fetchData} activeRange={activeRange} />}
         {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
 
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
       
       {showSettings && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl relative border border-gray-100">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Admin Mode Access</h2>
-              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
+              <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">System Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
             </div>
-            <div className="space-y-4">
-              <div className={`p-5 rounded-2xl border transition-all duration-300 ${isAdmin ? 'bg-green-50 border-green-100 shadow-inner' : 'bg-red-50 border-red-100 shadow-sm'}`}>
-                <div className="flex items-center gap-2 mb-4">
-                  <ShieldCheck className={isAdmin ? "text-green-600" : "text-red-500"} size={18} />
-                  <span className={`text-[11px] font-black uppercase tracking-widest ${isAdmin ? "text-green-700" : "text-red-700"}`}>
-                    {isAdmin ? "Admin Access Active" : "Admin Restrictions"}
-                  </span>
+
+            <div className={`p-5 rounded-2xl border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
+              <div className="flex items-center gap-2 mb-4">
+                <ShieldAlert className={isAdmin ? "text-blue-600" : "text-red-500"} size={18} />
+                <span className={`text-[11px] font-black uppercase tracking-widest ${isAdmin ? "text-blue-700" : "text-red-700"}`}>
+                  {isAdmin ? "Admin Access Active" : "Admin Restrictions"}
+                </span>
+              </div>
+              {!isAdmin ? (
+                <button onClick={() => setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl active:scale-95 transition-all">Enter Admin Mode</button>
+              ) : (
+                <div className="space-y-3">
+                  <button onClick={handleExitAdmin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"><LogOut size={16} /> Exit Admin</button>
+                  <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-blue-200 text-blue-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-blue-100/50 transition-colors"><KeyRound size={14} /> Change Password</button>
                 </div>
-                {!isAdmin ? (
-                  <button onClick={() => setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-100 active:scale-95 transition-all">Enter Admin Mode</button>
-                ) : (
-                  <div className="space-y-3">
-                    <button onClick={handleExitAdmin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"><LogOut size={16} /> Exit Admin Mode</button>
-                    <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-green-200 text-green-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-green-100/50 transition-colors"><KeyRound size={14} /> Change Password</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- UNSYNCED LIST MODAL --- */}
+      {showUnsyncedList && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
+                <WifiOff size={18} className="text-amber-500"/> Unsynced Data
+              </h3>
+              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+            </div>
+            
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Roll IDs Pending Cloud Sync</p>
+              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1 scrollbar-hide">
+                {unsyncedRolls.map(r => (
+                  <div key={r.product_id} className="bg-white border border-slate-200 py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black text-slate-600">
+                    {r.product_id}
                   </div>
-                )}
+                ))}
               </div>
             </div>
+
+            <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Close</button>
           </div>
         </div>
       )}
@@ -238,27 +277,27 @@ export default function App() {
       {showAdminLogin && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
           <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
-            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Enter Admin Password</h3>
+            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Unlock Admin</h3>
             <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center hover:bg-blue-700 shadow-lg transition-all">Unlock</button>
+              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
+              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg">Unlock</button>
             </div>
           </div>
         </div>
       )}
 
       {isChangingPass && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
-          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
-            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><KeyRound size={14}/> Update Security Key</h3>
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl">
+            <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><KeyRound size={14}/> Security Key</h3>
             <div className="space-y-3">
-              <input type="password" placeholder="Current Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold outline-none focus:border-blue-500" value={verifyOldPassInput} onChange={e => setVerifyOldPassInput(e.target.value)} />
-              <input type="password" placeholder="New Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold outline-none focus:border-blue-500" value={newPassInput} onChange={e => setNewPassInput(e.target.value)} />
+              <input type="password" placeholder="Old Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold outline-none" value={verifyOldPassInput} onChange={e => setVerifyOldPassInput(e.target.value)} />
+              <input type="password" placeholder="New Password" className="w-full p-3 rounded-xl border bg-slate-50 font-bold outline-none" value={newPassInput} onChange={e => setNewPassInput(e.target.value)} />
             </div>
             <div className="flex gap-2 mt-6">
-              <button onClick={() => { setIsChangingPass(false); setVerifyOldPassInput(''); setNewPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-              <button onClick={handleChangePassword} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-[10px] uppercase text-center hover:bg-green-700 shadow-lg transition-all">Save</button>
+              <button onClick={() => { setIsChangingPass(false); setVerifyOldPassInput(''); setNewPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
+              <button onClick={handleChangePassword} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg">Save</button>
             </div>
           </div>
         </div>
