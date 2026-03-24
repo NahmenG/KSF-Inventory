@@ -68,7 +68,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- REINFORCED SYNC LOGIC (The "No-Duplicate" Fix) ---
+  // --- REINFORCED SYNC LOGIC (Matches your Schema: dispatched_by & device_name) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -79,8 +79,7 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        // IMPORTANT: We strip 'id' and 'synced' so Supabase doesn't see a numeric ID conflict.
-        // It will use product_id (onConflict) to find the existing row and update it.
+        // Strip only local-only fields. Keep dispatched_by and device_name.
         const { id, synced, ...dataToUpload } = roll;
 
         const { error } = await supabase
@@ -103,7 +102,13 @@ export default function App() {
   }, [loading]);
 
   const handleLocalSave = async (updatedRoll) => {
-    await db.rolls.put({ ...updatedRoll, synced: 0 });
+    // Ensure the terminal name is attached before saving
+    const rollWithDevice = { 
+      ...updatedRoll, 
+      device_name: updatedRoll.device_name || deviceName 
+    };
+    
+    await db.rolls.put({ ...rollWithDevice, synced: 0 });
     const allLocal = await db.rolls.toArray();
     setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     if (navigator.onLine) syncOfflineData();
@@ -115,7 +120,7 @@ export default function App() {
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
-  // --- FETCH DATA WITH AUTO-RECONCILIATION ---
+  // --- FETCH DATA WITH DUPLICATE PROTECTION ---
   const fetchData = useCallback(async () => {
     const cached = await db.rolls.toArray();
     const pending = await db.rolls.where({ synced: 0 }).toArray();
@@ -151,10 +156,8 @@ export default function App() {
       
       if (allRemoteData.length > 0) {
         const pendingIds = new Set(pending.map(p => p.product_id));
-        
         const dataToSave = allRemoteData.map(r => ({
           ...r,
-          // Protect local pending changes from being overwritten by old cloud data
           synced: pendingIds.has(r.product_id) ? 0 : 1
         }));
 
@@ -195,7 +198,7 @@ export default function App() {
 
   if (!user && !isGuest) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
+      <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100">
           <img src="/logo.png" alt="Logo" className="w-40 h-40 mx-auto mb-1 object-contain" />
           <h1 className="text-base font-bold text-gray-500 mb-10 tracking-tight">Inventory Manager</h1>
@@ -223,7 +226,16 @@ export default function App() {
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} isAdmin={isAdmin} fetchData={fetchData} onOpenSyncList={() => setShowUnsyncedList(true)} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
         {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
-        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
+        {activeTab === 'dispatch' && (
+          <DispatchView 
+            rolls={rolls} 
+            deviceName={deviceName} 
+            onDispatch={(roll) => {
+              // Schema Alignment: Attach deviceName to the dispatched_by column
+              handleLocalSave({ ...roll, dispatched_by: deviceName });
+            }} 
+          />
+        )}
         {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} isAdmin={isAdmin} onSelectRoll={setEditRoll} onFetchRange={fetchData} activeRange={activeRange} />}
         {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
@@ -232,15 +244,15 @@ export default function App() {
       
       {showUnsyncedList && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
                 <WifiOff size={18} className="text-amber-500"/> Unsynced Data
               </h3>
-              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
+              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
             </div>
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2">
                 {unsyncedRolls.map(r => (
                   <div key={r.product_id} className="bg-white border border-slate-200 py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black text-slate-600">
                     {r.product_id}
@@ -248,7 +260,7 @@ export default function App() {
                 ))}
               </div>
             </div>
-            <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Close</button>
+            <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px]">Close</button>
           </div>
         </div>
       )}
@@ -275,13 +287,13 @@ export default function App() {
       )}
 
       {showAdminLogin && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
             <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Unlock Admin</h3>
-            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
+            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
             <div className="flex gap-2 mt-4">
               <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
-              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg transition-all">Unlock</button>
+              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg">Unlock</button>
             </div>
           </div>
         </div>
