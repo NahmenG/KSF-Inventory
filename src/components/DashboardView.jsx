@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Settings2, Calculator } from 'lucide-react';
+import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Settings2, Calculator, Activity, Truck } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 // Components
@@ -54,6 +54,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       }
 
       if (rDateStr === todayStr) producedToday.push(r);
+      
       if (r.status === 'dispatched' && r.dispatched_at) {
         if (new Date(r.dispatched_at).toLocaleDateString() === todayStr) dispatchedToday.push(r);
       }
@@ -63,6 +64,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         dateMap[rDateStr].p += 1;
         dateMap[rDateStr].pw += weight;
       }
+      
       if (r.status === 'dispatched' && r.dispatched_at) {
         const dDate = new Date(r.dispatched_at);
         if (dDate >= startOfMonth) {
@@ -77,7 +79,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     return { inStock, producedToday, dispatchedToday, agedMap, totalAgedWeight, dateMap };
   }, [rolls, todayStr, todayDate]);
 
-  // RESTORED: SUMMATION LOGIC FOR LEGEND
+  // 2. TIMELINE CALCULATIONS
   const { timelineData, totalProdMonth, totalDispMonth } = useMemo(() => {
     const data = [];
     let pSum = 0; let dSum = 0;
@@ -93,29 +95,57 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
   }, [processedData.dateMap, todayDate]);
 
+  // 3. ENHANCED RECENT ACTIVITY LOGIC (Aligned with Schema)
   const recentActivity = useMemo(() => {
-    return [...rolls]
-      .sort((a, b) => {
-        const timeA = new Date(a.dispatched_at || a.created_at).getTime();
-        const timeB = new Date(b.dispatched_at || b.created_at).getTime();
-        return timeB - timeA;
-      })
-      .slice(0, 8)
-      .map(r => {
-        let type = "Produced", icon = <PlusCircle size={14} className="text-green-500" />;
-        if (r.status === 'dispatched') { 
-          type = "Dispatched"; 
-          icon = <Send size={14} className="text-blue-500" />; 
-        } else {
-          const created = new Date(r.created_at).getTime();
-          const updated = new Date(r.updated_at || r.created_at).getTime();
-          if (Math.abs(updated - created) > 10000) {
-            type = "Edited";
-            icon = <Edit3 size={14} className="text-orange-500" />;
-          }
-        }
-        return { ...r, type, icon };
-      });
+    const events = [];
+
+    rolls.forEach(r => {
+      // Production Event (Uses device_name)
+      if (r.created_at) {
+        events.push({
+          id: `${r.product_id}-p`,
+          productId: r.product_id,
+          type: 'Produced',
+          icon: <PlusCircle size={14} className="text-green-500" />,
+          time: new Date(r.created_at),
+          terminal: r.device_name || 'Production',
+          weight: r.net_weight
+        });
+      }
+
+      // Dispatch Event (Uses dispatched_by)
+      if (r.status === 'dispatched' && r.dispatched_at) {
+        events.push({
+          id: `${r.product_id}-d`,
+          productId: r.product_id,
+          type: 'Dispatched',
+          icon: <Send size={14} className="text-blue-500" />,
+          time: new Date(r.dispatched_at),
+          terminal: r.dispatched_by || 'Loading Bay',
+          weight: r.net_weight
+        });
+      }
+
+      // Edit Event Detection (Uses updated_at vs created_at/dispatched_at)
+      const createdT = new Date(r.created_at).getTime();
+      const updatedT = new Date(r.updated_at || r.created_at).getTime();
+      const dispatchedT = r.dispatched_at ? new Date(r.dispatched_at).getTime() : 0;
+      
+      // If modification happened > 10s after creation/dispatch
+      if (updatedT > createdT + 10000 && updatedT > dispatchedT + 10000) {
+        events.push({
+          id: `${r.product_id}-e`,
+          productId: r.product_id,
+          type: 'Edited',
+          icon: <Edit3 size={14} className="text-orange-500" />,
+          time: new Date(r.updated_at),
+          terminal: r.device_name || 'Admin Panel',
+          weight: r.net_weight
+        });
+      }
+    });
+
+    return events.sort((a, b) => b.time - a.time).slice(0, 10);
   }, [rolls]);
 
   const qualityData = useMemo(() => {
@@ -172,7 +202,6 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
               <YAxis fontSize={9} axisLine={false} tickLine={false} />
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
               
-              {/* RESTORED: Monthly Summation Legends */}
               <Legend 
                 verticalAlign="top" 
                 align="right" 
@@ -187,26 +216,31 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
-      {/* 4. RECENT ACTIVITY */}
+      {/* 4. RECENT ACTIVITY (Updated Terminal Logic) */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
             <Clock size={16}/> Recent Actions
           </h3>
+          <button onClick={fetchData} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400">
+            <Activity size={14} />
+          </button>
         </div>
         <div className="divide-y divide-gray-50">
-          {recentActivity.map((r, i) => (
-            <div key={i} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+          {recentActivity.map((r) => (
+            <div key={r.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-gray-50 rounded-xl">{r.icon}</div>
                 <div>
-                  <div className="font-black text-sm text-gray-900 tracking-tight">{r.product_id}</div>
-                  <div className="text-[10px] font-bold text-gray-400 uppercase">{r.type} • {r.device_name || 'System'}</div>
+                  <div className="font-black text-sm text-gray-900 tracking-tight">{r.productId}</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">
+                    {r.type} <span className="text-blue-500/60 mx-1">•</span> {r.terminal}
+                  </div>
                 </div>
               </div>
               <div className="text-right">
-                <div className="font-black text-gray-900 text-sm">{r.net_weight} kg</div>
-                <div className="text-[10px] font-bold text-blue-500">{new Date(r.dispatched_at || r.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                <div className="font-black text-gray-900 text-sm">{r.weight} kg</div>
+                <div className="text-[10px] font-bold text-blue-500">{r.time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
               </div>
             </div>
           ))}
