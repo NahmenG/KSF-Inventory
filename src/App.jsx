@@ -68,7 +68,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- REINFORCED SYNC LOGIC (The Duplicate Fix) ---
+  // --- OPTIMIZED SYNC LOGIC (Aligned with new Schema) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     const pending = await db.rolls.where({ synced: 0 }).toArray();
@@ -78,22 +78,11 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        const { id, synced, ...dataToUpload } = roll;
-        
-        // Handshake Check: Does it already exist in the cloud?
-        const { data: cloudCheck } = await supabase
+        // Since schema now includes 'synced', we send the full object
+        const { error } = await supabase
           .from('rolls')
-          .select('product_id')
-          .eq('product_id', roll.product_id)
-          .single();
-
-        if (cloudCheck) {
-          // It's already there! Just mark local as synced.
-          await db.rolls.update(roll.product_id, { synced: 1 });
-          continue;
-        }
-
-        const { error } = await supabase.from('rolls').upsert(dataToUpload, { onConflict: 'product_id' });
+          .upsert(roll, { onConflict: 'product_id' });
+          
         if (!error || error.code === '23505') {
           await db.rolls.update(roll.product_id, { synced: 1 });
         }
@@ -110,12 +99,12 @@ export default function App() {
   }, [loading]);
 
   const handleLocalSave = async (updatedRoll) => {
-    // Put locally first
+    // 1. Save locally as unsynced
     await db.rolls.put({ ...updatedRoll, synced: 0 });
     const allLocal = await db.rolls.toArray();
     setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     
-    // Trigger sync
+    // 2. Immediate push if online
     if (navigator.onLine) {
         syncOfflineData();
     }
@@ -139,17 +128,15 @@ export default function App() {
       const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
       const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
 
-      // Fetch broad enough range to ensure today's counts are correct
       const { data, error } = await supabase.from('rolls').select('*')
         .or(`status.eq.in_stock,created_at.gte.${startOfDay.toISOString()},dispatched_at.gte.${startOfMonth.toISOString()}`);
       
       if (!error && data) {
-        // GHOST CLEANUP: Overwrite local with cloud data (forces synced: 1)
+        // Any roll coming from cloud is by definition synced
         await db.rolls.bulkPut(data.map(r => ({ ...r, synced: 1 })));
         const final = await db.rolls.toArray();
         setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
         
-        // Refresh unsynced count after cleanup
         const cleanPending = await db.rolls.where({ synced: 0 }).toArray();
         setUnsyncedRolls(cleanPending);
       }
@@ -169,7 +156,14 @@ export default function App() {
   }, [fetchData]);
 
   const handleLogout = async () => {
-    if(confirm("Logout and clear cache?")) { await supabase.auth.signOut(); await db.rolls.clear(); await db.materials.clear(); setUser(null); setIsGuest(false); window.location.reload(); }
+    if(confirm("Logout and clear cache?")) { 
+      await supabase.auth.signOut(); 
+      await db.rolls.clear(); 
+      await db.materials.clear(); 
+      setUser(null); 
+      setIsGuest(false); 
+      window.location.reload(); 
+    }
   };
 
   useEffect(() => { localStorage.setItem('ksf_active_tab', activeTab); }, [activeTab]);
@@ -219,6 +213,31 @@ export default function App() {
 
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />
       
+      {showUnsyncedList && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
+                <WifiOff size={18} className="text-amber-500"/> Unsynced Data
+              </h3>
+              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+            </div>
+            
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto pr-1 scrollbar-hide">
+              <div className="grid grid-cols-2 gap-2">
+                {unsyncedRolls.map(r => (
+                  <div key={r.product_id} className="bg-white border border-slate-200 py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black text-slate-600">
+                    {r.product_id}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Close</button>
+          </div>
+        </div>
+      )}
+
       {showSettings && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
@@ -227,7 +246,7 @@ export default function App() {
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
             </div>
 
-            <div className={`p-5 rounded-2xl border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
+            <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
               <div className="flex items-center gap-2 mb-4">
                 <ShieldAlert className={isAdmin ? "text-blue-600" : "text-red-500"} size={18} />
                 <span className={`text-[11px] font-black uppercase tracking-widest ${isAdmin ? "text-blue-700" : "text-red-700"}`}>
@@ -243,33 +262,6 @@ export default function App() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- UNSYNCED LIST MODAL --- */}
-      {showUnsyncedList && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
-                <WifiOff size={18} className="text-amber-500"/> Unsynced Data
-              </h3>
-              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
-            </div>
-            
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Roll IDs Pending Cloud Sync</p>
-              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1 scrollbar-hide">
-                {unsyncedRolls.map(r => (
-                  <div key={r.product_id} className="bg-white border border-slate-200 py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black text-slate-600">
-                    {r.product_id}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Close</button>
           </div>
         </div>
       )}
