@@ -68,7 +68,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- REINFORCED SYNC LOGIC (Matches your Schema: dispatched_by & device_name) ---
+  // --- REINFORCED SYNC LOGIC (Matches Schema: device_name, dispatched_by) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -79,14 +79,18 @@ export default function App() {
     setLoading(true);
     try {
       for (const roll of pending) {
-        // Strip only local-only fields. Keep dispatched_by and device_name.
-        const { id, synced, ...dataToUpload } = roll;
+        // CLEAN HANDSHAKE: 
+        // 1. We remove 'id' because it's a numeric local key, Supabase uses UUID.
+        // 2. We remove 'synced' to avoid sending local-only flags.
+        // 3. We ensure no legacy 'dispatched_by_device' is sent.
+        const { id, synced, dispatched_by_device, ...dataToUpload } = roll;
 
         const { error } = await supabase
           .from('rolls')
           .upsert(dataToUpload, { onConflict: 'product_id' });
         
-        if (!error) {
+        if (!error || error.code === '23505') {
+          // Success: Use product_id to anchor the local update
           await db.rolls.update(roll.product_id, { synced: 1 });
         } else {
           console.error(`Sync error for ${roll.product_id}:`, error.message);
@@ -102,25 +106,26 @@ export default function App() {
   }, [loading]);
 
   const handleLocalSave = async (updatedRoll) => {
-    // Ensure the terminal name is attached before saving
-    const rollWithDevice = { 
-      ...updatedRoll, 
-      device_name: updatedRoll.device_name || deviceName 
+    // Schema Alignment: Ensure created items have device_name and dispatched items have dispatched_by
+    const schemaCorrected = {
+      ...updatedRoll,
+      device_name: updatedRoll.device_name || deviceName,
+      dispatched_by: updatedRoll.status === 'dispatched' ? deviceName : (updatedRoll.dispatched_by || null)
     };
-    
-    await db.rolls.put({ ...rollWithDevice, synced: 0 });
+
+    await db.rolls.put({ ...schemaCorrected, synced: 0 });
     const allLocal = await db.rolls.toArray();
     setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     if (navigator.onLine) syncOfflineData();
   };
 
   useEffect(() => {
-    const handleStatus = () => { setIsOnline(navigator.onLine); if(navigator.onLine) syncOfflineData(); };
+    const handleStatus = () => { setIsOnline(navigator.onLine); if (navigator.onLine) syncOfflineData(); };
     window.addEventListener('online', handleStatus); window.addEventListener('offline', handleStatus);
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
-  // --- FETCH DATA WITH DUPLICATE PROTECTION ---
+  // --- FETCH DATA WITH LOCAL-FIRST PROTECTION ---
   const fetchData = useCallback(async () => {
     const cached = await db.rolls.toArray();
     const pending = await db.rolls.where({ synced: 0 }).toArray();
@@ -131,36 +136,28 @@ export default function App() {
     setLoading(true);
 
     try {
-      const startOfMonth = new Date(); 
-      startOfMonth.setDate(1); 
-      startOfMonth.setHours(0,0,0,0);
-
-      let allRemoteData = [];
-      let from = 0;
-      const step = 1000;
+      const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
+      let allRemoteData = []; let from = 0; const step = 1000;
 
       while (true) {
-        const { data, error } = await supabase
-          .from('rolls')
-          .select('*')
+        const { data, error } = await supabase.from('rolls').select('*')
           .or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`)
           .order('created_at', { ascending: false })
           .range(from, from + step - 1);
-        
-        if (error) throw error;
-        if (!data || data.length === 0) break;
+        if (error) throw error; if (!data || data.length === 0) break;
         allRemoteData = [...allRemoteData, ...data];
-        if (data.length < step) break;
-        from += step;
+        if (data.length < step) break; from += step;
       }
       
       if (allRemoteData.length > 0) {
+        // PROTECTION: Don't let Cloud data overwrite rolls that are currently 'Pending' locally
         const pendingIds = new Set(pending.map(p => p.product_id));
         const dataToSave = allRemoteData.map(r => ({
           ...r,
           synced: pendingIds.has(r.product_id) ? 0 : 1
         }));
 
+        // bulkPut uses product_id to merge, killing duplicates
         await db.rolls.bulkPut(dataToSave);
         const final = await db.rolls.toArray();
         setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -168,9 +165,7 @@ export default function App() {
       
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
-    } finally { 
-      setLoading(false); 
-    }
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -185,12 +180,7 @@ export default function App() {
 
   const handleLogout = async () => {
     if(confirm("Logout and clear local cache?")) { 
-      await supabase.auth.signOut(); 
-      await db.rolls.clear(); 
-      await db.materials.clear(); 
-      setUser(null); 
-      setIsGuest(false); 
-      window.location.reload(); 
+      await supabase.auth.signOut(); await db.rolls.clear(); await db.materials.clear(); setUser(null); setIsGuest(false); window.location.reload(); 
     }
   };
 
@@ -198,7 +188,7 @@ export default function App() {
 
   if (!user && !isGuest) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
+      <div className="h-screen flex items-center justify-center bg-slate-50 p-6 font-sans">
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center border border-gray-100">
           <img src="/logo.png" alt="Logo" className="w-40 h-40 mx-auto mb-1 object-contain" />
           <h1 className="text-base font-bold text-gray-500 mb-10 tracking-tight">Inventory Manager</h1>
@@ -226,16 +216,7 @@ export default function App() {
         {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} isAdmin={isAdmin} fetchData={fetchData} onOpenSyncList={() => setShowUnsyncedList(true)} />}
         {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
         {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
-        {activeTab === 'dispatch' && (
-          <DispatchView 
-            rolls={rolls} 
-            deviceName={deviceName} 
-            onDispatch={(roll) => {
-              // Schema Alignment: Attach deviceName to the dispatched_by column
-              handleLocalSave({ ...roll, dispatched_by: deviceName });
-            }} 
-          />
-        )}
+        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={(roll) => handleLocalSave({...roll, status: 'dispatched', dispatched_at: new Date().toISOString()})} />}
         {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} isAdmin={isAdmin} onSelectRoll={setEditRoll} onFetchRange={fetchData} activeRange={activeRange} />}
         {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
       </main>
@@ -244,14 +225,14 @@ export default function App() {
       
       {showUnsyncedList && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
                 <WifiOff size={18} className="text-amber-500"/> Unsynced Data
               </h3>
-              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
             </div>
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto">
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-2">
                 {unsyncedRolls.map(r => (
                   <div key={r.product_id} className="bg-white border border-slate-200 py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black text-slate-600">
@@ -260,7 +241,7 @@ export default function App() {
                 ))}
               </div>
             </div>
-            <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px]">Close</button>
+            <button onClick={() => setShowUnsyncedList(false)} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Close</button>
           </div>
         </div>
       )}
@@ -269,31 +250,26 @@ export default function App() {
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">System Settings</h2>
+              <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight text-center">Settings</h2>
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
             </div>
             <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
-                {!isAdmin ? (
-                  <button onClick={() => setShowAdminLogin(true)} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl">Enter Admin Mode</button>
-                ) : (
-                  <div className="space-y-3">
-                    <button onClick={handleExitAdmin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2"><LogOut size={16} /> Exit Admin</button>
-                    <button onClick={() => setIsChangingPass(true)} className="w-full py-3 border-2 border-dashed border-blue-200 text-blue-700 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-blue-100/50 transition-colors"><KeyRound size={14} /> Change Password</button>
-                  </div>
-                )}
+                <button onClick={() => isAdmin ? handleExitAdmin() : setShowAdminLogin(true)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
+                  {isAdmin ? "Exit Admin Mode" : "Enter Admin Mode"}
+                </button>
             </div>
           </div>
         </div>
       )}
 
       {showAdminLogin && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in zoom-in-95">
           <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 shadow-2xl border border-slate-200">
             <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Unlock Admin</h3>
-            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
+            <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
-              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg">Unlock</button>
+              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+              <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg transition-all">Unlock</button>
             </div>
           </div>
         </div>
