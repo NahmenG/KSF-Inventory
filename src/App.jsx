@@ -15,7 +15,7 @@ import EditModal from './components/EditModal.jsx';
 import LabelPrint from './components/LabelPrint.jsx';
 
 // Icons
-import { X, Lock, ShieldCheck, KeyRound, LogOut, ShieldAlert, WifiOff } from 'lucide-react';
+import { X, Lock, ShieldCheck, KeyRound, LogOut, ShieldAlert, WifiOff, Cloud, CloudOff, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -78,7 +78,7 @@ export default function App() {
 
     setLoading(true);
     try {
-      // Whitelist of valid Supabase columns from your provided schema
+      // Schema Whitelist: Only send columns that exist in your Supabase table
       const validSchemaColumns = [
         'product_id', 'customer_name', 'quality', 'gsm', 'color', 
         'width_inches', 'length_meters', 'net_weight', 'gross_weight', 
@@ -92,13 +92,13 @@ export default function App() {
           if (roll[col] !== undefined) cleanData[col] = roll[col];
         });
 
-        // We use product_id for conflict resolution
+        // Upsert based on product_id
         const { error } = await supabase
           .from('rolls')
-          .upsert(cleanData, { onConflict: 'product_id' });
+          .upsert({ ...cleanData, synced: 1 }, { onConflict: 'product_id' });
         
         if (!error || error.code === '23505') {
-          // Success: Use product_id (Primary Key) to mark as synced locally
+          // Success: Mark as synced using the product_id anchor
           await db.rolls.update(roll.product_id, { synced: 1 });
         } else {
           console.error(`Sync Blocked for ${roll.product_id}:`, error.message);
@@ -113,7 +113,7 @@ export default function App() {
     }
   }, [loading]);
 
-  // --- 2. THE LOCAL SAVE HANDLER ---
+  // --- 2. LOCAL SAVE HANDLER (Duplicate Killer) ---
   const handleLocalSave = async (updatedRoll) => {
     const finalRoll = {
       ...updatedRoll,
@@ -122,7 +122,7 @@ export default function App() {
       updated_at: new Date().toISOString()
     };
 
-    // Dexie 'put' overwrites based on product_id primary key
+    // 'put' with product_id as the PK overwrites instead of duplicating
     await db.rolls.put({ ...finalRoll, synced: 0 });
     
     const allLocal = await db.rolls.toArray();
@@ -136,7 +136,7 @@ export default function App() {
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
-  // --- 3. FETCH DATA (With Local-First Protection) ---
+  // --- 3. FETCH DATA (With Reconciliation) ---
   const fetchData = useCallback(async () => {
     const cached = await db.rolls.toArray();
     const pending = await db.rolls.where({ synced: 0 }).toArray();
@@ -163,7 +163,7 @@ export default function App() {
       if (allRemoteData.length > 0) {
         const pendingIds = new Set(pending.map(p => p.product_id));
         
-        // PROTECTION: Only accept Cloud data if we don't have a newer 'Pending' local version
+        // PROTECTION: Only merge cloud data if the local roll is NOT pending a change
         const dataToSave = allRemoteData.map(r => ({
           ...r,
           synced: pendingIds.has(r.product_id) ? 0 : 1
@@ -240,13 +240,14 @@ export default function App() {
               <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
                 <WifiOff size={18} className="text-amber-500"/> Unsynced Data
               </h3>
-              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20} /></button>
+              <button onClick={() => setShowUnsyncedList(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
             </div>
             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 max-h-60 overflow-y-auto">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
                 {unsyncedRolls.map(r => (
-                  <div key={r.product_id} className="bg-white border border-slate-200 py-2 px-3 rounded-xl text-center text-[10px] font-mono font-black text-slate-600">
-                    {r.product_id}
+                  <div key={r.product_id} className="bg-white border border-slate-200 py-3 px-4 rounded-xl flex justify-between items-center shadow-sm">
+                    <span className="text-[10px] font-mono font-black text-slate-600">{r.product_id}</span>
+                    <CloudOff size={14} className="text-amber-500 animate-pulse" />
                   </div>
                 ))}
               </div>
@@ -280,7 +281,7 @@ export default function App() {
             <h3 className="text-xs font-black uppercase mb-4 text-slate-800 flex items-center gap-2"><Lock size={14}/> Unlock Admin</h3>
             <input autoFocus type="password" placeholder="Password" className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 outline-none font-bold text-center text-lg focus:border-blue-500 transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAdminLogin()} />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400">Cancel</button>
+              <button onClick={() => { setShowAdminLogin(false); setPassInput(''); }} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
               <button onClick={handleAdminLogin} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase text-center shadow-lg transition-all">Unlock</button>
             </div>
           </div>
