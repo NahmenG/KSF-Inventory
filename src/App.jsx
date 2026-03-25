@@ -68,17 +68,16 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- 1. THE PAYLOAD SCRUBBER (Kills Rejection Errors) ---
+  // --- 1. THE PAYLOAD SCRUBBER (Kills Sync Rejections) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
-    const pending = await db.rolls.where({ synced: 0 }).toArray();
-    setUnsyncedRolls(pending);
-    if (pending.length === 0) return;
-
-    setLoading(true);
     try {
-      // Schema Whitelist: Only send columns that exist in your Supabase table
+      const pending = await db.rolls.where({ synced: 0 }).toArray();
+      setUnsyncedRolls(pending);
+      if (pending.length === 0) return;
+
+      setLoading(true);
       const validSchemaColumns = [
         'product_id', 'customer_name', 'quality', 'gsm', 'color', 
         'width_inches', 'length_meters', 'net_weight', 'gross_weight', 
@@ -92,18 +91,19 @@ export default function App() {
           if (roll[col] !== undefined) cleanData[col] = roll[col];
         });
 
-        // Upsert based on product_id
+        // Upsert uses product_id as the anchor for cloud reconciliation
         const { error } = await supabase
           .from('rolls')
-          .upsert({ ...cleanData, synced: 1 }, { onConflict: 'product_id' });
+          .upsert(cleanData, { onConflict: 'product_id' });
         
         if (!error || error.code === '23505') {
-          // Success: Mark as synced using the product_id anchor
           await db.rolls.update(roll.product_id, { synced: 1 });
         } else {
-          console.error(`Sync Blocked for ${roll.product_id}:`, error.message);
+          console.error(`Sync error for ${roll.product_id}:`, error.message);
         }
       }
+    } catch (e) {
+      console.error("Sync process interrupted:", e);
     } finally {
       const refreshed = await db.rolls.toArray();
       setRolls(refreshed.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -113,7 +113,6 @@ export default function App() {
     }
   }, [loading]);
 
-  // --- 2. LOCAL SAVE HANDLER (Duplicate Killer) ---
   const handleLocalSave = async (updatedRoll) => {
     const finalRoll = {
       ...updatedRoll,
@@ -122,12 +121,15 @@ export default function App() {
       updated_at: new Date().toISOString()
     };
 
-    // 'put' with product_id as the PK overwrites instead of duplicating
-    await db.rolls.put({ ...finalRoll, synced: 0 });
-    
-    const allLocal = await db.rolls.toArray();
-    setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    if (navigator.onLine) syncOfflineData();
+    try {
+      // Natural Key logic: Dexie 'put' replaces existing rolls with the same product_id
+      await db.rolls.put({ ...finalRoll, synced: 0 });
+      const allLocal = await db.rolls.toArray();
+      setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      if (navigator.onLine) syncOfflineData();
+    } catch (e) {
+      alert("Database error: Save failed. Please refresh and try again.");
+    }
   };
 
   useEffect(() => {
@@ -136,17 +138,17 @@ export default function App() {
     return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
   }, [syncOfflineData]);
 
-  // --- 3. FETCH DATA (With Reconciliation) ---
+  // --- 2. FETCH DATA (With Reconciliation) ---
   const fetchData = useCallback(async () => {
-    const cached = await db.rolls.toArray();
-    const pending = await db.rolls.where({ synced: 0 }).toArray();
-    setUnsyncedRolls(pending);
-    if (cached.length > 0) setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-    
-    if (!navigator.onLine) return;
-    setLoading(true);
-
     try {
+      const cached = await db.rolls.toArray();
+      const pending = await db.rolls.where({ synced: 0 }).toArray();
+      setUnsyncedRolls(pending);
+      if (cached.length > 0) setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      
+      if (!navigator.onLine) return;
+      setLoading(true);
+
       const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
       let allRemoteData = []; let from = 0; const step = 1000;
 
@@ -162,10 +164,9 @@ export default function App() {
       
       if (allRemoteData.length > 0) {
         const pendingIds = new Set(pending.map(p => p.product_id));
-        
-        // PROTECTION: Only merge cloud data if the local roll is NOT pending a change
         const dataToSave = allRemoteData.map(r => ({
           ...r,
+          // If a roll is pending on the phone, keep its local state as 'unsynced'
           synced: pendingIds.has(r.product_id) ? 0 : 1
         }));
 
@@ -175,6 +176,8 @@ export default function App() {
       }
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
+    } catch (err) {
+      console.error("Data fetch failed:", err);
     } finally { setLoading(false); }
   }, []);
 
@@ -190,7 +193,9 @@ export default function App() {
 
   const handleLogout = async () => {
     if(confirm("Logout and clear local cache?")) { 
-      await supabase.auth.signOut(); await db.rolls.clear(); await db.materials.clear(); setUser(null); setIsGuest(false); window.location.reload(); 
+      await supabase.auth.signOut(); 
+      try { await db.rolls.clear(); await db.materials.clear(); } catch (e) {}
+      setUser(null); setIsGuest(false); window.location.reload(); 
     }
   };
 
@@ -259,9 +264,12 @@ export default function App() {
 
       {showSettings && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100">
-            <h2 className="text-xl font-black uppercase text-slate-900 mb-6 text-center tracking-tight">Settings</h2>
-            <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight text-center">Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
+            </div>
+            <div className={`p-5 rounded-[2rem] border transition-all duration-300 ${isAdmin ? 'bg-blue-50 border-blue-100 shadow-inner' : 'bg-red-50 border-red-100'}`}>
                 <div className="space-y-3">
                   <button onClick={() => isAdmin ? handleExitAdmin() : setShowAdminLogin(true)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition-all">
                     {isAdmin ? "Exit Admin Mode" : "Enter Admin Mode"}
@@ -309,7 +317,7 @@ export default function App() {
           onDelete={async (productId) => {
             if (isDeleting.current) return; isDeleting.current = true; setEditRoll(null);
             try {
-              await db.rolls.where('product_id').equals(productId).delete();
+              await db.rolls.delete(productId);
               if (navigator.onLine) await supabase.from('rolls').delete().eq('product_id', productId);
               await fetchData();
             } finally { isDeleting.current = false; }
