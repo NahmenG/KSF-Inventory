@@ -45,6 +45,7 @@ export default function App() {
   
   const initialFetchDone = useRef(false);
   const isDeleting = useRef(false);
+  const syncTimer = useRef(null);
 
   const [activeTab, setActiveTab] = useState(() => {
     try {
@@ -68,7 +69,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- 1. THE PAYLOAD SCRUBBER (Kills Sync Rejections) ---
+  // --- 1. THE PAYLOAD SCRUBBER & SYNC ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || loading) return;
     
@@ -77,7 +78,6 @@ export default function App() {
       setUnsyncedRolls(pending);
       if (pending.length === 0) return;
 
-      setLoading(true);
       const validSchemaColumns = [
         'product_id', 'customer_name', 'quality', 'gsm', 'color', 
         'width_inches', 'length_meters', 'net_weight', 'gross_weight', 
@@ -91,25 +91,21 @@ export default function App() {
           if (roll[col] !== undefined) cleanData[col] = roll[col];
         });
 
-        // Upsert uses product_id as the anchor for cloud reconciliation
         const { error } = await supabase
           .from('rolls')
           .upsert(cleanData, { onConflict: 'product_id' });
         
         if (!error || error.code === '23505') {
           await db.rolls.update(roll.product_id, { synced: 1 });
-        } else {
-          console.error(`Sync error for ${roll.product_id}:`, error.message);
         }
       }
     } catch (e) {
-      console.error("Sync process interrupted:", e);
+      console.error("Sync interrupted:", e);
     } finally {
       const refreshed = await db.rolls.toArray();
       setRolls(refreshed.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       const finalPending = await db.rolls.where({ synced: 0 }).toArray();
       setUnsyncedRolls(finalPending);
-      setLoading(false);
     }
   }, [loading]);
 
@@ -122,24 +118,17 @@ export default function App() {
     };
 
     try {
-      // Natural Key logic: Dexie 'put' replaces existing rolls with the same product_id
       await db.rolls.put({ ...finalRoll, synced: 0 });
       const allLocal = await db.rolls.toArray();
       setRolls(allLocal.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       if (navigator.onLine) syncOfflineData();
     } catch (e) {
-      alert("Database error: Save failed. Please refresh and try again.");
+      alert("Database error: Save failed.");
     }
   };
 
-  useEffect(() => {
-    const handleStatus = () => { setIsOnline(navigator.onLine); if (navigator.onLine) syncOfflineData(); };
-    window.addEventListener('online', handleStatus); window.addEventListener('offline', handleStatus);
-    return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
-  }, [syncOfflineData]);
-
-  // --- 2. FETCH DATA (With Reconciliation) ---
-  const fetchData = useCallback(async () => {
+  // --- 2. FETCH DATA (With Silent Mode for Background Refresh) ---
+  const fetchData = useCallback(async (isSilent = false) => {
     try {
       const cached = await db.rolls.toArray();
       const pending = await db.rolls.where({ synced: 0 }).toArray();
@@ -147,7 +136,7 @@ export default function App() {
       if (cached.length > 0) setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       
       if (!navigator.onLine) return;
-      setLoading(true);
+      if (!isSilent) setLoading(true);
 
       const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
       let allRemoteData = []; let from = 0; const step = 1000;
@@ -166,7 +155,6 @@ export default function App() {
         const pendingIds = new Set(pending.map(p => p.product_id));
         const dataToSave = allRemoteData.map(r => ({
           ...r,
-          // If a roll is pending on the phone, keep its local state as 'unsynced'
           synced: pendingIds.has(r.product_id) ? 0 : 1
         }));
 
@@ -177,9 +165,42 @@ export default function App() {
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
     } catch (err) {
-      console.error("Data fetch failed:", err);
-    } finally { setLoading(false); }
+      console.error("Fetch error:", err);
+    } finally { if (!isSilent) setLoading(false); }
   }, []);
+
+  // --- 3. REALTIME & POLLING LISTENERS ---
+  useEffect(() => {
+    if (!user) return;
+
+    // A. Realtime Channel (Instant Updates from other devices)
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
+        // Trigger silent background refresh on any cloud change
+        fetchData(true);
+      })
+      .subscribe();
+
+    // B. Polling Backup (Every 15s check)
+    syncTimer.current = setInterval(() => {
+      if (navigator.onLine && !loading) {
+        syncOfflineData();
+        fetchData(true);
+      }
+    }, 15000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(syncTimer.current);
+    };
+  }, [user, fetchData, syncOfflineData, loading]);
+
+  useEffect(() => {
+    const handleStatus = () => { setIsOnline(navigator.onLine); if (navigator.onLine) syncOfflineData(); };
+    window.addEventListener('online', handleStatus); window.addEventListener('offline', handleStatus);
+    return () => { window.removeEventListener('online', handleStatus); window.removeEventListener('offline', handleStatus); };
+  }, [syncOfflineData]);
 
   useEffect(() => {
     const startUp = async () => {
