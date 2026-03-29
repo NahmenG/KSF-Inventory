@@ -69,15 +69,68 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- 1. THE PAYLOAD SCRUBBER & SYNC ---
-  const syncOfflineData = useCallback(async () => {
-    if (!navigator.onLine || loading) return;
-    
+  // --- 1. THE INCREMENTAL FETCH (Low Egress Logic) ---
+  const fetchData = useCallback(async (isSilent = false) => {
     try {
+      // Get current local data to establish the baseline
+      const cached = await db.rolls.toArray();
       const pending = await db.rolls.where({ synced: 0 }).toArray();
       setUnsyncedRolls(pending);
-      if (pending.length === 0) return;
+      
+      if (cached.length > 0) {
+        setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      }
 
+      if (!navigator.onLine) return;
+      if (!isSilent) setLoading(true);
+
+      // LOW EGRESS: Find the most recent update in local DB
+      // We only fetch items that have been updated AFTER our last known record
+      const lastUpdate = cached.length > 0 
+        ? new Date(Math.max(...cached.map(r => new Date(r.updated_at || r.created_at).getTime()))).toISOString()
+        : new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+
+      const { data: deltaData, error } = await supabase
+        .from('rolls')
+        .select('*')
+        .gt('updated_at', lastUpdate)
+        .order('updated_at', { ascending: true });
+
+      if (error) throw error;
+
+      if (deltaData && deltaData.length > 0) {
+        const pendingIds = new Set(pending.map(p => p.product_id));
+        
+        // Merge delta into local storage without overwriting local pending changes
+        const dataToSave = deltaData.map(r => ({
+          ...r,
+          synced: pendingIds.has(r.product_id) ? 0 : 1
+        }));
+
+        await db.rolls.bulkPut(dataToSave);
+        const final = await db.rolls.toArray();
+        setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      }
+
+      // Materials are small enough for a standard sync
+      const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
+      if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
+      
+    } catch (err) {
+      console.error("Incremental fetch failed:", err);
+    } finally { 
+      if (!isSilent) setLoading(false); 
+    }
+  }, []);
+
+  // --- 2. THE REINFORCED SYNC (Now including Refresh logic) ---
+  const syncOfflineData = useCallback(async () => {
+    if (!navigator.onLine) { alert("No internet connection."); return; }
+    
+    setLoading(true);
+    try {
+      const pending = await db.rolls.where({ synced: 0 }).toArray();
+      
       const validSchemaColumns = [
         'product_id', 'customer_name', 'quality', 'gsm', 'color', 
         'width_inches', 'length_meters', 'net_weight', 'gross_weight', 
@@ -95,19 +148,20 @@ export default function App() {
           .from('rolls')
           .upsert(cleanData, { onConflict: 'product_id' });
         
-        if (!error || error.code === '23505') {
+        if (!error) {
           await db.rolls.update(roll.product_id, { synced: 1 });
         }
       }
-    } catch (e) {
-      console.error("Sync interrupted:", e);
+
+      // AFTER PUSHING, IMMEDIATELY PULL NEW DATA
+      // This is the specific logic that makes the UI refresh on other devices' data
+      await fetchData(false);
+
+      if (window.navigator.vibrate) window.navigator.vibrate(50); // Haptic feedback
     } finally {
-      const refreshed = await db.rolls.toArray();
-      setRolls(refreshed.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-      const finalPending = await db.rolls.where({ synced: 0 }).toArray();
-      setUnsyncedRolls(finalPending);
+      setLoading(false);
     }
-  }, [loading]);
+  }, [fetchData]);
 
   const handleLocalSave = async (updatedRoll) => {
     const finalRoll = {
@@ -127,65 +181,22 @@ export default function App() {
     }
   };
 
-  // --- 2. FETCH DATA (With Silent Mode for Background Refresh) ---
-  const fetchData = useCallback(async (isSilent = false) => {
-    try {
-      const cached = await db.rolls.toArray();
-      const pending = await db.rolls.where({ synced: 0 }).toArray();
-      setUnsyncedRolls(pending);
-      if (cached.length > 0) setRolls(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-      
-      if (!navigator.onLine) return;
-      if (!isSilent) setLoading(true);
-
-      const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
-      let allRemoteData = []; let from = 0; const step = 1000;
-
-      while (true) {
-        const { data, error } = await supabase.from('rolls').select('*')
-          .or(`status.eq.in_stock,dispatched_at.gte.${startOfMonth.toISOString()}`)
-          .order('created_at', { ascending: false })
-          .range(from, from + step - 1);
-        if (error) throw error; if (!data || data.length === 0) break;
-        allRemoteData = [...allRemoteData, ...data];
-        if (data.length < step) break; from += step;
-      }
-      
-      if (allRemoteData.length > 0) {
-        const pendingIds = new Set(pending.map(p => p.product_id));
-        const dataToSave = allRemoteData.map(r => ({
-          ...r,
-          synced: pendingIds.has(r.product_id) ? 0 : 1
-        }));
-
-        await db.rolls.bulkPut(dataToSave);
-        const final = await db.rolls.toArray();
-        setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-      }
-      const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
-      if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
-    } catch (err) {
-      console.error("Fetch error:", err);
-    } finally { if (!isSilent) setLoading(false); }
-  }, []);
-
-  // --- 3. REALTIME & POLLING LISTENERS ---
+  // --- 3. REALTIME & AUTO-POLLING ---
   useEffect(() => {
     if (!user) return;
 
-    // A. Realtime Channel (Instant Updates from other devices)
+    // Realtime Listener
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
-        // Trigger silent background refresh on any cloud change
+        // Trigger incremental fetch whenever a change is detected on Supabase
         fetchData(true);
       })
       .subscribe();
 
-    // B. Polling Backup (Every 15s check)
+    // Safety Polling (Every 15 seconds)
     syncTimer.current = setInterval(() => {
-      if (navigator.onLine && !loading) {
-        syncOfflineData();
+      if (navigator.onLine) {
         fetchData(true);
       }
     }, 15000);
@@ -194,7 +205,7 @@ export default function App() {
       supabase.removeChannel(channel);
       clearInterval(syncTimer.current);
     };
-  }, [user, fetchData, syncOfflineData, loading]);
+  }, [user, fetchData]);
 
   useEffect(() => {
     const handleStatus = () => { setIsOnline(navigator.onLine); if (navigator.onLine) syncOfflineData(); };
