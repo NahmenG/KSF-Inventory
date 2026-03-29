@@ -72,7 +72,7 @@ export default function App() {
   // --- 1. THE INCREMENTAL FETCH (Low Egress Logic) ---
   const fetchData = useCallback(async (isSilent = false) => {
     try {
-      // Get current local data to establish the baseline
+      // Step A: Load whatever is in the local cache first
       const cached = await db.rolls.toArray();
       const pending = await db.rolls.where({ synced: 0 }).toArray();
       setUnsyncedRolls(pending);
@@ -84,12 +84,13 @@ export default function App() {
       if (!navigator.onLine) return;
       if (!isSilent) setLoading(true);
 
-      // LOW EGRESS: Find the most recent update in local DB
-      // We only fetch items that have been updated AFTER our last known record
+      // Step B: Calculate the "Watermark" (The last time this device received an update)
+      // We look for the newest 'updated_at' timestamp we have locally.
       const lastUpdate = cached.length > 0 
         ? new Date(Math.max(...cached.map(r => new Date(r.updated_at || r.created_at).getTime()))).toISOString()
         : new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
+      // Step C: Ask Supabase ONLY for rows changed AFTER that timestamp
       const { data: deltaData, error } = await supabase
         .from('rolls')
         .select('*')
@@ -101,7 +102,7 @@ export default function App() {
       if (deltaData && deltaData.length > 0) {
         const pendingIds = new Set(pending.map(p => p.product_id));
         
-        // Merge delta into local storage without overwriting local pending changes
+        // Merge records. If a roll is 'pending' locally, don't overwrite it with cloud data yet.
         const dataToSave = deltaData.map(r => ({
           ...r,
           synced: pendingIds.has(r.product_id) ? 0 : 1
@@ -112,7 +113,7 @@ export default function App() {
         setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       }
 
-      // Materials are small enough for a standard sync
+      // Sync materials (Small table, full fetch is safe)
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
       
@@ -144,6 +145,7 @@ export default function App() {
           if (roll[col] !== undefined) cleanData[col] = roll[col];
         });
 
+        // Push to cloud
         const { error } = await supabase
           .from('rolls')
           .upsert(cleanData, { onConflict: 'product_id' });
@@ -153,11 +155,10 @@ export default function App() {
         }
       }
 
-      // AFTER PUSHING, IMMEDIATELY PULL NEW DATA
-      // This is the specific logic that makes the UI refresh on other devices' data
+      // CRITICAL: After pushing, immediately run incremental fetch to get data from other terminals
       await fetchData(false);
 
-      if (window.navigator.vibrate) window.navigator.vibrate(50); // Haptic feedback
+      if (window.navigator.vibrate) window.navigator.vibrate(50); // Mobile haptic feedback
     } finally {
       setLoading(false);
     }
@@ -185,16 +186,15 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    // Realtime Listener
+    // Realtime Listener: When any terminal updates Supabase, trigger our local incremental fetch
     const channel = supabase
       .channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async (payload) => {
-        // Trigger incremental fetch whenever a change is detected on Supabase
-        fetchData(true);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async () => {
+        fetchData(true); // Silent background fetch
       })
       .subscribe();
 
-    // Safety Polling (Every 15 seconds)
+    // Polling Backup: Every 15 seconds, check for updates manually
     syncTimer.current = setInterval(() => {
       if (navigator.onLine) {
         fetchData(true);
