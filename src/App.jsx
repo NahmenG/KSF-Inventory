@@ -69,10 +69,9 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- 1. THE INCREMENTAL FETCH (Low Egress Logic) ---
+  // --- 1. THE INCREMENTAL FETCH (Corrected for Recovery/Cold Start) ---
   const fetchData = useCallback(async (isSilent = false) => {
     try {
-      // Step A: Load whatever is in the local cache first
       const cached = await db.rolls.toArray();
       const pending = await db.rolls.where({ synced: 0 }).toArray();
       setUnsyncedRolls(pending);
@@ -84,47 +83,56 @@ export default function App() {
       if (!navigator.onLine) return;
       if (!isSilent) setLoading(true);
 
-      // Step B: Calculate the "Watermark" (The last time this device received an update)
-      // We look for the newest 'updated_at' timestamp we have locally.
-      const lastUpdate = cached.length > 0 
-        ? new Date(Math.max(...cached.map(r => new Date(r.updated_at || r.created_at).getTime()))).toISOString()
-        : new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+      let query = supabase.from('rolls').select('*');
 
-      // Step C: Ask Supabase ONLY for rows changed AFTER that timestamp
-      const { data: deltaData, error } = await supabase
-        .from('rolls')
-        .select('*')
-        .gt('updated_at', lastUpdate)
-        .order('updated_at', { ascending: true });
+      // LOGIC: If local DB is empty (after logout), we pull ALL 'in_stock' rolls
+      // If we already have data, we only pull what's NEWER than our last record.
+      if (cached.length > 0) {
+        const lastUpdate = new Date(Math.max(...cached.map(r => new Date(r.updated_at || r.created_at).getTime()))).toISOString();
+        query = query.gt('updated_at', lastUpdate);
+      } else {
+        query = query.eq('status', 'in_stock');
+      }
+
+      const { data: deltaData, error } = await query.order('updated_at', { ascending: true });
 
       if (error) throw error;
 
       if (deltaData && deltaData.length > 0) {
         const pendingIds = new Set(pending.map(p => p.product_id));
-        
-        // Merge records. If a roll is 'pending' locally, don't overwrite it with cloud data yet.
         const dataToSave = deltaData.map(r => ({
           ...r,
           synced: pendingIds.has(r.product_id) ? 0 : 1
         }));
 
         await db.rolls.bulkPut(dataToSave);
+        
+        // Also fetch last 50 dispatched rolls if we are starting fresh
+        if (cached.length === 0) {
+          const { data: historyData } = await supabase
+            .from('rolls')
+            .select('*')
+            .eq('status', 'dispatched')
+            .order('dispatched_at', { ascending: false })
+            .limit(50);
+          if (historyData) await db.rolls.bulkPut(historyData.map(h => ({ ...h, synced: 1 })));
+        }
+
         const final = await db.rolls.toArray();
         setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
       }
 
-      // Sync materials (Small table, full fetch is safe)
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
       
     } catch (err) {
-      console.error("Incremental fetch failed:", err);
+      console.error("Fetch process error:", err);
     } finally { 
       if (!isSilent) setLoading(false); 
     }
   }, []);
 
-  // --- 2. THE REINFORCED SYNC (Now including Refresh logic) ---
+  // --- 2. THE REINFORCED SYNC ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine) { alert("No internet connection."); return; }
     
@@ -145,7 +153,6 @@ export default function App() {
           if (roll[col] !== undefined) cleanData[col] = roll[col];
         });
 
-        // Push to cloud
         const { error } = await supabase
           .from('rolls')
           .upsert(cleanData, { onConflict: 'product_id' });
@@ -155,10 +162,8 @@ export default function App() {
         }
       }
 
-      // CRITICAL: After pushing, immediately run incremental fetch to get data from other terminals
       await fetchData(false);
-
-      if (window.navigator.vibrate) window.navigator.vibrate(50); // Mobile haptic feedback
+      if (window.navigator.vibrate) window.navigator.vibrate(50);
     } finally {
       setLoading(false);
     }
@@ -186,15 +191,13 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    // Realtime Listener: When any terminal updates Supabase, trigger our local incremental fetch
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rolls' }, async () => {
-        fetchData(true); // Silent background fetch
+        fetchData(true);
       })
       .subscribe();
 
-    // Polling Backup: Every 15 seconds, check for updates manually
     syncTimer.current = setInterval(() => {
       if (navigator.onLine) {
         fetchData(true);
