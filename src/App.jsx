@@ -69,7 +69,7 @@ export default function App() {
     setNewPassInput(''); setVerifyOldPassInput(''); setIsChangingPass(false); alert("Admin password updated!");
   };
 
-  // --- 1. THE INCREMENTAL FETCH (Corrected for Recovery/Cold Start) ---
+  // --- 1. THE INCREMENTAL FETCH (Corrected for Full Monthly History & Recovery) ---
   const fetchData = useCallback(async (isSilent = false) => {
     try {
       const cached = await db.rolls.toArray();
@@ -83,45 +83,51 @@ export default function App() {
       if (!navigator.onLine) return;
       if (!isSilent) setLoading(true);
 
-      let query = supabase.from('rolls').select('*');
+      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
-      // LOGIC: If local DB is empty (after logout), we pull ALL 'in_stock' rolls
-      // If we already have data, we only pull what's NEWER than our last record.
       if (cached.length > 0) {
+        // INCREMENTAL MODE: Get only what changed since our last local record
         const lastUpdate = new Date(Math.max(...cached.map(r => new Date(r.updated_at || r.created_at).getTime()))).toISOString();
-        query = query.gt('updated_at', lastUpdate);
-      } else {
-        query = query.eq('status', 'in_stock');
-      }
-
-      const { data: deltaData, error } = await query.order('updated_at', { ascending: true });
-
-      if (error) throw error;
-
-      if (deltaData && deltaData.length > 0) {
-        const pendingIds = new Set(pending.map(p => p.product_id));
-        const dataToSave = deltaData.map(r => ({
-          ...r,
-          synced: pendingIds.has(r.product_id) ? 0 : 1
-        }));
-
-        await db.rolls.bulkPut(dataToSave);
         
-        // Also fetch last 50 dispatched rolls if we are starting fresh
-        if (cached.length === 0) {
-          const { data: historyData } = await supabase
-            .from('rolls')
-            .select('*')
-            .eq('status', 'dispatched')
-            .order('dispatched_at', { ascending: false })
-            .limit(50);
-          if (historyData) await db.rolls.bulkPut(historyData.map(h => ({ ...h, synced: 1 })));
-        }
+        const { data: deltaData, error } = await supabase
+          .from('rolls')
+          .select('*')
+          .gt('updated_at', lastUpdate)
+          .order('updated_at', { ascending: true });
 
-        const final = await db.rolls.toArray();
-        setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+        if (error) throw error;
+        if (deltaData && deltaData.length > 0) {
+          const pendingIds = new Set(pending.map(p => p.product_id));
+          await db.rolls.bulkPut(deltaData.map(r => ({ ...r, synced: pendingIds.has(r.product_id) ? 0 : 1 })));
+        }
+      } else {
+        // INITIAL/RECOVERY MODE: Local DB is empty (after logout/merge)
+        // Fetch ALL active stock (913 rolls)
+        const { data: stockData, error: stockErr } = await supabase
+          .from('rolls')
+          .select('*')
+          .eq('status', 'in_stock');
+
+        if (stockErr) throw stockErr;
+
+        // Fetch ALL dispatches from the start of THIS month (restoring your 344 count)
+        const { data: monthHistory, error: histErr } = await supabase
+          .from('rolls')
+          .select('*')
+          .eq('status', 'dispatched')
+          .gte('dispatched_at', startOfMonth);
+
+        if (histErr) throw histErr;
+
+        if (stockData) await db.rolls.bulkPut(stockData.map(r => ({ ...r, synced: 1 })));
+        if (monthHistory) await db.rolls.bulkPut(monthHistory.map(r => ({ ...r, synced: 1 })));
       }
 
+      // Refresh final list from local storage
+      const final = await db.rolls.toArray();
+      setRolls(final.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+
+      // Sync materials
       const { data: mats } = await supabase.from('raw_materials').select('*').order('name');
       if (mats) { await db.materials.bulkPut(mats); setMaterials(mats); }
       
