@@ -117,7 +117,7 @@ export default function App() {
           if (!data || data.length === 0) break;
           
           allStock = [...allStock, ...data];
-          if (data.length < step) break; // End of records
+          if (data.length < step) break;
           from += step;
         }
 
@@ -147,7 +147,95 @@ export default function App() {
     }
   }, []);
 
-  // --- 2. THE REINFORCED SYNC ---
+  // --- 2. HISTORY DATE RANGE FETCH ---
+  // Fetches dispatched rolls within a date range from Supabase,
+  // merges them into Dexie, then refreshes the rolls state.
+  // If both dates are null/empty, falls back to the standard fetchData.
+  const handleFetchRange = useCallback(async (startDate, endDate) => {
+    // Fallback: no dates provided → standard fetch
+    if (!startDate && !endDate) {
+      setActiveRange('current_month');
+      await fetchData(false);
+      return;
+    }
+
+    if (!navigator.onLine) {
+      // Offline: just filter what's already in Dexie locally
+      const all = await db.rolls.toArray();
+      const start = startDate ? new Date(startDate) : null;
+      // endDate is inclusive — push to end of that day
+      const end = endDate ? new Date(new Date(endDate).setHours(23, 59, 59, 999)) : null;
+
+      const filtered = all.filter(r => {
+        if (r.status !== 'dispatched') return false;
+        const d = new Date(r.dispatched_at || r.created_at);
+        if (start && d < start) return false;
+        if (end && d > end) return false;
+        return true;
+      });
+
+      setRolls(prev => {
+        // Keep in_stock rolls intact, replace dispatched slice with filtered range
+        const inStock = prev.filter(r => r.status === 'in_stock');
+        return [...inStock, ...filtered].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      });
+      setActiveRange('custom');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Build Supabase query
+      let query = supabase
+        .from('rolls')
+        .select('*')
+        .eq('status', 'dispatched')
+        .order('dispatched_at', { ascending: false });
+
+      if (startDate) query = query.gte('dispatched_at', new Date(startDate).toISOString());
+      if (endDate)   query = query.lte('dispatched_at', new Date(new Date(endDate).setHours(23, 59, 59, 999)).toISOString());
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Merge fetched range into Dexie (don't overwrite unsynced local records)
+        const pending = await db.rolls.where({ synced: 0 }).toArray();
+        const pendingIds = new Set(pending.map(p => p.product_id));
+        await db.rolls.bulkPut(
+          data.map(r => ({ ...r, synced: pendingIds.has(r.product_id) ? 0 : 1 }))
+        );
+      }
+
+      // Update rolls state: keep in_stock from current cache, use fresh range for dispatched
+      const allLocal = await db.rolls.toArray();
+      const inStock = allLocal.filter(r => r.status === 'in_stock');
+
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(new Date(endDate).setHours(23, 59, 59, 999)) : null;
+
+      const rangeDispatched = allLocal.filter(r => {
+        if (r.status !== 'dispatched') return false;
+        const d = new Date(r.dispatched_at || r.created_at);
+        if (start && d < start) return false;
+        if (end && d > end) return false;
+        return true;
+      });
+
+      setRolls(
+        [...inStock, ...rangeDispatched].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      );
+      setActiveRange('custom');
+
+    } catch (err) {
+      console.error("Range fetch error:", err);
+      alert("Failed to fetch date range. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchData]);
+
+  // --- 3. THE REINFORCED SYNC ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine) { alert("No internet connection."); return; }
     
@@ -202,7 +290,7 @@ export default function App() {
     }
   };
 
-  // --- 3. REALTIME & AUTO-POLLING ---
+  // --- 4. REALTIME & AUTO-POLLING ---
   useEffect(() => {
     if (!user) return;
 
@@ -278,12 +366,53 @@ export default function App() {
       />
       
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {activeTab === 'dashboard' && <DashboardView rolls={rolls} materials={materials} isAdmin={isAdmin} fetchData={fetchData} onOpenSyncList={() => setShowUnsyncedList(true)} />}
-        {activeTab === 'entry' && <NewProductView rolls={rolls} deviceName={deviceName} onSaved={handleLocalSave} onPrint={setPrintData} />}
-        {activeTab === 'stock' && <StockView rolls={rolls} isAdmin={isAdmin} onPrint={setPrintData} onSelectRoll={setEditRoll} />}
-        {activeTab === 'dispatch' && <DispatchView rolls={rolls} deviceName={deviceName} onDispatch={handleLocalSave} />}
-        {activeTab === 'history' && <HistoryView rolls={rolls.filter(r => r.status === 'dispatched')} isAdmin={isAdmin} onSelectRoll={setEditRoll} onFetchRange={fetchData} activeRange={activeRange} />}
-        {activeTab === 'materials' && <MaterialsView materials={materials} onUpdate={fetchData} />}
+        {activeTab === 'dashboard' && (
+          <DashboardView
+            rolls={rolls}
+            materials={materials}
+            isAdmin={isAdmin}           // FIX: was missing
+            fetchData={fetchData}       // FIX: was missing
+            onOpenSyncList={() => setShowUnsyncedList(true)}
+          />
+        )}
+        {activeTab === 'entry' && (
+          <NewProductView
+            rolls={rolls}
+            deviceName={deviceName}
+            onSaved={handleLocalSave}
+            onPrint={setPrintData}
+          />
+        )}
+        {activeTab === 'stock' && (
+          <StockView
+            rolls={rolls}
+            isAdmin={isAdmin}
+            onPrint={setPrintData}
+            onSelectRoll={setEditRoll}
+          />
+        )}
+        {activeTab === 'dispatch' && (
+          <DispatchView
+            rolls={rolls}
+            deviceName={deviceName}
+            onDispatch={handleLocalSave}
+          />
+        )}
+        {activeTab === 'history' && (
+          <HistoryView
+            rolls={rolls.filter(r => r.status === 'dispatched')}
+            isAdmin={isAdmin}
+            onSelectRoll={setEditRoll}
+            onFetchRange={handleFetchRange}  // FIX: now points to real range handler
+            activeRange={activeRange}
+          />
+        )}
+        {activeTab === 'materials' && (
+          <MaterialsView
+            materials={materials}
+            onUpdate={fetchData}
+          />
+        )}
       </main>
 
       <BottomNav activeTab={activeTab} setTab={setActiveTab} isGuest={isGuest} />

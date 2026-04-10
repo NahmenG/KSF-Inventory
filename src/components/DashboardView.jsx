@@ -1,10 +1,9 @@
-import React, { useMemo, useState } from 'react';
-import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Settings2, Calculator, Activity, Truck } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Calculator, Activity, Truck } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 // Components
 import RateCalculator from './RateCalculator';
-import MarketRatesModal from './MarketRatesModal';
 
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#fb7185', '#2dd4bf'];
 
@@ -25,7 +24,6 @@ const abbreviateColor = (name) => {
 };
 
 const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
-  const [showRateModal, setShowRateModal] = useState(false);
   const todayDate = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
   
@@ -307,24 +305,9 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">Fabric Rate Calculator</h3>
         </div>
         
-        <RateCalculator />
-
-        {isAdmin && (
-          <button 
-            onClick={() => setShowRateModal(true)}
-            className="w-full py-5 bg-white border-2 border-dashed border-blue-200 text-blue-600 rounded-[2rem] font-black text-[11px] uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-sm"
-          >
-            <Settings2 size={16} /> Update Market Material Rates
-          </button>
-        )}
+        {/* FIX: pass isAdmin and fetchData so Rate Calculator and its modals work */}
+        <RateCalculator isAdmin={isAdmin} fetchData={fetchData} />
       </div>
-
-      {showRateModal && (
-        <MarketRatesModal 
-          onClose={() => setShowRateModal(false)}
-          onUpdate={fetchData} 
-        />
-      )}
 
     </div>
   );
