@@ -4,15 +4,8 @@ import { supabase } from '../supabaseClient';
 
 /**
  * MarketRatesModal — Full CRUD for market_rates table.
- *
- * - Lists the latest rate per material_name
- * - Admin can: rename materials, change rates, add new rows, delete rows
- * - On Save:
- *     1. Hard-deletes all rows whose material_name no longer exists in the list
- *     2. Inserts fresh rows for every remaining/new material (history-log style)
- * - Modal stays open after save. Admin mode is unaffected.
- *
- * market_rates table: id, material_name (text), rate (numeric), created_at
+ * * Logic Update: 
+ * Ensures that materials removed from the list are hard-deleted from Supabase.
  */
 const MarketRatesModal = ({ onClose, isAdmin, onUpdate }) => {
   const [rates, setRates] = useState([]);
@@ -57,7 +50,7 @@ const MarketRatesModal = ({ onClose, isAdmin, onUpdate }) => {
     setRates(prev => prev.map((r, i) => i === idx ? { ...r, rate: value } : r));
 
   const handleAddRow = () =>
-    setRates(prev => [...prev, { material_name: '', rate: 0, isNew: true }]);
+    setRates(prev => [...prev, { material_name: '', rate: 0 }]);
 
   const handleRemoveRow = (idx) =>
     setRates(prev => prev.filter((_, i) => i !== idx));
@@ -70,33 +63,41 @@ const MarketRatesModal = ({ onClose, isAdmin, onUpdate }) => {
     setError('');
     setSavedOk(false);
     try {
-      // 1. Find names that existed before but are no longer in the list → delete them
+      // 1. Get current names in database to identify what was deleted
       const { data: existing } = await supabase.from('market_rates').select('material_name');
-      const existingNames = new Set((existing || []).map(r => r.material_name));
+      const existingNames = [...new Set((existing || []).map(r => r.material_name))];
+      
       const keepNames = new Set(validRows.map(r => r.material_name.trim()));
-      const toDelete = [...existingNames].filter(n => !keepNames.has(n));
+      
+      // Filter out names that are no longer in our local "rates" list
+      const toDelete = existingNames.filter(name => !keepNames.has(name));
 
-      for (const name of toDelete) {
-        await supabase.from('market_rates').delete().eq('material_name', name);
+      // 2. Perform Hard Delete for removed materials
+      if (toDelete.length > 0) {
+        const { error: delErr } = await supabase
+          .from('market_rates')
+          .delete()
+          .in('material_name', toDelete);
+        if (delErr) throw delErr;
       }
 
-      // 2. Insert new rate rows for every current material
+      // 3. Insert fresh rate rows for every current material (History-log style)
       const now = new Date().toISOString();
       const inserts = validRows.map(r => ({
         material_name: r.material_name.trim(),
         rate: parseFloat(r.rate) || 0,
         created_at: now
       }));
+      
       const { error: insertErr } = await supabase.from('market_rates').insert(inserts);
       if (insertErr) throw insertErr;
 
-      // 3. Reload modal data in place
+      // 4. Cleanup and UI Refresh
       await loadRates();
       setEditMode(false);
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 2500);
 
-      // 4. Tell RateCalculator to refresh its pricing cards
       if (onUpdate) onUpdate();
 
     } catch (err) {
@@ -109,7 +110,6 @@ const MarketRatesModal = ({ onClose, isAdmin, onUpdate }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] border border-gray-200 overflow-hidden">
-
         {/* Header */}
         <div className="bg-slate-800 p-4 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2">
@@ -149,15 +149,10 @@ const MarketRatesModal = ({ onClose, isAdmin, onUpdate }) => {
           <div className="bg-red-50 border-b border-red-200 px-5 py-3 text-red-700 text-sm font-bold shrink-0">{error}</div>
         )}
 
-        {/* Table */}
         <div className="overflow-y-auto flex-1">
           {loading ? (
             <div className="flex items-center justify-center py-16 text-gray-400 gap-3">
               <Loader2 size={20} className="animate-spin" /> Loading…
-            </div>
-          ) : rates.length === 0 && !editMode ? (
-            <div className="text-center py-12 text-gray-400 font-bold text-sm">
-              No materials yet. Click Edit Rates to add some.
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
@@ -219,7 +214,6 @@ const MarketRatesModal = ({ onClose, isAdmin, onUpdate }) => {
           )}
         </div>
 
-        {/* Footer */}
         <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center shrink-0">
           {editMode ? (
             <button
@@ -232,9 +226,6 @@ const MarketRatesModal = ({ onClose, isAdmin, onUpdate }) => {
             <span className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">
               {rates.length} material{rates.length !== 1 ? 's' : ''}
             </span>
-          )}
-          {!editMode && isAdmin && (
-            <span className="text-[10px] text-blue-500 font-bold italic">Click Edit Rates to modify</span>
           )}
         </div>
       </div>
