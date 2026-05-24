@@ -1,29 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
-import JsBarcode from 'jsbarcode';
+import React, { useRef, useState } from 'react';
+import { QRCodeCanvas } from 'qrcode.react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const LabelPrint = ({ data, onClose }) => {
-  const canvasRef = useRef(null);
   const labelRef = useRef(null);
   const [showBrand, setShowBrand] = useState(true);
   const [showDate, setShowDate] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-
-  useEffect(() => {
-    if (data && canvasRef.current) {
-      try { 
-        JsBarcode(canvasRef.current, data.product_id, { 
-          format: "CODE128", 
-          displayValue: false, 
-          height: 35, 
-          width: 2, 
-          margin: 0 
-        }); 
-      } catch (e) { console.error(e); }
-    }
-  }, [data]);
 
   const handleDownloadPDF = async () => {
     if (!labelRef.current || isGenerating) return;
@@ -78,6 +63,18 @@ const LabelPrint = ({ data, onClose }) => {
 
   if (!data) return null;
 
+  // JSON payload for third-party scanning (Customer Name is excluded)
+  const qrPayload = JSON.stringify({
+    id: data.product_id,
+    q: data.quality,
+    gsm: data.gsm,
+    c: data.color,
+    w: data.width_inches,
+    l: data.length_meters,
+    nw: data.net_weight,
+    gw: data.gross_weight
+  });
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh] shadow-2xl">
@@ -125,11 +122,17 @@ const LabelPrint = ({ data, onClose }) => {
               <div className="text-right leading-none"><span className="text-[10px] uppercase font-bold block text-gray-400 leading-none">Net Weight</span><span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span></div>
             </div>
             
-            <div className="w-full flex flex-col items-center overflow-hidden pb-4">
-              <canvas ref={canvasRef} className="max-w-full h-10 mb-1"></canvas>
-              <div className="font-mono font-bold text-lg tracking-widest leading-none mt-1 uppercase">{data.product_id}</div>
+            <div className="w-full flex flex-col items-center overflow-hidden pb-2 pt-1">
+              {/* QR Code replaces the barcode. Using QRCodeCanvas ensures html2canvas compatibility. */}
+              <QRCodeCanvas 
+                value={qrPayload} 
+                size={64} 
+                level="M" 
+                className="mb-1"
+              />
+              <div className="font-mono font-bold text-[14px] tracking-widest leading-none mt-1 uppercase">{data.product_id}</div>
               {showDate && (
-                <div className="text-[8px] text-gray-400 font-bold mt-2 leading-none uppercase">
+                <div className="text-[8px] text-gray-400 font-bold mt-1 leading-none uppercase">
                   {data.created_at ? new Date(data.created_at).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'}) : new Date().toLocaleString()}
                 </div>
               )}
