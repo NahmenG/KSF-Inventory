@@ -53,7 +53,7 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const [scanId, setScanId] = useState('');
   const [reviewData, setReviewData] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false); // NEW: Prevent double dispatch
+  const [isProcessing, setIsProcessing] = useState(false);
   const [sessionList, setSessionList] = useState(() => JSON.parse(localStorage.getItem('ksf_dispatch_list_v12') || '[]'));
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('ksf_dispatch_customer_v11') || '');
   const [vehicleNo, setVehicleNo] = useState(() => localStorage.getItem('ksf_dispatch_vehicle_v11') || '');
@@ -72,7 +72,6 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
       const q = field === 'quality' ? value : reviewData.quality;
       
       if (!isNaN(w) && !isNaN(g) && w > 0) {
-        // BOPP uses a 3kg core per 63 inches, others use 1kg
         const coreFactor = q === 'BOPP Fabric' ? 3 : 1;
         updated.net_weight = (g - (coreFactor * w / 63)).toFixed(2);
       }
@@ -81,8 +80,19 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   };
 
   const handleSearch = (idToSearch) => {
-    const query = (idToSearch || scanId || '').trim();
-    if (!query) return;
+    let rawQuery = (idToSearch || scanId || '').trim();
+    if (!rawQuery) return;
+
+    // --- JSON INTERCEPTOR (For camera scanner parsing) ---
+    let query = rawQuery;
+    try {
+      if (query.startsWith('{') && query.endsWith('}')) {
+        const parsed = JSON.parse(query);
+        if (parsed.id) query = String(parsed.id).trim();
+      }
+    } catch (e) {
+      // Ignored: Treat as normal barcode
+    }
     
     // Check if already in current manifest list
     if (sessionList.some(r => r.product_id.toUpperCase() === query.toUpperCase())) {
@@ -103,13 +113,12 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
   const handleConfirmDispatch = async () => {
     if (!reviewData || isProcessing) return;
     
-    // CRITICAL: Double check if another click added this already
     if (sessionList.some(r => r.product_id === reviewData.product_id)) {
       setReviewData(null);
       return;
     }
 
-    setIsProcessing(true); // Lock the button immediately
+    setIsProcessing(true);
     try {
       const updatedRoll = {
         ...reviewData,
@@ -165,7 +174,23 @@ export default function DispatchView({ rolls, deviceName, onDispatch }) {
 
       <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 text-center">
         <div className="flex gap-2 mb-4">
-          <input className="flex-1 border-2 border-gray-100 p-4 rounded-2xl text-center font-mono focus:border-blue-500 outline-none font-bold" placeholder="ID (Scan/Type)" value={scanId} onChange={e => setScanId(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} />
+          <input 
+            className="flex-1 border-2 border-gray-100 p-4 rounded-2xl text-center font-mono focus:border-blue-500 outline-none font-bold" 
+            placeholder="ID (Scan/Type)" 
+            value={scanId} 
+            onChange={e => {
+              let val = e.target.value;
+              // --- JSON INTERCEPTOR (For Physical Scanner Guns) ---
+              try {
+                if (val.trim().startsWith('{') && val.trim().endsWith('}')) {
+                  const parsed = JSON.parse(val.trim());
+                  if (parsed.id) val = parsed.id;
+                }
+              } catch (err) {}
+              setScanId(val);
+            }} 
+            onKeyPress={e => e.key === 'Enter' && handleSearch()} 
+          />
           <button onClick={() => setIsScanning(true)} className="bg-slate-900 text-white p-4 rounded-2xl active:scale-95 transition-all"><Camera size={24} /></button>
         </div>
         <button onClick={() => handleSearch()} className="bg-blue-600 text-white w-full py-5 rounded-2xl font-black shadow-lg shadow-blue-100 active:scale-95 transition-all uppercase tracking-widest">Identify Roll</button>

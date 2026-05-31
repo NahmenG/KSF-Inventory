@@ -127,7 +127,17 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
               className="border border-gray-100 p-2 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 transition-all shadow-inner" 
               placeholder="Buyer / ID" 
               value={filters.customer} 
-              onChange={e => setFilters({...filters, customer: e.target.value})} 
+              onChange={e => {
+                let val = e.target.value;
+                // --- JSON INTERCEPTOR (For Physical Scanner Guns) ---
+                try {
+                  if (val.trim().startsWith('{') && val.trim().endsWith('}')) {
+                    const parsed = JSON.parse(val.trim());
+                    if (parsed.id) val = parsed.id;
+                  }
+                } catch (err) {}
+                setFilters({...filters, customer: val});
+              }} 
             />
 
             <div className="relative">
