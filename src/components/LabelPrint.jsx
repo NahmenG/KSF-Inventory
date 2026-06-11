@@ -103,23 +103,25 @@ const LabelPrint = ({ data, onClose }) => {
               )}
             </div>
             
-            {/* Data Grid: Removed flex-1 content-center, reduced gap to gap-y-0.5 */}
+            {/* Data Grid: Reduced gap to gap-y-0.5 */}
             <div className="w-full grid grid-cols-2 gap-y-0.5 text-left px-1 mt-1">
               <div><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-lg leading-none">{data.quality}</span></div>
               <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-lg leading-none">{data.color}</span></div>
               <div><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
               <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Length</span><span className="font-bold text-lg leading-none">{data.length_meters}m</span></div>
-              <div className="col-span-2 text-center mt-0.5"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">GSM</span><span className="font-bold text-3xl leading-none">{data.gsm}</span></div>
+              
+              {/* FIX: Reduced GSM from 3xl to 2xl to stop line overlapping */}
+              <div className="col-span-2 text-center mt-0.5"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">GSM</span><span className="font-bold text-2xl leading-none">{data.gsm}</span></div>
             </div>
             
-            {/* Weights: Reduced padding and margins to save space */}
+            {/* Weights: Reduced Net Weight from 4xl to 3xl to stop line overlapping */}
             <div className="w-full border-y-2 border-black py-1 my-0.5 flex justify-between items-end px-1">
               <div className="text-left leading-none"><span className="text-[10px] uppercase font-bold block leading-none">Gross Wt</span><span className="text-sm font-bold">{data.gross_weight} kg</span></div>
-              <div className="text-right leading-none"><span className="text-[10px] uppercase font-bold block text-gray-400 leading-none">Net Weight</span><span className="text-4xl font-black leading-none">{data.net_weight}<span className="text-lg">kg</span></span></div>
+              <div className="text-right leading-none"><span className="text-[10px] uppercase font-bold block text-gray-400 leading-none">Net Weight</span><span className="text-3xl font-black leading-none">{data.net_weight}<span className="text-base">kg</span></span></div>
             </div>
             
-            {/* QR Section: Flex-1 moved here to push it to the bottom, size increased to 96 */}
-            <div className="w-full flex flex-col items-center justify-end overflow-hidden pb-1 flex-1">
+            {/* QR Section: Increased padding-bottom to pb-2 to lift the date away from the clipping edge */}
+            <div className="w-full flex flex-col items-center justify-end overflow-hidden pb-2 flex-1">
               <QRCodeCanvas 
                 value={qrPayload} 
                 size={96} 
