@@ -92,9 +92,9 @@ const LabelPrint = ({ data, onClose }) => {
           <div 
             ref={labelRef} 
             className="flex flex-col justify-between items-center text-center bg-white shadow-xl relative" 
-            style={{ width: '2.4in', height: '3.9in', padding: '0.08in', boxSizing: 'border-box' }}
+            style={{ width: '2.4in', height: '3.9in', padding: '0.1in', boxSizing: 'border-box' }}
           >
-            {/* Header: Reduced height and text size slightly */}
+            {/* Header: Retained h-6 but restored the 0.1in safe margin on the container */}
             <div className="w-full border-b-2 border-black pb-0.5 h-6 flex items-center justify-center">
               {showBrand ? (
                 <div className="font-black text-lg tracking-tighter uppercase leading-none">KSF NON WOVEN</div>
@@ -103,8 +103,8 @@ const LabelPrint = ({ data, onClose }) => {
               )}
             </div>
             
-            {/* Data Grid: Tighter margins and slightly reduced text scaling */}
-            <div className="w-full grid grid-cols-2 gap-y-0 text-left px-1 mt-0.5">
+            {/* Data Grid: Added px-2 to pull text slightly away from the absolute edges */}
+            <div className="w-full grid grid-cols-2 gap-y-0 text-left px-2 mt-0.5">
               <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-base leading-none">{data.quality}</span></div>
               <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-base leading-none">{data.color}</span></div>
               <div className="mt-0.5"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-base leading-none">{data.width_inches}"</span></div>
@@ -112,14 +112,14 @@ const LabelPrint = ({ data, onClose }) => {
               <div className="col-span-2 text-center mt-0.5"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">GSM</span><span className="font-bold text-2xl leading-none">{data.gsm}</span></div>
             </div>
             
-            {/* Weights: Compressing the area to maximize QR footprint */}
-            <div className="w-full border-y-2 border-black py-0.5 my-0.5 flex justify-between items-end px-1">
+            {/* Weights: Re-centered and protected by the px-2 horizontal boundary */}
+            <div className="w-full border-y-2 border-black py-0.5 my-0.5 flex justify-between items-end px-2">
               <div className="text-left leading-none"><span className="text-[9px] uppercase font-bold block leading-none">Gross Wt</span><span className="text-xs font-bold">{data.gross_weight} kg</span></div>
               <div className="text-right leading-none"><span className="text-[9px] uppercase font-bold block text-gray-400 leading-none">Net Weight</span><span className="text-3xl font-black leading-none">{data.net_weight}<span className="text-sm">kg</span></span></div>
             </div>
             
-            {/* QR Section: QR code bumped to 116px */}
-            <div className="w-full flex flex-col items-center justify-end overflow-hidden pb-0.5 flex-1">
+            {/* QR Section: Retaining the 116px size */}
+            <div className="w-full flex flex-col items-center justify-end overflow-hidden pb-1 flex-1">
               <QRCodeCanvas 
                 value={qrPayload} 
                 size={116} 
