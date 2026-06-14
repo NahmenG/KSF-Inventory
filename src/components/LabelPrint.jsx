@@ -103,12 +103,12 @@ const LabelPrint = ({ data, onClose }) => {
               )}
             </div>
             
-            {/* Data Grid: Reduced gap to gap-y-0.5 */}
+            {/* Data Grid: Added min-w-0 and block truncate to strictly prevent wrapping */}
             <div className="w-full grid grid-cols-2 gap-y-0.5 text-left px-1 mt-1">
-              <div><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-lg leading-none">{data.quality}</span></div>
-              <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-lg leading-none">{data.color}</span></div>
-              <div><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-lg leading-none">{data.width_inches}"</span></div>
-              <div className="text-right"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Length</span><span className="font-bold text-lg leading-none">{data.length_meters}m</span></div>
+              <div className="min-w-0"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-lg leading-none block truncate">{data.quality}</span></div>
+              <div className="text-right min-w-0"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-lg leading-none block truncate">{data.color}</span></div>
+              <div className="min-w-0"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-lg leading-none block truncate">{data.width_inches}"</span></div>
+              <div className="text-right min-w-0"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Length</span><span className="font-bold text-lg leading-none block truncate">{data.length_meters}m</span></div>
               
               <div className="col-span-2 text-center mt-0.5"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">GSM</span><span className="font-bold text-2xl leading-none">{data.gsm}</span></div>
             </div>
@@ -118,7 +118,7 @@ const LabelPrint = ({ data, onClose }) => {
               <div className="text-right leading-none"><span className="text-[10px] uppercase font-bold block text-gray-400 leading-none">Net Weight</span><span className="text-3xl font-black leading-none">{data.net_weight}<span className="text-base">kg</span></span></div>
             </div>
             
-            {/* QR Section: Added Quiet Zone, Lowered Error Correction to L, Bumped Size to 100 */}
+            {/* QR Section: Contains the robust L-level QR code */}
             <div className="w-full flex flex-col items-center justify-end overflow-hidden pb-2 flex-1">
               <QRCodeCanvas 
                 value={qrPayload} 
