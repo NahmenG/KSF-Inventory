@@ -92,12 +92,12 @@ const LabelPrint = ({ data, onClose }) => {
           <div 
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
-            style={{ width: '3.9in', height: '2.4in', padding: '0.1in', boxSizing: 'border-box' }}
+            style={{ width: '3.9in', height: '2.4in', padding: '0.15in', boxSizing: 'border-box' }}
           >
             {/* FULL WIDTH HEADER */}
             <div className="w-full border-b-2 border-black pb-1 mb-1 shrink-0 flex items-center justify-center">
               {showBrand ? (
-                <div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>
+                <div className="font-black text-xl tracking-tighter uppercase leading-tight">KSF NON WOVEN</div>
               ) : (
                 <div className="w-full h-7"></div>
               )}
@@ -108,24 +108,24 @@ const LabelPrint = ({ data, onClose }) => {
               {/* LEFT COLUMN */}
               <div className="w-[60%] border-r-2 border-black pr-2 flex flex-col h-full justify-between">
                 
-                {/* Data Grid: Removed tight tracking and truncations */}
+                {/* Data Grid: Added leading-tight to compress vertical height safely */}
                 <div className="w-full grid grid-cols-2 gap-y-1 text-left mt-0.5">
-                  <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Quality</span><span className="font-bold text-base">{data.quality}</span></div>
-                  <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Color</span><span className="font-bold text-base">{data.color}</span></div>
+                  <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-tight">Quality</span><span className="font-bold text-base leading-tight">{data.quality}</span></div>
+                  <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-tight">Color</span><span className="font-bold text-base leading-tight">{data.color}</span></div>
                   
-                  <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Size (in)</span><span className="font-bold text-base">{data.width_inches}"</span></div>
-                  <div className="text-right mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Length</span><span className="font-bold text-base">{data.length_meters}m</span></div>
+                  <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-tight">Size (in)</span><span className="font-bold text-base leading-tight">{data.width_inches}"</span></div>
+                  <div className="text-right mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-tight">Length</span><span className="font-bold text-base leading-tight">{data.length_meters}m</span></div>
                 </div>
 
                 {/* Bottom section */}
                 <div className="w-full mt-auto">
                   <div className="border-t-2 border-black pt-1 mb-1 flex items-end justify-between">
-                    <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0.5">GSM</span><span className="font-bold text-2xl">{data.gsm}</span></div>
-                    <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0.5">Gross Wt</span><span className="font-bold text-sm">{data.gross_weight} kg</span></div>
+                    <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0.5 leading-tight">GSM</span><span className="font-bold text-2xl leading-tight">{data.gsm}</span></div>
+                    <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0.5 leading-tight">Gross Wt</span><span className="font-bold text-sm leading-tight">{data.gross_weight} kg</span></div>
                   </div>
                   <div className="bg-gray-100 p-1 rounded text-center border border-gray-300">
-                    <span className="text-[9px] uppercase font-bold text-gray-500 block mb-0.5">Net Weight</span>
-                    <span className="text-2xl font-black text-black">{data.net_weight}<span className="text-xs">kg</span></span>
+                    <span className="text-[9px] uppercase font-bold text-gray-500 block mb-0.5 leading-tight">Net Weight</span>
+                    <span className="text-2xl font-black text-black leading-tight">{data.net_weight}<span className="text-xs">kg</span></span>
                   </div>
                 </div>
               </div>
@@ -134,14 +134,14 @@ const LabelPrint = ({ data, onClose }) => {
               <div className="w-[40%] pl-2 flex flex-col items-center justify-center h-full">
                 <QRCodeCanvas 
                   value={qrPayload} 
-                  size={105} 
+                  size={100} 
                   level="L" 
                   includeMargin={true}
-                  className="mb-2 bg-white"
+                  className="mb-1.5 bg-white"
                 />
-                <div className="font-mono font-bold text-[14px] tracking-widest text-center uppercase">{data.product_id}</div>
+                <div className="font-mono font-bold text-[14px] tracking-widest text-center uppercase leading-tight">{data.product_id}</div>
                 {showDate && (
-                  <div className="text-[8px] text-gray-400 font-bold mt-1 text-center uppercase">
+                  <div className="text-[8px] text-gray-400 font-bold mt-1 text-center uppercase leading-tight">
                     {data.created_at ? new Date(data.created_at).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'}) : new Date().toLocaleString()}
                   </div>
                 )}
