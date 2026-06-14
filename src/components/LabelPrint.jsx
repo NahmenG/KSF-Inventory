@@ -91,7 +91,7 @@ const LabelPrint = ({ data, onClose }) => {
         </div>
         
         <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
-          {/* Canvas Wrapper updated to have 0.15in bottom padding to protect Net Weight from clipping */}
+          {/* Canvas Wrapper */}
           <div 
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
@@ -111,13 +111,13 @@ const LabelPrint = ({ data, onClose }) => {
               {/* LEFT COLUMN: 60% Width for all Text Data */}
               <div className="w-[60%] border-r-2 border-black pr-2 flex flex-col h-full">
                 
-                {/* Data Grid: Added overflow-hidden and whitespace-nowrap to guarantee single-row text */}
+                {/* Data Grid: Removed overflow-hidden to stop clipping, reduced text-base to text-sm to naturally fit long words */}
                 <div className="w-full grid grid-cols-2 gap-y-1 text-left flex-1 content-start mt-1">
-                  <div className="overflow-hidden"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-base leading-tight whitespace-nowrap">{data.quality}</span></div>
-                  <div className="text-right overflow-hidden"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-base leading-tight whitespace-nowrap">{data.color}</span></div>
+                  <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-sm leading-tight whitespace-nowrap">{data.quality}</span></div>
+                  <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-sm leading-tight whitespace-nowrap">{data.color}</span></div>
                   
-                  <div className="mt-1 overflow-hidden"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-base leading-none whitespace-nowrap">{data.width_inches}"</span></div>
-                  <div className="text-right mt-1 overflow-hidden"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Length</span><span className="font-bold text-base leading-none whitespace-nowrap">{data.length_meters}m</span></div>
+                  <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-sm leading-none whitespace-nowrap">{data.width_inches}"</span></div>
+                  <div className="text-right mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Length</span><span className="font-bold text-sm leading-none whitespace-nowrap">{data.length_meters}m</span></div>
                 </div>
 
                 {/* Bottom section of left column for GSM and Weights */}
@@ -126,7 +126,8 @@ const LabelPrint = ({ data, onClose }) => {
                     <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none mb-0.5">GSM</span><span className="font-bold text-2xl leading-none">{data.gsm}</span></div>
                     <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none mb-0.5">Gross Wt</span><span className="font-bold text-sm leading-none">{data.gross_weight} kg</span></div>
                   </div>
-                  <div className="bg-gray-100 p-1 rounded text-center border border-gray-300">
+                  {/* Removed gray background, padding, and border */}
+                  <div className="text-center">
                     <span className="text-[9px] uppercase font-bold text-gray-500 block leading-none mb-0.5">Net Weight</span>
                     <span className="text-2xl font-black leading-none text-black">{data.net_weight}<span className="text-xs">kg</span></span>
                   </div>
