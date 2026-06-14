@@ -32,14 +32,12 @@ const LabelPrint = ({ data, onClose }) => {
         reader.readAsDataURL(blob);
         reader.onloadend = () => {
           const base64data = reader.result;
-          // Updated to Landscape format
           const pdf = new jsPDF({ 
             orientation: 'landscape', 
             unit: 'in', 
             format: [3.9, 2.4] 
           });
 
-          // Print bounds updated to 3.9 width x 2.4 height
           pdf.addImage(base64data, 'JPEG', 0, 0, 3.9, 2.4, undefined, 'SLOW');
           pdf.save(`Label-${data.product_id}.pdf`);
           
@@ -91,18 +89,18 @@ const LabelPrint = ({ data, onClose }) => {
         </div>
         
         <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
-          {/* Canvas Wrapper */}
+          {/* Canvas Wrapper: Shifted up by reducing top padding to 0.05in and increasing bottom padding to 0.2in */}
           <div 
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
-            style={{ width: '3.9in', height: '2.4in', padding: '0.1in 0.1in 0.15in 0.1in', boxSizing: 'border-box' }}
+            style={{ width: '3.9in', height: '2.4in', padding: '0.05in 0.1in 0.2in 0.1in', boxSizing: 'border-box' }}
           >
-            {/* FULL WIDTH BRAND HEADER */}
-            <div className="w-full border-b-2 border-black pb-1 mb-1 h-7 shrink-0 flex items-center justify-center">
+            {/* FULL WIDTH BRAND HEADER: Increased pb to 1.5 to lift it off the line, removed leading-none */}
+            <div className="w-full border-b-2 border-black pb-1.5 mb-1 shrink-0 flex items-center justify-center">
               {showBrand ? (
-                <div className="font-black text-xl tracking-tighter uppercase leading-none">KSF NON WOVEN</div>
+                <div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>
               ) : (
-                <div className="w-full h-full"></div>
+                <div className="w-full h-7"></div>
               )}
             </div>
 
@@ -111,25 +109,43 @@ const LabelPrint = ({ data, onClose }) => {
               {/* LEFT COLUMN: 60% Width for all Text Data */}
               <div className="w-[60%] border-r-2 border-black pr-2 flex flex-col h-full">
                 
-                {/* Data Grid: Removed overflow-hidden to stop clipping, reduced text-base to text-sm to naturally fit long words */}
-                <div className="w-full grid grid-cols-2 gap-y-1 text-left flex-1 content-start mt-1">
-                  <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-sm leading-tight whitespace-nowrap">{data.quality}</span></div>
-                  <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-sm leading-tight whitespace-nowrap">{data.color}</span></div>
+                {/* Data Grid: Reduced gap-y to 0, completely removed line-height restrictions, applied -mt to shrink vertical gaps naturally */}
+                <div className="w-full grid grid-cols-2 gap-y-0 text-left flex-1 content-start mt-0.5">
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Quality</span>
+                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.quality}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Color</span>
+                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.color}</span>
+                  </div>
                   
-                  <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-sm leading-none whitespace-nowrap">{data.width_inches}"</span></div>
-                  <div className="text-right mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Length</span><span className="font-bold text-sm leading-none whitespace-nowrap">{data.length_meters}m</span></div>
+                  <div className="mt-1">
+                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Size (in)</span>
+                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.width_inches}"</span>
+                  </div>
+                  <div className="text-right mt-1">
+                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Length</span>
+                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.length_meters}m</span>
+                  </div>
                 </div>
 
                 {/* Bottom section of left column for GSM and Weights */}
                 <div className="w-full mt-auto">
-                  <div className="border-t-2 border-black pt-1 mb-1 flex items-end justify-between">
-                    <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none mb-0.5">GSM</span><span className="font-bold text-2xl leading-none">{data.gsm}</span></div>
-                    <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none mb-0.5">Gross Wt</span><span className="font-bold text-sm leading-none">{data.gross_weight} kg</span></div>
+                  <div className="border-t-2 border-black pt-1 mb-0.5 flex items-end justify-between">
+                    <div>
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">GSM</span>
+                      <span className="font-bold text-2xl block -mt-0.5">{data.gsm}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">Gross Wt</span>
+                      <span className="font-bold text-sm block -mt-0.5">{data.gross_weight} kg</span>
+                    </div>
                   </div>
-                  {/* Removed gray background, padding, and border */}
+                  {/* Net Weight tightly packed together */}
                   <div className="text-center">
-                    <span className="text-[9px] uppercase font-bold text-gray-500 block leading-none mb-0.5">Net Weight</span>
-                    <span className="text-2xl font-black leading-none text-black">{data.net_weight}<span className="text-xs">kg</span></span>
+                    <span className="text-[9px] uppercase font-bold text-gray-500 block mb-0">Net Weight</span>
+                    <span className="text-2xl font-black text-black block -mt-1">{data.net_weight}<span className="text-xs">kg</span></span>
                   </div>
                 </div>
               </div>
@@ -143,9 +159,9 @@ const LabelPrint = ({ data, onClose }) => {
                   includeMargin={true}
                   className="mb-2 bg-white"
                 />
-                <div className="font-mono font-bold text-[14px] tracking-widest leading-none text-center uppercase">{data.product_id}</div>
+                <div className="font-mono font-bold text-[14px] tracking-widest text-center uppercase">{data.product_id}</div>
                 {showDate && (
-                  <div className="text-[8px] text-gray-400 font-bold mt-1.5 leading-none text-center uppercase">
+                  <div className="text-[8px] text-gray-400 font-bold mt-1.5 text-center uppercase">
                     {data.created_at ? new Date(data.created_at).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'}) : new Date().toLocaleString()}
                   </div>
                 )}
