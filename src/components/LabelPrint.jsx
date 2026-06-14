@@ -1,61 +1,73 @@
 import React, { useRef, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const LabelPrint = ({ data, onClose }) => {
   const labelRef = useRef(null);
   const [showBrand, setShowBrand] = useState(true);
   const [showDate, setShowDate] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
-  const handleDownloadPDF = async () => {
-    if (!labelRef.current || isGenerating) return;
-    setIsGenerating(true); 
+  const handlePrint = () => {
+    if (!labelRef.current || isPrinting) return;
+    setIsPrinting(true);
+
+    // Extract the raw HTML of the label
+    const content = labelRef.current.outerHTML;
     
-    // Allow UI to update before blocking the thread
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Create an invisible iframe to isolate the print job
+    const printWindow = document.createElement('iframe');
+    printWindow.style.position = 'absolute';
+    printWindow.style.top = '-10000px';
+    printWindow.style.left = '-10000px';
+    document.body.appendChild(printWindow);
+
+    const doc = printWindow.contentWindow.document;
+    doc.open();
     
-    try {
-      const canvas = await html2canvas(labelRef.current, { 
-        scale: 2, 
-        useCORS: true, 
-        backgroundColor: '#ffffff',
-        logging: false,
-        imageTimeout: 0,
-        removeContainer: true
-      });
+    // Inject the parent's styles and strict @page rules for the thermal printer
+    doc.write(`
+      <html>
+        <head>
+          ${document.head.innerHTML}
+          <style>
+            @page { 
+              size: 3.9in 2.4in; 
+              margin: 0; 
+            }
+            body { 
+              margin: 0; 
+              padding: 0; 
+              background: white; 
+              display: flex; 
+              align-items: flex-start; 
+              justify-content: flex-start; 
+            }
+            /* Force exact colors to bypass browser ink-saving modes */
+            * { 
+              -webkit-print-color-adjust: exact !important; 
+              print-color-adjust: exact !important; 
+            }
+          </style>
+        </head>
+        <body>
+          ${content}
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    // Trigger the native print dialog after a brief delay for styles to load
+    setTimeout(() => {
+      printWindow.contentWindow.focus();
+      printWindow.contentWindow.print();
       
-      canvas.toBlob(async (blob) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = () => {
-          const base64data = reader.result;
-          
-          // The PDF hardware format remains strictly exactly 2.4in tall
-          const pdf = new jsPDF({ 
-            orientation: 'landscape', 
-            unit: 'in', 
-            format: [3.9, 2.4] 
-          });
-
-          // We draw the 2.6in image onto the 2.4in document. 
-          // The bottom 0.2in of blank white space overflows and is cleanly cropped out!
-          pdf.addImage(base64data, 'JPEG', 0, 0, 3.9, 2.6, undefined, 'SLOW');
-          pdf.save(`Label-${data.product_id}.pdf`);
-          
-          canvas.width = 0;
-          canvas.height = 0;
-          setIsGenerating(false);
-        };
-      }, 'image/jpeg', 0.8);
-
-    } catch (error) {
-      console.error("PDF Generation Error:", error);
-      alert("Error generating PDF. Please try again.");
-      setIsGenerating(false);
-    }
+      // Clean up the iframe after printing is initiated
+      setTimeout(() => {
+        document.body.removeChild(printWindow);
+        setIsPrinting(false);
+      }, 500);
+    }, 500);
   };
 
   if (!data) return null;
@@ -78,7 +90,7 @@ const LabelPrint = ({ data, onClose }) => {
         <div className="p-4 border-b flex flex-col gap-3">
           <div className="flex justify-between items-center">
             <h2 className="font-bold text-lg text-gray-800 tracking-tighter uppercase">Label Preview (Landscape)</h2>
-            <button onClick={onClose} disabled={isGenerating} className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-20 transition-colors">
+            <button onClick={onClose} disabled={isPrinting} className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-20 transition-colors">
               <X size={20} />
             </button>
           </div>
@@ -93,14 +105,11 @@ const LabelPrint = ({ data, onClose }) => {
         </div>
         
         <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
-          {/* 
-            FIX: Height dynamically expanded to 2.6in to act as a "Bleed Area".
-            Bottom padding increased to 0.45in so the text draws safely away from the html2canvas boundary edge. 
-          */}
+          {/* Restored to the clean 2.4in layout without the PDF bleed hack */}
           <div 
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
-            style={{ width: '3.9in', height: '2.6in', padding: '0.05in 0.1in 0.45in 0.1in', boxSizing: 'border-box' }}
+            style={{ width: '3.9in', height: '2.4in', padding: '0.05in 0.1in 0.25in 0.1in', boxSizing: 'border-box' }}
           >
             {/* FULL WIDTH BRAND HEADER */}
             <div className="w-full border-b-2 border-black pb-1.5 mb-1 shrink-0 flex items-center justify-center">
@@ -149,7 +158,6 @@ const LabelPrint = ({ data, onClose }) => {
                       <span className="font-bold text-sm block -mt-0.5">{data.gross_weight} kg</span>
                     </div>
                   </div>
-                  {/* Net Weight tightly packed together */}
                   <div className="text-center">
                     <span className="text-[9px] uppercase font-bold text-gray-500 block mb-0">Net Weight</span>
                     <span className="text-2xl font-black text-black block -mt-1.5">{data.net_weight}<span className="text-xs">kg</span></span>
@@ -179,15 +187,15 @@ const LabelPrint = ({ data, onClose }) => {
 
         <div className="p-4 bg-white border-t flex gap-3">
           <button 
-            onClick={handleDownloadPDF} 
-            disabled={isGenerating} 
+            onClick={handlePrint} 
+            disabled={isPrinting} 
             className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-lg transition-all flex justify-center gap-2 items-center active:scale-95 ${
-              isGenerating ? 'bg-blue-300 cursor-not-allowed text-white' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
+              isPrinting ? 'bg-blue-300 cursor-not-allowed text-white' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
             }`}
           >
-            {isGenerating ? <><Loader2 size={18} className="animate-spin" /> GENERATING...</> : <><Printer size={18} /> SAVE PDF</>}
+            {isPrinting ? <><Loader2 size={18} className="animate-spin" /> PRINTING...</> : <><Printer size={18} /> PRINT LABEL</>}
           </button>
-          <button onClick={onClose} disabled={isGenerating} className="flex-1 bg-gray-50 border border-gray-100 text-gray-500 py-4 rounded-2xl font-bold active:scale-95 transition-all hover:bg-gray-100 disabled:opacity-50 uppercase text-xs">
+          <button onClick={onClose} disabled={isPrinting} className="flex-1 bg-gray-50 border border-gray-100 text-gray-500 py-4 rounded-2xl font-bold active:scale-95 transition-all hover:bg-gray-100 disabled:opacity-50 uppercase text-xs">
             Close
           </button>
         </div>
