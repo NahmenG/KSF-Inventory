@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const LabelPrint = ({ data, onClose }) => {
@@ -105,7 +105,6 @@ const LabelPrint = ({ data, onClose }) => {
         </div>
         
         <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
-          {/* Restored to the clean 2.4in layout without the PDF bleed hack */}
           <div 
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
@@ -167,7 +166,8 @@ const LabelPrint = ({ data, onClose }) => {
 
               {/* RIGHT COLUMN: 40% Width strictly dedicated to QR Code and ID */}
               <div className="w-[40%] pl-2 flex flex-col items-center justify-center h-full overflow-hidden">
-                <QRCodeCanvas 
+                {/* FIX: Swapped QRCodeCanvas for QRCodeSVG so it clones into the print iframe perfectly */}
+                <QRCodeSVG 
                   value={qrPayload} 
                   size={110} 
                   level="L" 
