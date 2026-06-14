@@ -89,13 +89,12 @@ const LabelPrint = ({ data, onClose }) => {
         </div>
         
         <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
-          {/* Canvas Wrapper: Shifted up by reducing top padding to 0.05in and increasing bottom padding to 0.2in */}
           <div 
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
             style={{ width: '3.9in', height: '2.4in', padding: '0.05in 0.1in 0.2in 0.1in', boxSizing: 'border-box' }}
           >
-            {/* FULL WIDTH BRAND HEADER: Increased pb to 1.5 to lift it off the line, removed leading-none */}
+            {/* FULL WIDTH BRAND HEADER */}
             <div className="w-full border-b-2 border-black pb-1.5 mb-1 shrink-0 flex items-center justify-center">
               {showBrand ? (
                 <div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>
@@ -109,7 +108,7 @@ const LabelPrint = ({ data, onClose }) => {
               {/* LEFT COLUMN: 60% Width for all Text Data */}
               <div className="w-[60%] border-r-2 border-black pr-2 flex flex-col h-full">
                 
-                {/* Data Grid: Reduced gap-y to 0, completely removed line-height restrictions, applied -mt to shrink vertical gaps naturally */}
+                {/* Data Grid */}
                 <div className="w-full grid grid-cols-2 gap-y-0 text-left flex-1 content-start mt-0.5">
                   <div>
                     <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Quality</span>
@@ -132,7 +131,8 @@ const LabelPrint = ({ data, onClose }) => {
 
                 {/* Bottom section of left column for GSM and Weights */}
                 <div className="w-full mt-auto">
-                  <div className="border-t-2 border-black pt-1 mb-0.5 flex items-end justify-between">
+                  {/* Removed the mb-0.5 to lift the Net Weight block up slightly */}
+                  <div className="border-t-2 border-black pt-1 mb-0 flex items-end justify-between">
                     <div>
                       <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">GSM</span>
                       <span className="font-bold text-2xl block -mt-0.5">{data.gsm}</span>
@@ -142,10 +142,10 @@ const LabelPrint = ({ data, onClose }) => {
                       <span className="font-bold text-sm block -mt-0.5">{data.gross_weight} kg</span>
                     </div>
                   </div>
-                  {/* Net Weight tightly packed together */}
+                  {/* Net Weight tightly packed together with -mt-2 */}
                   <div className="text-center">
                     <span className="text-[9px] uppercase font-bold text-gray-500 block mb-0">Net Weight</span>
-                    <span className="text-2xl font-black text-black block -mt-1">{data.net_weight}<span className="text-xs">kg</span></span>
+                    <span className="text-2xl font-black text-black block -mt-2">{data.net_weight}<span className="text-xs">kg</span></span>
                   </div>
                 </div>
               </div>
