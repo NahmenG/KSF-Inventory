@@ -92,7 +92,7 @@ const LabelPrint = ({ data, onClose }) => {
           <div 
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
-            style={{ width: '3.9in', height: '2.4in', padding: '0.05in 0.1in 0.2in 0.1in', boxSizing: 'border-box' }}
+            style={{ width: '3.9in', height: '2.4in', padding: '0.05in 0.1in 0.25in 0.1in', boxSizing: 'border-box' }}
           >
             {/* FULL WIDTH BRAND HEADER */}
             <div className="w-full border-b-2 border-black pb-1.5 mb-1 shrink-0 flex items-center justify-center">
@@ -130,9 +130,9 @@ const LabelPrint = ({ data, onClose }) => {
                 </div>
 
                 {/* Bottom section of left column for GSM and Weights */}
-                <div className="w-full mt-auto">
-                  {/* Removed the mb-0.5 to lift the Net Weight block up slightly */}
-                  <div className="border-t-2 border-black pt-1 mb-0 flex items-end justify-between">
+                {/* Removed the top border to lift the lower half up safely */}
+                <div className="w-full mt-auto flex flex-col justify-end">
+                  <div className="flex items-end justify-between mb-1">
                     <div>
                       <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">GSM</span>
                       <span className="font-bold text-2xl block -mt-0.5">{data.gsm}</span>
@@ -142,10 +142,10 @@ const LabelPrint = ({ data, onClose }) => {
                       <span className="font-bold text-sm block -mt-0.5">{data.gross_weight} kg</span>
                     </div>
                   </div>
-                  {/* Net Weight tightly packed together with -mt-2 */}
+                  {/* Net Weight tightly packed together */}
                   <div className="text-center">
                     <span className="text-[9px] uppercase font-bold text-gray-500 block mb-0">Net Weight</span>
-                    <span className="text-2xl font-black text-black block -mt-2">{data.net_weight}<span className="text-xs">kg</span></span>
+                    <span className="text-2xl font-black text-black block -mt-1.5">{data.net_weight}<span className="text-xs">kg</span></span>
                   </div>
                 </div>
               </div>
