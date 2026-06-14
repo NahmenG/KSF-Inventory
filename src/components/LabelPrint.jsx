@@ -32,13 +32,17 @@ const LabelPrint = ({ data, onClose }) => {
         reader.readAsDataURL(blob);
         reader.onloadend = () => {
           const base64data = reader.result;
+          
+          // The PDF hardware format remains strictly exactly 2.4in tall
           const pdf = new jsPDF({ 
             orientation: 'landscape', 
             unit: 'in', 
             format: [3.9, 2.4] 
           });
 
-          pdf.addImage(base64data, 'JPEG', 0, 0, 3.9, 2.4, undefined, 'SLOW');
+          // We draw the 2.6in image onto the 2.4in document. 
+          // The bottom 0.2in of blank white space overflows and is cleanly cropped out!
+          pdf.addImage(base64data, 'JPEG', 0, 0, 3.9, 2.6, undefined, 'SLOW');
           pdf.save(`Label-${data.product_id}.pdf`);
           
           canvas.width = 0;
@@ -89,10 +93,14 @@ const LabelPrint = ({ data, onClose }) => {
         </div>
         
         <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
+          {/* 
+            FIX: Height dynamically expanded to 2.6in to act as a "Bleed Area".
+            Bottom padding increased to 0.45in so the text draws safely away from the html2canvas boundary edge. 
+          */}
           <div 
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
-            style={{ width: '3.9in', height: '2.4in', padding: '0.05in 0.1in 0.25in 0.1in', boxSizing: 'border-box' }}
+            style={{ width: '3.9in', height: '2.6in', padding: '0.05in 0.1in 0.45in 0.1in', boxSizing: 'border-box' }}
           >
             {/* FULL WIDTH BRAND HEADER */}
             <div className="w-full border-b-2 border-black pb-1.5 mb-1 shrink-0 flex items-center justify-center">
@@ -130,7 +138,6 @@ const LabelPrint = ({ data, onClose }) => {
                 </div>
 
                 {/* Bottom section of left column for GSM and Weights */}
-                {/* Removed the top border to lift the lower half up safely */}
                 <div className="w-full mt-auto flex flex-col justify-end">
                   <div className="flex items-end justify-between mb-1">
                     <div>
