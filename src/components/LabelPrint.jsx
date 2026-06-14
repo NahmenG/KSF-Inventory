@@ -32,13 +32,15 @@ const LabelPrint = ({ data, onClose }) => {
         reader.readAsDataURL(blob);
         reader.onloadend = () => {
           const base64data = reader.result;
+          // Updated to Landscape format
           const pdf = new jsPDF({ 
-            orientation: 'portrait', 
+            orientation: 'landscape', 
             unit: 'in', 
-            format: [2.4, 3.9] 
+            format: [3.9, 2.4] 
           });
 
-          pdf.addImage(base64data, 'JPEG', 0, 0, 2.4, 3.9, undefined, 'SLOW');
+          // Print bounds updated to 3.9 width x 2.4 height
+          pdf.addImage(base64data, 'JPEG', 0, 0, 3.9, 2.4, undefined, 'SLOW');
           pdf.save(`Label-${data.product_id}.pdf`);
           
           canvas.width = 0;
@@ -56,7 +58,7 @@ const LabelPrint = ({ data, onClose }) => {
 
   if (!data) return null;
 
-  // JSON payload for third-party scanning (Customer Name is excluded)
+  // JSON payload for third-party scanning
   const qrPayload = JSON.stringify({
     id: data.product_id,
     q: data.quality,
@@ -70,10 +72,10 @@ const LabelPrint = ({ data, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh] shadow-2xl">
+      <div className="bg-white rounded-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] shadow-2xl">
         <div className="p-4 border-b flex flex-col gap-3">
           <div className="flex justify-between items-center">
-            <h2 className="font-bold text-lg text-gray-800 tracking-tighter uppercase">Label Preview</h2>
+            <h2 className="font-bold text-lg text-gray-800 tracking-tighter uppercase">Label Preview (Landscape)</h2>
             <button onClick={onClose} disabled={isGenerating} className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-20 transition-colors">
               <X size={20} />
             </button>
@@ -88,48 +90,58 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
         </div>
         
-        <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-start">
+        <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
+          {/* Canvas Wrapper updated to 3.9in wide x 2.4in tall */}
           <div 
             ref={labelRef} 
-            className="flex flex-col justify-between items-center text-center bg-white shadow-xl relative" 
-            style={{ width: '2.4in', height: '3.9in', padding: '0.1in', boxSizing: 'border-box' }}
+            className="flex flex-row bg-white shadow-xl relative" 
+            style={{ width: '3.9in', height: '2.4in', padding: '0.1in', boxSizing: 'border-box' }}
           >
-            {/* Header: Squeezed height and margins */}
-            <div className="w-full border-b-2 border-black pb-0.5 h-8 flex items-center justify-center">
-              {showBrand ? (
-                <div className="font-black text-xl tracking-tighter uppercase leading-none">KSF NON WOVEN</div>
-              ) : (
-                <div className="w-full h-full"></div>
-              )}
-            </div>
-            
-            {/* Data Grid: Added min-w-0 and block truncate to strictly prevent wrapping */}
-            <div className="w-full grid grid-cols-2 gap-y-0.5 text-left px-1 mt-1">
-              <div className="min-w-0"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-lg leading-none block truncate">{data.quality}</span></div>
-              <div className="text-right min-w-0"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-lg leading-none block truncate">{data.color}</span></div>
-              <div className="min-w-0"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-lg leading-none block truncate">{data.width_inches}"</span></div>
-              <div className="text-right min-w-0"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Length</span><span className="font-bold text-lg leading-none block truncate">{data.length_meters}m</span></div>
+            {/* LEFT COLUMN: 60% Width for all Text Data */}
+            <div className="w-[60%] border-r-2 border-black pr-2 flex flex-col h-full">
+              {/* Brand Header */}
+              <div className="w-full border-b-2 border-black pb-1 mb-1 h-7 flex items-center justify-center">
+                {showBrand ? (
+                  <div className="font-black text-xl tracking-tighter uppercase leading-none">KSF NON WOVEN</div>
+                ) : (
+                  <div className="w-full h-full"></div>
+                )}
+              </div>
               
-              <div className="col-span-2 text-center mt-0.5"><span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">GSM</span><span className="font-bold text-2xl leading-none">{data.gsm}</span></div>
+              {/* Data Grid: We can allow wrapping here safely because it won't push the QR code */}
+              <div className="w-full grid grid-cols-2 gap-y-1 text-left flex-1 content-start mt-1">
+                <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Quality</span><span className="font-bold text-base leading-tight">{data.quality}</span></div>
+                <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Color</span><span className="font-bold text-base leading-tight">{data.color}</span></div>
+                
+                <div className="mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Size (in)</span><span className="font-bold text-base leading-none">{data.width_inches}"</span></div>
+                <div className="text-right mt-1"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none">Length</span><span className="font-bold text-base leading-none">{data.length_meters}m</span></div>
+              </div>
+
+              {/* Bottom section of left column for GSM and Weights */}
+              <div className="w-full mt-auto">
+                <div className="border-t-2 border-black pt-1 mb-1 flex items-end justify-between">
+                  <div><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none mb-0.5">GSM</span><span className="font-bold text-2xl leading-none">{data.gsm}</span></div>
+                  <div className="text-right"><span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter leading-none mb-0.5">Gross Wt</span><span className="font-bold text-sm leading-none">{data.gross_weight} kg</span></div>
+                </div>
+                <div className="bg-gray-100 p-1 rounded text-center border border-gray-300">
+                  <span className="text-[9px] uppercase font-bold text-gray-500 block leading-none mb-0.5">Net Weight</span>
+                  <span className="text-2xl font-black leading-none text-black">{data.net_weight}<span className="text-xs">kg</span></span>
+                </div>
+              </div>
             </div>
-            
-            <div className="w-full border-y-2 border-black py-1 my-0.5 flex justify-between items-end px-1">
-              <div className="text-left leading-none"><span className="text-[10px] uppercase font-bold block leading-none">Gross Wt</span><span className="text-sm font-bold">{data.gross_weight} kg</span></div>
-              <div className="text-right leading-none"><span className="text-[10px] uppercase font-bold block text-gray-400 leading-none">Net Weight</span><span className="text-3xl font-black leading-none">{data.net_weight}<span className="text-base">kg</span></span></div>
-            </div>
-            
-            {/* QR Section: Contains the robust L-level QR code */}
-            <div className="w-full flex flex-col items-center justify-end overflow-hidden pb-2 flex-1">
+
+            {/* RIGHT COLUMN: 40% Width strictly dedicated to QR Code and ID */}
+            <div className="w-[40%] pl-2 flex flex-col items-center justify-center h-full overflow-hidden">
               <QRCodeCanvas 
                 value={qrPayload} 
-                size={100} 
+                size={110} 
                 level="L" 
                 includeMargin={true}
-                className="mb-1 bg-white"
+                className="mb-2 bg-white"
               />
-              <div className="font-mono font-bold text-[14px] tracking-widest leading-none mt-1 uppercase">{data.product_id}</div>
+              <div className="font-mono font-bold text-[14px] tracking-widest leading-none text-center uppercase">{data.product_id}</div>
               {showDate && (
-                <div className="text-[8px] text-gray-400 font-bold mt-1 leading-none uppercase">
+                <div className="text-[8px] text-gray-400 font-bold mt-1.5 leading-none text-center uppercase">
                   {data.created_at ? new Date(data.created_at).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'}) : new Date().toLocaleString()}
                 </div>
               )}
