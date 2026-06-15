@@ -147,7 +147,8 @@ const LabelPrint = ({ data, onClose }) => {
 
                 {/* Bottom section of left column for GSM and Weights */}
                 <div className="w-full mt-auto flex flex-col justify-end">
-                  <div className="flex items-end justify-between mb-1">
+                  {/* Restored the top border partition here */}
+                  <div className="border-t-2 border-black pt-1 mb-0.5 flex items-end justify-between">
                     <div>
                       <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">GSM</span>
                       <span className="font-bold text-2xl block -mt-0.5">{data.gsm}</span>
@@ -166,7 +167,6 @@ const LabelPrint = ({ data, onClose }) => {
 
               {/* RIGHT COLUMN: 40% Width strictly dedicated to QR Code and ID */}
               <div className="w-[40%] pl-2 flex flex-col items-center justify-center h-full overflow-hidden">
-                {/* FIX: Swapped QRCodeCanvas for QRCodeSVG so it clones into the print iframe perfectly */}
                 <QRCodeSVG 
                   value={qrPayload} 
                   size={110} 
