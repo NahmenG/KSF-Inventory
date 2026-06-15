@@ -1,73 +1,66 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff } from 'lucide-react';
 
 const LabelPrint = ({ data, onClose }) => {
   const labelRef = useRef(null);
   const [showBrand, setShowBrand] = useState(true);
   const [showDate, setShowDate] = useState(true);
-  const [isPrinting, setIsPrinting] = useState(false);
+
+  // Inject strict native print CSS when the modal opens
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @media print {
+        /* 1. Force the exact paper size for Brother AirPrint */
+        @page { 
+          size: 3.9in 2.4in !important; 
+          margin: 0 !important; 
+        }
+        
+        /* 2. Shrink the entire body to prevent extra blank pages */
+        html, body {
+          width: 3.9in !important;
+          height: 2.4in !important;
+          overflow: hidden !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: white !important;
+        }
+
+        /* 3. Hide the entire application UI */
+        body * {
+          visibility: hidden !important;
+        }
+
+        /* 4. Show ONLY the label and its contents */
+        #printable-label, #printable-label * {
+          visibility: visible !important;
+        }
+
+        /* 5. Break the label out of the DOM and pin it to the paper edge */
+        #printable-label {
+          position: fixed !important;
+          left: 0 !important;
+          top: 0 !important;
+          margin: 0 !important;
+          box-shadow: none !important;
+          transform: none !important;
+          -webkit-print-color-adjust: exact !important; 
+          print-color-adjust: exact !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   const handlePrint = () => {
-    if (!labelRef.current || isPrinting) return;
-    setIsPrinting(true);
-
-    // Extract the raw HTML of the label
-    const content = labelRef.current.outerHTML;
-    
-    // Create an invisible iframe to isolate the print job
-    const printWindow = document.createElement('iframe');
-    printWindow.style.position = 'absolute';
-    printWindow.style.top = '-10000px';
-    printWindow.style.left = '-10000px';
-    document.body.appendChild(printWindow);
-
-    const doc = printWindow.contentWindow.document;
-    doc.open();
-    
-    // Inject the parent's styles and strict @page rules for the thermal printer
-    doc.write(`
-      <html>
-        <head>
-          ${document.head.innerHTML}
-          <style>
-            @page { 
-              size: 3.9in 2.4in; 
-              margin: 0; 
-            }
-            body { 
-              margin: 0; 
-              padding: 0; 
-              background: white; 
-              display: flex; 
-              align-items: flex-start; 
-              justify-content: flex-start; 
-            }
-            /* Force exact colors to bypass browser ink-saving modes */
-            * { 
-              -webkit-print-color-adjust: exact !important; 
-              print-color-adjust: exact !important; 
-            }
-          </style>
-        </head>
-        <body>
-          ${content}
-        </body>
-      </html>
-    `);
-    doc.close();
-
-    // Trigger the native print dialog after a brief delay for styles to load
-    setTimeout(() => {
-      printWindow.contentWindow.focus();
-      printWindow.contentWindow.print();
-      
-      // Clean up the iframe after printing is initiated
-      setTimeout(() => {
-        document.body.removeChild(printWindow);
-        setIsPrinting(false);
-      }, 500);
-    }, 500);
+    // A synchronous, immediate print command satisfies iOS Apple Security
+    window.print();
   };
 
   if (!data) return null;
@@ -90,7 +83,7 @@ const LabelPrint = ({ data, onClose }) => {
         <div className="p-4 border-b flex flex-col gap-3">
           <div className="flex justify-between items-center">
             <h2 className="font-bold text-lg text-gray-800 tracking-tighter uppercase">Label Preview (Landscape)</h2>
-            <button onClick={onClose} disabled={isPrinting} className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-20 transition-colors">
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
               <X size={20} />
             </button>
           </div>
@@ -106,6 +99,7 @@ const LabelPrint = ({ data, onClose }) => {
         
         <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
           <div 
+            id="printable-label"
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
             style={{ width: '3.9in', height: '2.4in', padding: '0.05in 0.1in 0.25in 0.1in', boxSizing: 'border-box' }}
@@ -187,14 +181,11 @@ const LabelPrint = ({ data, onClose }) => {
         <div className="p-4 bg-white border-t flex gap-3">
           <button 
             onClick={handlePrint} 
-            disabled={isPrinting} 
-            className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-lg transition-all flex justify-center gap-2 items-center active:scale-95 ${
-              isPrinting ? 'bg-blue-300 cursor-not-allowed text-white' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
-            }`}
+            className="flex-1 py-4 rounded-2xl font-black text-sm shadow-lg transition-all flex justify-center gap-2 items-center active:scale-95 bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100"
           >
-            {isPrinting ? <><Loader2 size={18} className="animate-spin" /> PRINTING...</> : <><Printer size={18} /> PRINT LABEL</>}
+            <Printer size={18} /> PRINT LABEL
           </button>
-          <button onClick={onClose} disabled={isPrinting} className="flex-1 bg-gray-50 border border-gray-100 text-gray-500 py-4 rounded-2xl font-bold active:scale-95 transition-all hover:bg-gray-100 disabled:opacity-50 uppercase text-xs">
+          <button onClick={onClose} className="flex-1 bg-gray-50 border border-gray-100 text-gray-500 py-4 rounded-2xl font-bold active:scale-95 transition-all hover:bg-gray-100 uppercase text-xs">
             Close
           </button>
         </div>
