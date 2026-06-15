@@ -12,16 +12,16 @@ const LabelPrint = ({ data, onClose }) => {
     const style = document.createElement('style');
     style.innerHTML = `
       @media print {
-        /* 1. Force the exact paper size for Brother AirPrint */
+        /* 1. Force PORTRAIT orientation for the physical thermal roll (2.4in wide x 3.9in tall) */
         @page { 
-          size: 3.9in 2.4in !important; 
+          size: 2.4in 3.9in !important; 
           margin: 0 !important; 
         }
         
-        /* 2. Shrink the entire body to prevent extra blank pages */
+        /* 2. Lock the body to the exact physical roll dimensions */
         html, body {
-          width: 3.9in !important;
-          height: 2.4in !important;
+          width: 2.4in !important;
+          height: 3.9in !important;
           overflow: hidden !important;
           margin: 0 !important;
           padding: 0 !important;
@@ -38,14 +38,17 @@ const LabelPrint = ({ data, onClose }) => {
           visibility: visible !important;
         }
 
-        /* 5. Break the label out of the DOM and pin it to the paper edge */
+        /* 5. Rotate the Landscape label 90 degrees to perfectly fit the Portrait roll */
         #printable-label {
           position: fixed !important;
-          left: 0 !important;
-          top: 0 !important;
+          top: 50% !important;
+          left: 50% !important;
+          width: 3.9in !important;
+          height: 2.4in !important;
+          /* Center the element, then spin it sideways */
+          transform: translate(-50%, -50%) rotate(90deg) !important;
           margin: 0 !important;
           box-shadow: none !important;
-          transform: none !important;
           -webkit-print-color-adjust: exact !important; 
           print-color-adjust: exact !important;
         }
