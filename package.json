@@ -15,7 +15,7 @@
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
     "jsbarcode": "^3.12.1",
-    "jspdf": "^4.2.1",
+    "jspdf": "^2.5.1",
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.562.0",
     "qrcode.react": "^4.2.0",
