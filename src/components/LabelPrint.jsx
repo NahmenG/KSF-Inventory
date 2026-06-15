@@ -113,7 +113,7 @@ const LabelPrint = ({ data, onClose }) => {
             {/* FULL WIDTH BRAND HEADER */}
             <div className="w-full border-b-2 border-black pb-1.5 mb-1 shrink-0 flex items-center justify-center">
               {showBrand ? (
-                <div className="font-black text-xl tracking-tighter uppercase">KSF NON WOVEN</div>
+                <div className="font-black text-xl tracking-tighter uppercase">KSF Non-Woven</div>
               ) : (
                 <div className="w-full h-7"></div>
               )}
