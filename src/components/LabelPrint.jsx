@@ -113,7 +113,7 @@ const LabelPrint = ({ data, onClose }) => {
             {/* FULL WIDTH BRAND HEADER */}
             <div className="w-full border-b-2 border-black pb-1.5 mb-1 shrink-0 flex items-center justify-center">
               {showBrand ? (
-                <div className="font-black text-xl tracking-tighter uppercase">KSF Non-Woven</div>
+                <div className="font-black text-xl tracking-tighter">KSF Non-Woven</div>
               ) : (
                 <div className="w-full h-7"></div>
               )}
@@ -147,7 +147,6 @@ const LabelPrint = ({ data, onClose }) => {
 
                 {/* Bottom section of left column for GSM and Weights */}
                 <div className="w-full mt-auto flex flex-col justify-end">
-                  {/* Restored the top border partition here */}
                   <div className="border-t-2 border-black pt-1 mb-0.5 flex items-end justify-between">
                     <div>
                       <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">GSM</span>
