@@ -1,69 +1,60 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { QRCodeCanvas } from 'qrcode.react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const LabelPrint = ({ data, onClose }) => {
   const labelRef = useRef(null);
   const [showBrand, setShowBrand] = useState(true);
   const [showDate, setShowDate] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  // Inject strict native print CSS when the modal opens
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.innerHTML = `
-      @media print {
-        /* 1. Force PORTRAIT orientation for the physical thermal roll (2.4in wide x 3.9in tall) */
-        @page { 
-          size: 2.4in 3.9in !important; 
-          margin: 0 !important; 
-        }
-        
-        /* 2. Lock the body to the exact physical roll dimensions */
-        html, body {
-          width: 2.4in !important;
-          height: 3.9in !important;
-          overflow: hidden !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          background: white !important;
-        }
+  const handleDownloadPDF = async () => {
+    if (!labelRef.current || isGenerating) return;
+    setIsGenerating(true); 
+    
+    // Allow UI to update before blocking the thread
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+      const canvas = await html2canvas(labelRef.current, { 
+        scale: 4, // Extremely high resolution for thermal clarity
+        useCORS: true, 
+        backgroundColor: '#ffffff',
+        logging: false,
+        imageTimeout: 0,
+        removeContainer: true
+      });
+      
+      canvas.toBlob(async (blob) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => {
+          const base64data = reader.result;
+          
+          // Force the hardware format to strictly 3.9in x 2.4in
+          const pdf = new jsPDF({ 
+            orientation: 'landscape', 
+            unit: 'in', 
+            format: [3.9, 2.4] 
+          });
 
-        /* 3. Hide the entire application UI */
-        body * {
-          visibility: hidden !important;
-        }
+          // Map the mathematically perfect pixel canvas directly to the inch-based PDF
+          pdf.addImage(base64data, 'JPEG', 0, 0, 3.9, 2.4, undefined, 'SLOW');
+          pdf.save(`Label-${data.product_id}.pdf`);
+          
+          canvas.width = 0;
+          canvas.height = 0;
+          setIsGenerating(false);
+        };
+      }, 'image/jpeg', 1.0);
 
-        /* 4. Show ONLY the label and its contents */
-        #printable-label, #printable-label * {
-          visibility: visible !important;
-        }
-
-        /* 5. Rotate the Landscape label 90 degrees to perfectly fit the Portrait roll */
-        #printable-label {
-          position: fixed !important;
-          top: 50% !important;
-          left: 50% !important;
-          width: 3.9in !important;
-          height: 2.4in !important;
-          /* Center the element, then spin it sideways */
-          transform: translate(-50%, -50%) rotate(90deg) !important;
-          margin: 0 !important;
-          box-shadow: none !important;
-          -webkit-print-color-adjust: exact !important; 
-          print-color-adjust: exact !important;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
-
-  const handlePrint = () => {
-    // A synchronous, immediate print command satisfies iOS Apple Security
-    window.print();
+    } catch (error) {
+      console.error("PDF Generation Error:", error);
+      alert("Error generating PDF. Please try again.");
+      setIsGenerating(false);
+    }
   };
 
   if (!data) return null;
@@ -86,7 +77,7 @@ const LabelPrint = ({ data, onClose }) => {
         <div className="p-4 border-b flex flex-col gap-3">
           <div className="flex justify-between items-center">
             <h2 className="font-bold text-lg text-gray-800 tracking-tighter uppercase">Label Preview (Landscape)</h2>
-            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+            <button onClick={onClose} disabled={isGenerating} className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-20 transition-colors">
               <X size={20} />
             </button>
           </div>
@@ -100,19 +91,19 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
         </div>
         
-        <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
+        <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center font-sans">
+          {/* FIX: Using strict pixels (390x240) instead of inches. Added 16px bottom padding to guarantee Net Weight clearance */}
           <div 
-            id="printable-label"
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
-            style={{ width: '3.9in', height: '2.4in', padding: '0.05in 0.1in 0.25in 0.1in', boxSizing: 'border-box' }}
+            style={{ width: '390px', height: '240px', padding: '10px 10px 16px 10px', boxSizing: 'border-box', fontFamily: 'Arial, Helvetica, sans-serif' }}
           >
             {/* FULL WIDTH BRAND HEADER */}
-            <div className="w-full border-b-2 border-black pb-1.5 mb-1 shrink-0 flex items-center justify-center">
+            <div className="w-full border-b-2 border-black pb-1 mb-1 shrink-0 flex items-center justify-center">
               {showBrand ? (
-                <div className="font-black text-xl tracking-tighter">KSF Non-Woven</div>
+                <div className="font-black text-[22px] tracking-tighter leading-none">KSF Non-Woven</div>
               ) : (
-                <div className="w-full h-7"></div>
+                <div className="w-full h-[22px]"></div>
               )}
             </div>
 
@@ -124,55 +115,55 @@ const LabelPrint = ({ data, onClose }) => {
                 {/* Data Grid */}
                 <div className="w-full grid grid-cols-2 gap-y-0 text-left flex-1 content-start mt-0.5">
                   <div>
-                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Quality</span>
-                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.quality}</span>
+                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Quality</span>
+                    <span className="font-bold text-[15px] block whitespace-nowrap -mt-0.5">{data.quality}</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Color</span>
-                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.color}</span>
+                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Color</span>
+                    <span className="font-bold text-[15px] block whitespace-nowrap -mt-0.5">{data.color}</span>
                   </div>
                   
                   <div className="mt-1">
-                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Size (in)</span>
-                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.width_inches}"</span>
+                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Size (in)</span>
+                    <span className="font-bold text-[15px] block whitespace-nowrap -mt-0.5">{data.width_inches}"</span>
                   </div>
                   <div className="text-right mt-1">
-                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Length</span>
-                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.length_meters}m</span>
+                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Length</span>
+                    <span className="font-bold text-[15px] block whitespace-nowrap -mt-0.5">{data.length_meters}m</span>
                   </div>
                 </div>
 
                 {/* Bottom section of left column for GSM and Weights */}
                 <div className="w-full mt-auto flex flex-col justify-end">
-                  <div className="border-t-2 border-black pt-1 mb-0.5 flex items-end justify-between">
+                  <div className="border-t-2 border-black pt-1 mb-1 flex items-end justify-between">
                     <div>
-                      <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">GSM</span>
-                      <span className="font-bold text-2xl block -mt-0.5">{data.gsm}</span>
+                      <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">GSM</span>
+                      <span className="font-bold text-[24px] block leading-none">{data.gsm}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">Gross Wt</span>
-                      <span className="font-bold text-sm block -mt-0.5">{data.gross_weight} kg</span>
+                      <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">Gross Wt</span>
+                      <span className="font-bold text-[14px] block leading-none">{data.gross_weight} kg</span>
                     </div>
                   </div>
                   <div className="text-center">
-                    <span className="text-[9px] uppercase font-bold text-gray-500 block mb-0">Net Weight</span>
-                    <span className="text-2xl font-black text-black block -mt-1.5">{data.net_weight}<span className="text-xs">kg</span></span>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 block mb-0">Net Weight</span>
+                    <span className="text-[26px] font-black text-black block leading-none -mt-1">{data.net_weight}<span className="text-[12px]">kg</span></span>
                   </div>
                 </div>
               </div>
 
               {/* RIGHT COLUMN: 40% Width strictly dedicated to QR Code and ID */}
               <div className="w-[40%] pl-2 flex flex-col items-center justify-center h-full overflow-hidden">
-                <QRCodeSVG 
+                <QRCodeCanvas 
                   value={qrPayload} 
-                  size={110} 
+                  size={105} 
                   level="L" 
                   includeMargin={true}
-                  className="mb-2 bg-white"
+                  className="mb-1.5 bg-white"
                 />
-                <div className="font-mono font-bold text-[14px] tracking-widest text-center uppercase">{data.product_id}</div>
+                <div className="font-mono font-bold text-[14px] tracking-widest text-center uppercase leading-none">{data.product_id}</div>
                 {showDate && (
-                  <div className="text-[8px] text-gray-400 font-bold mt-1.5 text-center uppercase">
+                  <div className="text-[8px] text-gray-400 font-bold mt-1.5 text-center uppercase leading-none">
                     {data.created_at ? new Date(data.created_at).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'}) : new Date().toLocaleString()}
                   </div>
                 )}
@@ -183,12 +174,15 @@ const LabelPrint = ({ data, onClose }) => {
 
         <div className="p-4 bg-white border-t flex gap-3">
           <button 
-            onClick={handlePrint} 
-            className="flex-1 py-4 rounded-2xl font-black text-sm shadow-lg transition-all flex justify-center gap-2 items-center active:scale-95 bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100"
+            onClick={handleDownloadPDF} 
+            disabled={isGenerating} 
+            className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-lg transition-all flex justify-center gap-2 items-center active:scale-95 ${
+              isGenerating ? 'bg-blue-300 cursor-not-allowed text-white' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
+            }`}
           >
-            <Printer size={18} /> PRINT LABEL
+            {isGenerating ? <><Loader2 size={18} className="animate-spin" /> GENERATING...</> : <><Printer size={18} /> SAVE PDF</>}
           </button>
-          <button onClick={onClose} className="flex-1 bg-gray-50 border border-gray-100 text-gray-500 py-4 rounded-2xl font-bold active:scale-95 transition-all hover:bg-gray-100 uppercase text-xs">
+          <button onClick={onClose} disabled={isGenerating} className="flex-1 bg-gray-50 border border-gray-100 text-gray-500 py-4 rounded-2xl font-bold active:scale-95 transition-all hover:bg-gray-100 disabled:opacity-50 uppercase text-xs">
             Close
           </button>
         </div>
