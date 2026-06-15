@@ -1,6 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { QRCodeCanvas } from 'qrcode.react';
-import html2canvas from 'html2canvas';
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import jsPDF from 'jspdf';
 import { X, Printer, ToggleRight, ToggleLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 
@@ -11,44 +10,112 @@ const LabelPrint = ({ data, onClose }) => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleDownloadPDF = async () => {
-    if (!labelRef.current || isGenerating) return;
+    if (isGenerating) return;
     setIsGenerating(true); 
     
     // Allow UI to update before blocking the thread
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 50));
     
     try {
-      const canvas = await html2canvas(labelRef.current, { 
-        scale: 4, // Extremely high resolution for thermal clarity
-        useCORS: true, 
-        backgroundColor: '#ffffff',
-        logging: false,
-        imageTimeout: 0,
-        removeContainer: true
+      // 1. Create a strictly formatted 3.9in x 2.4in PDF document
+      const doc = new jsPDF({ 
+        orientation: 'landscape', 
+        unit: 'in', 
+        format: [3.9, 2.4] 
       });
-      
-      canvas.toBlob(async (blob) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = () => {
-          const base64data = reader.result;
-          
-          // Force the hardware format to strictly 3.9in x 2.4in
-          const pdf = new jsPDF({ 
-            orientation: 'landscape', 
-            unit: 'in', 
-            format: [3.9, 2.4] 
-          });
 
-          // Map the mathematically perfect pixel canvas directly to the inch-based PDF
-          pdf.addImage(base64data, 'JPEG', 0, 0, 3.9, 2.4, undefined, 'SLOW');
-          pdf.save(`Label-${data.product_id}.pdf`);
-          
-          canvas.width = 0;
-          canvas.height = 0;
-          setIsGenerating(false);
-        };
-      }, 'image/jpeg', 1.0);
+      // --- BRAND HEADER ---
+      if (showBrand) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.text("KSF Non-Woven", 1.95, 0.28, { align: "center" });
+      }
+
+      // Horizontal Border Under Brand
+      doc.setLineWidth(0.015);
+      doc.line(0.1, 0.38, 3.8, 0.38);
+
+      // Vertical Splitter Border (60% / 40%)
+      doc.line(2.35, 0.38, 2.35, 2.3);
+
+      // --- LEFT COLUMN: DATA GRID ---
+      const leftX = 0.15;
+      const rightX = 2.25;
+
+      // Row 1: Quality & Color
+      doc.setFontSize(7);
+      doc.setTextColor(120, 120, 120);
+      doc.text("QUALITY", leftX, 0.55);
+      doc.text("COLOR", rightX, 0.55, { align: "right" });
+
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.text(data.quality || '', leftX, 0.72);
+      doc.text(data.color || '', rightX, 0.72, { align: "right" });
+
+      // Row 2: Size & Length
+      doc.setFontSize(7);
+      doc.setTextColor(120, 120, 120);
+      doc.text("SIZE (IN)", leftX, 0.95);
+      doc.text("LENGTH", rightX, 0.95, { align: "right" });
+
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.text(data.width_inches ? `${data.width_inches}"` : '', leftX, 1.12);
+      doc.text(data.length_meters ? `${data.length_meters}m` : '', rightX, 1.12, { align: "right" });
+
+      // Horizontal Partition for Bottom Half
+      doc.line(leftX, 1.35, rightX, 1.35);
+
+      // Row 3: GSM & Gross Wt
+      doc.setFontSize(7);
+      doc.setTextColor(120, 120, 120);
+      doc.text("GSM", leftX, 1.55);
+      doc.text("GROSS WT", rightX, 1.55, { align: "right" });
+
+      doc.setFontSize(20);
+      doc.setTextColor(0, 0, 0);
+      doc.text(data.gsm ? data.gsm.toString() : '', leftX, 1.8);
+
+      doc.setFontSize(12);
+      doc.text(data.gross_weight ? `${data.gross_weight} kg` : '', rightX, 1.78, { align: "right" });
+
+      // Row 4: Net Weight
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text("NET WEIGHT", 1.2, 2.05, { align: "center" });
+
+      doc.setFontSize(24);
+      doc.setTextColor(0, 0, 0);
+      doc.text(data.net_weight ? `${data.net_weight} kg` : '', 1.2, 2.3, { align: "center" });
+
+      // --- RIGHT COLUMN: QR & ID ---
+      const rightCenter = 3.125;
+
+      // Extract the pixel-perfect QR Code from the hidden canvas
+      const qrCanvas = document.getElementById('hidden-qr-canvas');
+      if (qrCanvas) {
+        const qrDataUrl = qrCanvas.toDataURL('image/png');
+        // Place 1.1 inch image perfectly centered in right column
+        doc.addImage(qrDataUrl, 'PNG', 2.575, 0.45, 1.1, 1.1);
+      }
+
+      // Product ID
+      doc.setFont("courier", "bold");
+      doc.setFontSize(12);
+      doc.text(data.product_id || '', rightCenter, 1.8, { align: "center" });
+
+      // Date
+      if (showDate) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(6);
+        doc.setTextColor(150, 150, 150);
+        const dateStr = data.created_at ? new Date(data.created_at).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'}) : new Date().toLocaleString();
+        doc.text(dateStr, rightCenter, 2.05, { align: "center" });
+      }
+
+      doc.save(`Label-${data.product_id}.pdf`);
+      setIsGenerating(false);
 
     } catch (error) {
       console.error("PDF Generation Error:", error);
@@ -91,19 +158,30 @@ const LabelPrint = ({ data, onClose }) => {
           </div>
         </div>
         
-        <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center font-sans">
-          {/* FIX: Using strict pixels (390x240) instead of inches. Added 16px bottom padding to guarantee Net Weight clearance */}
+        {/* Hidden high-res canvas strictly for the jsPDF engine to harvest the QR code */}
+        <div className="absolute left-[-9999px]">
+          <QRCodeCanvas 
+            id="hidden-qr-canvas"
+            value={qrPayload} 
+            size={400} 
+            level="L" 
+            includeMargin={true}
+          />
+        </div>
+
+        <div className="flex-1 overflow-auto bg-gray-200/50 p-6 flex justify-center items-center">
+          {/* UI Preview wrapper remains entirely untouched */}
           <div 
             ref={labelRef} 
             className="flex flex-col bg-white shadow-xl relative" 
-            style={{ width: '390px', height: '240px', padding: '10px 10px 16px 10px', boxSizing: 'border-box', fontFamily: 'Arial, Helvetica, sans-serif' }}
+            style={{ width: '3.9in', height: '2.4in', padding: '0.05in 0.1in 0.25in 0.1in', boxSizing: 'border-box' }}
           >
             {/* FULL WIDTH BRAND HEADER */}
-            <div className="w-full border-b-2 border-black pb-1 mb-1 shrink-0 flex items-center justify-center">
+            <div className="w-full border-b-2 border-black pb-1.5 mb-1 shrink-0 flex items-center justify-center">
               {showBrand ? (
-                <div className="font-black text-[22px] tracking-tighter leading-none">KSF Non-Woven</div>
+                <div className="font-black text-xl tracking-tighter">KSF Non-Woven</div>
               ) : (
-                <div className="w-full h-[22px]"></div>
+                <div className="w-full h-7"></div>
               )}
             </div>
 
@@ -115,55 +193,55 @@ const LabelPrint = ({ data, onClose }) => {
                 {/* Data Grid */}
                 <div className="w-full grid grid-cols-2 gap-y-0 text-left flex-1 content-start mt-0.5">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Quality</span>
-                    <span className="font-bold text-[15px] block whitespace-nowrap -mt-0.5">{data.quality}</span>
+                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Quality</span>
+                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.quality}</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Color</span>
-                    <span className="font-bold text-[15px] block whitespace-nowrap -mt-0.5">{data.color}</span>
+                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Color</span>
+                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.color}</span>
                   </div>
                   
                   <div className="mt-1">
-                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Size (in)</span>
-                    <span className="font-bold text-[15px] block whitespace-nowrap -mt-0.5">{data.width_inches}"</span>
+                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Size (in)</span>
+                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.width_inches}"</span>
                   </div>
                   <div className="text-right mt-1">
-                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter">Length</span>
-                    <span className="font-bold text-[15px] block whitespace-nowrap -mt-0.5">{data.length_meters}m</span>
+                    <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter">Length</span>
+                    <span className="font-bold text-sm block whitespace-nowrap -mt-0.5">{data.length_meters}m</span>
                   </div>
                 </div>
 
                 {/* Bottom section of left column for GSM and Weights */}
                 <div className="w-full mt-auto flex flex-col justify-end">
-                  <div className="border-t-2 border-black pt-1 mb-1 flex items-end justify-between">
+                  <div className="border-t-2 border-black pt-1 mb-0.5 flex items-end justify-between">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">GSM</span>
-                      <span className="font-bold text-[24px] block leading-none">{data.gsm}</span>
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">GSM</span>
+                      <span className="font-bold text-2xl block -mt-0.5">{data.gsm}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">Gross Wt</span>
-                      <span className="font-bold text-[14px] block leading-none">{data.gross_weight} kg</span>
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block tracking-tighter mb-0">Gross Wt</span>
+                      <span className="font-bold text-sm block -mt-0.5">{data.gross_weight} kg</span>
                     </div>
                   </div>
                   <div className="text-center">
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block mb-0">Net Weight</span>
-                    <span className="text-[26px] font-black text-black block leading-none -mt-1">{data.net_weight}<span className="text-[12px]">kg</span></span>
+                    <span className="text-[9px] uppercase font-bold text-gray-500 block mb-0">Net Weight</span>
+                    <span className="text-2xl font-black text-black block -mt-1.5">{data.net_weight}<span className="text-xs">kg</span></span>
                   </div>
                 </div>
               </div>
 
               {/* RIGHT COLUMN: 40% Width strictly dedicated to QR Code and ID */}
               <div className="w-[40%] pl-2 flex flex-col items-center justify-center h-full overflow-hidden">
-                <QRCodeCanvas 
+                <QRCodeSVG 
                   value={qrPayload} 
-                  size={105} 
+                  size={110} 
                   level="L" 
                   includeMargin={true}
-                  className="mb-1.5 bg-white"
+                  className="mb-2 bg-white"
                 />
-                <div className="font-mono font-bold text-[14px] tracking-widest text-center uppercase leading-none">{data.product_id}</div>
+                <div className="font-mono font-bold text-[14px] tracking-widest text-center uppercase">{data.product_id}</div>
                 {showDate && (
-                  <div className="text-[8px] text-gray-400 font-bold mt-1.5 text-center uppercase leading-none">
+                  <div className="text-[8px] text-gray-400 font-bold mt-1.5 text-center uppercase">
                     {data.created_at ? new Date(data.created_at).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'}) : new Date().toLocaleString()}
                   </div>
                 )}
