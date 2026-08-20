@@ -23,7 +23,8 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
       quality: '',
       gsm: '',
       width: '',
-      color: ''
+      color: '',
+      date: ''
     };
   });
 
@@ -66,7 +67,12 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
       const matchWidth = !filters.width || String(r.width_inches) === filters.width;
       const matchColor = !filters.color || r.color === filters.color;
       
-      return isStock && matchCustomer && matchQuality && matchGSM && matchWidth && matchColor;
+      // Safely parse local date for accurate day matching
+      const d = new Date(r.created_at);
+      const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const matchDate = !filters.date || localDate === filters.date;
+      
+      return isStock && matchCustomer && matchQuality && matchGSM && matchWidth && matchColor && matchDate;
     })
     .sort((a,b) => {
       const dateA = new Date(a.created_at);
@@ -99,7 +105,7 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
   };
 
   const clearFilters = () => {
-    setFilters({ customer: '', quality: '', gsm: '', width: '', color: '' });
+    setFilters({ customer: '', quality: '', gsm: '', width: '', color: '', date: '' });
   };
 
   return (
@@ -109,7 +115,7 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
         <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100 relative transition-all">
           
-          {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color) && (
+          {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color || filters.date) && (
             <button 
               onClick={clearFilters} 
               className="absolute top-3 right-3 p-1.5 bg-red-50 text-red-500 rounded-full hover:bg-red-600 hover:text-white transition-all z-10 shadow-sm border border-red-100 active:scale-90"
@@ -186,6 +192,12 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
           </div>
 
           <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
+            <input 
+              type="date"
+              className="flex-1 py-1.5 px-2 border border-gray-100 rounded-lg bg-white text-[10px] font-black text-gray-600 shadow-sm outline-none focus:ring-2 focus:ring-blue-100 uppercase text-center"
+              value={filters.date || ''}
+              onChange={e => setFilters({...filters, date: e.target.value})}
+            />
             <button 
               onClick={() => setSort(sort === 'newest' ? 'oldest' : 'newest')} 
               className="flex-1 py-1.5 border border-gray-100 rounded-lg bg-white text-[10px] font-black text-gray-600 flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all"
