@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { 
   Package, Edit2, X, Loader2, AlertTriangle, 
   Trash2, Bell, Save, Layers, Droplets, Box, Zap, 
-  MoreHorizontal, Plus, Search, Download, Trash, CheckCircle, ChevronDown
+  MoreHorizontal, Plus, Search, Download, CheckCircle, ChevronDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -20,7 +20,6 @@ const MaterialDropdown = ({ category, materials, selectedId, onSelect }) => {
 
   const selectedItem = materials.find(m => m.id === selectedId);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
@@ -33,9 +32,9 @@ const MaterialDropdown = ({ category, materials, selectedId, onSelect }) => {
     <div className="relative w-full" ref={dropdownRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-gray-50 border p-3 rounded-xl text-xs font-bold text-gray-700 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors"
+        className="w-full bg-white border border-gray-200 p-2.5 rounded-lg text-xs font-bold text-gray-700 flex justify-between items-center cursor-pointer hover:border-blue-300 transition-colors"
       >
-        <span className="truncate pr-2 text-[11px] uppercase tracking-tighter">
+        <span className="truncate pr-2 text-[10px] uppercase tracking-tighter">
           {selectedItem ? selectedItem.name : `Select ${category}`}
         </span>
         <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />
@@ -49,7 +48,7 @@ const MaterialDropdown = ({ category, materials, selectedId, onSelect }) => {
               <input 
                 autoFocus
                 placeholder="Search..." 
-                className="w-full pl-7 pr-2 py-2 text-xs font-bold bg-white border rounded-lg outline-none focus:border-blue-500"
+                className="w-full pl-7 pr-2 py-2 text-[11px] font-bold bg-white border rounded-lg outline-none focus:border-blue-500"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -65,8 +64,8 @@ const MaterialDropdown = ({ category, materials, selectedId, onSelect }) => {
                   onClick={() => { onSelect(m.id); setIsOpen(false); setSearch(''); }}
                   className="flex justify-between items-center p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors"
                 >
-                  <span className="text-[11px] font-black text-gray-800 uppercase tracking-tighter truncate">{m.name}</span>
-                  <span className="text-[10px] font-bold text-blue-600 whitespace-nowrap ml-2 bg-blue-50/50 px-1.5 rounded">{m.stock_quantity} kg</span>
+                  <span className="text-[10px] font-black text-gray-800 uppercase tracking-tighter truncate">{m.name}</span>
+                  <span className="text-[9px] font-bold text-blue-600 whitespace-nowrap ml-2 bg-blue-50/50 px-1.5 py-0.5 rounded">{m.stock_quantity} kg</span>
                 </div>
               ))
             )}
@@ -88,14 +87,16 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
   const [consumptionDate, setConsumptionDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [consumptionShift, setConsumptionShift] = useState('Day Shift');
   
-  // State holds the selected material ID and entered quantity for each category
-  const [consumedItems, setConsumedItems] = useState({
-    Polymers: { id: '', qty: '' },
-    Filler: { id: '', qty: '' },
-    Colour: { id: '', qty: '' },
-    Additives: { id: '', qty: '' },
-    Others: { id: '', qty: '' }
+  // State now supports arrays of items per category so users can log multiple materials
+  const getInitialEntries = () => ({
+    Polymers: [{ uid: 'p1', materialId: '', qty: '' }],
+    Filler: [{ uid: 'f1', materialId: '', qty: '' }],
+    Colour: [{ uid: 'c1', materialId: '', qty: '' }],
+    Additives: [{ uid: 'a1', materialId: '', qty: '' }],
+    Others: [{ uid: 'o1', materialId: '', qty: '' }]
   });
+  
+  const [consumedItems, setConsumedItems] = useState(getInitialEntries());
 
   const [newMaterial, setNewMaterial] = useState({ name: '', category: 'Polymers', stock_quantity: '', min_level: '' });
 
@@ -139,6 +140,28 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
     XLSX.writeFile(wb, `KSF_Materials_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  // MULTIPLE ITEM LOGIC
+  const handleItemChange = (category, uid, field, value) => {
+    setConsumedItems(prev => ({
+      ...prev,
+      [category]: prev[category].map(item => item.uid === uid ? { ...item, [field]: value } : item)
+    }));
+  };
+
+  const addRow = (category) => {
+    setConsumedItems(prev => ({
+      ...prev,
+      [category]: [...prev[category], { uid: Math.random().toString(), materialId: '', qty: '' }]
+    }));
+  };
+
+  const removeRow = (category, uid) => {
+    setConsumedItems(prev => ({
+      ...prev,
+      [category]: prev[category].filter(item => item.uid !== uid)
+    }));
+  };
+
   // --- AUTOMATED CONSUMPTION DEDUCTION LOGIC ---
   const handleLogConsumption = async (e) => {
     e.preventDefault();
@@ -148,32 +171,36 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
       const updates = [];
       const loggedData = {};
 
-      // 1. Strict Stock Validation Check
+      // 1. Strict Stock Validation Check across all dynamic rows
       for (const cat of CATEGORIES) {
-        const item = consumedItems[cat.name];
-        const val = parseFloat(item.qty);
-        
-        if (item.id && val > 0) {
-          const dbItem = materials.find(m => m.id === item.id);
-          if (!dbItem) throw new Error(`Material not found in inventory.`);
-          if (val > dbItem.stock_quantity) {
-            throw new Error(`Insufficient stock for ${dbItem.name}. Tried to consume ${val}kg, but only ${dbItem.stock_quantity}kg available.`);
+        for (const item of consumedItems[cat.name]) {
+          const val = parseFloat(item.qty);
+          if (item.materialId && val > 0) {
+            const dbItem = materials.find(m => m.id === item.materialId);
+            if (!dbItem) throw new Error(`Material not found in inventory.`);
+            if (val > dbItem.stock_quantity) {
+              throw new Error(`Insufficient stock for ${dbItem.name}. Tried to consume ${val}kg, but only ${dbItem.stock_quantity}kg available.`);
+            }
+            
+            updates.push({ id: dbItem.id, stock_quantity: dbItem.stock_quantity - val });
+            
+            // Sum up values in case the user selected the same material in two different rows
+            loggedData[dbItem.name] = (loggedData[dbItem.name] || 0) + val;
           }
-          
-          updates.push({
-            id: dbItem.id,
-            stock_quantity: dbItem.stock_quantity - val
-          });
-          
-          loggedData[dbItem.name] = val;
         }
       }
 
       if (updates.length === 0) throw new Error("Please select and enter a weight for at least one material.");
 
-      // 2. Execute Material Deductions
-      const { error: updateError } = await supabase.from('raw_materials').upsert(updates);
-      if (updateError) throw updateError;
+      // 2. Execute Surgical Material Deductions to avoid NOT NULL constraints
+      const updatePromises = updates.map(u => 
+        supabase.from('raw_materials')
+          .update({ stock_quantity: u.stock_quantity })
+          .eq('id', u.id)
+      );
+      
+      const updateResults = await Promise.all(updatePromises);
+      updateResults.forEach(res => { if (res.error) throw res.error; });
 
       // 3. Log the shift report to consumption_logs as JSONB
       const { error: logError } = await supabase.from('consumption_logs').insert([{
@@ -184,13 +211,7 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
       if (logError) throw logError;
 
       // Reset Form
-      setConsumedItems({
-        Polymers: { id: '', qty: '' },
-        Filler: { id: '', qty: '' },
-        Colour: { id: '', qty: '' },
-        Additives: { id: '', qty: '' },
-        Others: { id: '', qty: '' }
-      });
+      setConsumedItems(getInitialEntries());
       alert("Shift consumption successfully logged and stock deducted!");
       onUpdate();
       
@@ -274,22 +295,46 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
           
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 bg-gray-50/50 p-3 rounded-2xl border border-gray-50">
             {CATEGORIES.map(cat => (
-              <div key={cat.name} className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-                <label className={`text-[10px] font-black uppercase flex items-center gap-1.5 ${cat.text}`}>
+              <div key={cat.name} className="flex flex-col bg-white p-2.5 rounded-xl shadow-sm border border-gray-100 min-h-[120px]">
+                <label className={`text-[10px] font-black uppercase flex items-center gap-1.5 mb-2 px-1 ${cat.text}`}>
                   {cat.icon} {cat.name}
                 </label>
-                <MaterialDropdown 
-                  category={cat.name} 
-                  materials={materials} 
-                  selectedId={consumedItems[cat.name].id} 
-                  onSelect={(id) => setConsumedItems(prev => ({ ...prev, [cat.name]: { ...prev[cat.name], id } }))} 
-                />
-                <input 
-                  type="number" placeholder="Weight (kg)"
-                  className="w-full bg-gray-50 border p-2.5 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100" 
-                  value={consumedItems[cat.name].qty} 
-                  onChange={e => setConsumedItems(prev => ({ ...prev, [cat.name]: { ...prev[cat.name], qty: e.target.value } }))} 
-                />
+                
+                <div className="space-y-2 flex-1">
+                  {consumedItems[cat.name].map((item) => (
+                    <div key={item.uid} className="flex flex-col gap-1.5 bg-gray-50 p-2 rounded-lg relative group border border-gray-100">
+                      {consumedItems[cat.name].length > 1 && (
+                        <button 
+                          type="button" 
+                          onClick={() => removeRow(cat.name, item.uid)}
+                          className="absolute -top-1.5 -right-1.5 bg-red-100 text-red-600 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-sm"
+                        >
+                          <X size={10} />
+                        </button>
+                      )}
+                      <MaterialDropdown 
+                        category={cat.name} 
+                        materials={materials} 
+                        selectedId={item.materialId} 
+                        onSelect={(id) => handleItemChange(cat.name, item.uid, 'materialId', id)} 
+                      />
+                      <input 
+                        type="number" placeholder="Weight (kg)"
+                        className="w-full bg-white border border-gray-200 p-2.5 rounded-lg text-xs font-bold outline-none focus:border-blue-400" 
+                        value={item.qty} 
+                        onChange={e => handleItemChange(cat.name, item.uid, 'qty', e.target.value)} 
+                      />
+                    </div>
+                  ))}
+                </div>
+                
+                <button 
+                  type="button" 
+                  onClick={() => addRow(cat.name)}
+                  className="mt-2 w-full py-1.5 border border-dashed border-gray-300 rounded-lg text-[9px] font-bold text-gray-500 uppercase flex items-center justify-center gap-1 hover:bg-gray-50 hover:text-blue-600 transition-colors"
+                >
+                  <Plus size={10} /> Add
+                </button>
               </div>
             ))}
           </div>
