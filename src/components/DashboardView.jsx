@@ -1,32 +1,28 @@
-import React, { useMemo } from 'react';
-import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Calculator, Activity, Truck } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
+import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Calculator, Activity, Truck, FileSpreadsheet, Layers } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import * as XLSX from 'xlsx';
 
 // Components
 import RateCalculator from './RateCalculator';
 
-const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#fb7185', '#2dd4bf'];
-
-const abbreviateColor = (name) => {
-  if (!name) return 'N/A';
-  return name
-    .replace(/Royal Blue/gi, 'R.Blue')
-    .replace(/Golden Yellow/gi, 'G.Yellow')
-    .replace(/Lemon Yellow/gi, 'L.Yellow')
-    .replace(/Parrot Green/gi, 'P.Green')
-    .replace(/Bottle Green/gi, 'B.Green')
-    .replace(/Sea Green/gi, 'S.Green')
-    .replace(/Peacock Blue/gi, 'P.Blue')
-    .replace(/Navy Blue/gi, 'N.Blue')
-    .replace(/Baby Pink/gi, 'B.Pink')
-    .replace(/Coffee Brown/gi, 'C.Brown')
-    .replace(/Colour Change/gi, 'CC');
-};
+const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#fb7185', '#2dd4bf', '#a855f7', '#ec4899'];
 
 const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
   const todayDate = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
   
+  const [consumptionLogs, setConsumptionLogs] = useState([]);
+  
+  useEffect(() => {
+    const fetchLogs = async () => {
+      const { data } = await supabase.from('consumption_logs').select('*');
+      if (data) setConsumptionLogs(data);
+    };
+    fetchLogs();
+  }, [rolls]);
+
   // 1. MASTER DATA PROCESSOR
   const processedData = useMemo(() => {
     const inStock = [];
@@ -93,68 +89,77 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
   }, [processedData.dateMap, todayDate]);
 
-  // 3. ENHANCED RECENT ACTIVITY LOGIC (Aligned with Schema)
-  const recentActivity = useMemo(() => {
-    const events = [];
+  // 3. DYNAMIC CONSUMPTION CHART PREP
+  const { consumptionChartData, uniqueMaterials } = useMemo(() => {
+    const dailyMap = {};
+    const materialsSet = new Set();
 
-    rolls.forEach(r => {
-      // Production Event (Uses device_name)
-      if (r.created_at) {
-        events.push({
-          id: `${r.product_id}-p`,
-          productId: r.product_id,
-          type: 'Produced',
-          icon: <PlusCircle size={14} className="text-green-500" />,
-          time: new Date(r.created_at),
-          terminal: r.device_name || 'Production',
-          weight: r.net_weight
-        });
+    consumptionLogs.forEach(log => {
+      if (!dailyMap[log.date]) {
+        dailyMap[log.date] = { date: log.date.slice(5) };
       }
-
-      // Dispatch Event (Uses dispatched_by)
-      if (r.status === 'dispatched' && r.dispatched_at) {
-        events.push({
-          id: `${r.product_id}-d`,
-          productId: r.product_id,
-          type: 'Dispatched',
-          icon: <Send size={14} className="text-blue-500" />,
-          time: new Date(r.dispatched_at),
-          terminal: r.dispatched_by || 'Loading Bay',
-          weight: r.net_weight
-        });
-      }
-
-      // Edit Event Detection (Uses updated_at vs created_at/dispatched_at)
-      const createdT = new Date(r.created_at).getTime();
-      const updatedT = new Date(r.updated_at || r.created_at).getTime();
-      const dispatchedT = r.dispatched_at ? new Date(r.dispatched_at).getTime() : 0;
-      
-      // If modification happened > 10s after creation/dispatch
-      if (updatedT > createdT + 10000 && updatedT > dispatchedT + 10000) {
-        events.push({
-          id: `${r.product_id}-e`,
-          productId: r.product_id,
-          type: 'Edited',
-          icon: <Edit3 size={14} className="text-orange-500" />,
-          time: new Date(r.updated_at),
-          terminal: r.device_name || 'Admin Panel',
-          weight: r.net_weight
+      // Process JSONB payload
+      if (log.consumed_data && typeof log.consumed_data === 'object') {
+        Object.entries(log.consumed_data).forEach(([matName, kgVal]) => {
+          materialsSet.add(matName);
+          const tons = parseFloat(kgVal) / 1000;
+          dailyMap[log.date][matName] = (dailyMap[log.date][matName] || 0) + tons;
         });
       }
     });
 
+    return {
+      consumptionChartData: Object.values(dailyMap).sort((a,b) => a.date.localeCompare(b.date)),
+      uniqueMaterials: Array.from(materialsSet)
+    };
+  }, [consumptionLogs]);
+
+  // 4. FACTORY REPORT EXPORT LOGIC
+  const downloadFactoryReport = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Dynamically unfold JSONB payload for the spreadsheet
+    const consumptionSheet = consumptionLogs.map(c => {
+      const row = { "Date": c.date, "Shift": c.shift };
+      if (c.consumed_data && typeof c.consumed_data === 'object') {
+        Object.entries(c.consumed_data).forEach(([matName, kgVal]) => {
+          row[`${matName} (kg)`] = kgVal;
+        });
+      }
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(consumptionSheet), "Daily_Consumption");
+
+    // Sheet 2: Production vs Dispatch (KSF Sales)
+    const statsSheet = Object.entries(processedData.dateMap).map(([date, data]) => ({
+      "Date": date,
+      "Total Produced Rolls": data.p,
+      "Produced Weight (kg)": data.pw,
+      "Total KSF Sales / Dispatched Rolls": data.d,
+      "Dispatched Weight (kg)": data.dw
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(statsSheet), "Production_Sales_Report");
+
+    XLSX.writeFile(wb, `KSF_Factory_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  // RECENT ACTIVITY
+  const recentActivity = useMemo(() => {
+    const events = [];
+    rolls.forEach(r => {
+      if (r.created_at) {
+        events.push({ id: `${r.product_id}-p`, productId: r.product_id, type: 'Produced', icon: <PlusCircle size={14} className="text-green-500" />, time: new Date(r.created_at), terminal: r.device_name || 'Production', weight: r.net_weight });
+      }
+      if (r.status === 'dispatched' && r.dispatched_at) {
+        events.push({ id: `${r.product_id}-d`, productId: r.product_id, type: 'Sale', icon: <Send size={14} className="text-blue-500" />, time: new Date(r.dispatched_at), terminal: r.dispatched_by || 'KSF Logistics', weight: r.net_weight });
+      }
+    });
     return events.sort((a, b) => b.time - a.time).slice(0, 10);
   }, [rolls]);
 
   const qualityData = useMemo(() => {
     const c = {}; processedData.inStock.forEach(r => c[r.quality] = (c[r.quality] || 0) + (parseFloat(r.net_weight) || 0));
     return Object.entries(c).map(([name, w]) => ({ name: `${name} (${(w/1000).toFixed(2)}T)`, value: w }));
-  }, [processedData.inStock]);
-
-  const colorData = useMemo(() => {
-    const c = {}; processedData.inStock.forEach(r => c[r.color] = (c[r.color] || 0) + (parseFloat(r.net_weight) || 0));
-    return Object.entries(c).map(([n, w]) => ({ name: abbreviateColor(n), weight: parseFloat(w.toFixed(1)) }))
-      .sort((a, b) => b.weight - a.weight).slice(0, 10);
   }, [processedData.inStock]);
 
   const weightKg = processedData.inStock.reduce((s, r) => s + (parseFloat(r.net_weight) || 0), 0);
@@ -169,7 +174,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
           <div className="text-2xl font-black text-gray-900">{processedData.producedToday.length} <span className="text-xs opacity-30">Rolls</span></div>
         </div>
         <div className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-blue-500 border border-gray-100">
-          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today Dispatch</div>
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Today KSF Sales</div>
           <div className="text-2xl font-black text-gray-900">{processedData.dispatchedToday.length} <span className="text-xs opacity-30">Rolls</span></div>
         </div>
       </div>
@@ -184,6 +189,40 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         <div className="text-center">
           <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Weight Stock</div>
           <div className="text-3xl font-black text-green-400">{(weightKg/1000).toFixed(2)} <span className="text-xs font-normal text-white/50">Ton</span></div>
+        </div>
+      </div>
+
+      {/* --- FACTORY REPORT COMPONENT (DYNAMIC BARS) --- */}
+      <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+        <div className="flex justify-between items-center mb-4 border-b border-gray-50 pb-3">
+          <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+            <Layers size={16} className="text-indigo-600"/> Daily Material Consumption (Tons)
+          </h3>
+          <button onClick={downloadFactoryReport} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm">
+            <FileSpreadsheet size={14} /> Factory Report
+          </button>
+        </div>
+        <div className="h-64 min-h-[256px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={consumptionChartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="date" fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
+              <YAxis fontSize={9} axisLine={false} tickLine={false} />
+              <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
+              
+              {/* Dynamically render a Bar solely for materials that were actually consumed */}
+              {uniqueMaterials.map((matName, index) => (
+                <Bar 
+                  key={matName} 
+                  dataKey={matName} 
+                  name={matName} 
+                  stackId="a" 
+                  fill={CHART_COLORS[index % CHART_COLORS.length]} 
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -204,17 +243,17 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
                 verticalAlign="top" 
                 align="right" 
                 wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} 
-                formatter={(val) => val === 'Produced' ? `P (${totalProdMonth}T)` : `D (${totalDispMonth}T)`} 
+                formatter={(val) => val === 'Produced' ? `P (${totalProdMonth}T)` : `Sales (${totalDispMonth}T)`} 
               />
 
               <Bar dataKey="Produced" fill="#22c55e" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Dispatched" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Dispatched" name="Sales" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* 4. RECENT ACTIVITY (Updated Terminal Logic) */}
+      {/* 4. RECENT ACTIVITY */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 bg-gray-50/50 border-b flex items-center justify-between">
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
@@ -298,14 +337,12 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       )}
 
-      {/* --- RATE CALCULATOR AT THE BOTTOM --- */}
+      {/* --- RATE CALCULATOR --- */}
       <div className="pt-6 border-t-2 border-slate-100 space-y-4">
         <div className="flex items-center gap-2 mb-2">
           <Calculator size={18} className="text-blue-600" />
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">Fabric Rate Calculator</h3>
         </div>
-        
-        {/* FIX: pass isAdmin and fetchData so Rate Calculator and its modals work */}
         <RateCalculator isAdmin={isAdmin} fetchData={fetchData} />
       </div>
 

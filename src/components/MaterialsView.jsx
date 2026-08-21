@@ -1,20 +1,102 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { 
   Package, Edit2, X, Loader2, AlertTriangle, 
   Trash2, Bell, Save, Layers, Droplets, Box, Zap, 
-  MoreHorizontal, Plus, Search, Download, Trash
+  MoreHorizontal, Plus, Search, Download, Trash, CheckCircle, ChevronDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+
+// --- CUSTOM SEARCHABLE DROPDOWN COMPONENT ---
+const MaterialDropdown = ({ category, materials, selectedId, onSelect }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const dropdownRef = useRef(null);
+
+  const filteredMaterials = materials.filter(m => 
+    m.category === category && 
+    m.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const selectedItem = materials.find(m => m.id === selectedId);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative w-full" ref={dropdownRef}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full bg-gray-50 border p-3 rounded-xl text-xs font-bold text-gray-700 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors"
+      >
+        <span className="truncate pr-2 text-[11px] uppercase tracking-tighter">
+          {selectedItem ? selectedItem.name : `Select ${category}`}
+        </span>
+        <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 top-full left-0 mt-1 w-full bg-white border border-gray-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="p-2 border-b bg-gray-50/50">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
+              <input 
+                autoFocus
+                placeholder="Search..." 
+                className="w-full pl-7 pr-2 py-2 text-xs font-bold bg-white border rounded-lg outline-none focus:border-blue-500"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="max-h-48 overflow-y-auto custom-scrollbar">
+            {filteredMaterials.length === 0 ? (
+              <div className="p-3 text-center text-xs font-bold text-gray-400">No {category} found.</div>
+            ) : (
+              filteredMaterials.map(m => (
+                <div 
+                  key={m.id} 
+                  onClick={() => { onSelect(m.id); setIsOpen(false); setSearch(''); }}
+                  className="flex justify-between items-center p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors"
+                >
+                  <span className="text-[11px] font-black text-gray-800 uppercase tracking-tighter truncate">{m.name}</span>
+                  <span className="text-[10px] font-bold text-blue-600 whitespace-nowrap ml-2 bg-blue-50/50 px-1.5 rounded">{m.stock_quantity} kg</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const MaterialsView = React.memo(({ materials, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('Polymers');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddPopup, setShowAddPopup] = useState(false);
-  const [editItem, setEditItem] = useState(null); // Tracks the item being edited in popup
+  const [editItem, setEditItem] = useState(null); 
   const [isSaving, setIsSaving] = useState(false);
 
-  // States for new material form
+  // --- DYNAMIC DAILY CONSUMPTION STATE ---
+  const [consumptionDate, setConsumptionDate] = useState(new Date().toLocaleDateString('en-CA'));
+  const [consumptionShift, setConsumptionShift] = useState('Day Shift');
+  
+  // State holds the selected material ID and entered quantity for each category
+  const [consumedItems, setConsumedItems] = useState({
+    Polymers: { id: '', qty: '' },
+    Filler: { id: '', qty: '' },
+    Colour: { id: '', qty: '' },
+    Additives: { id: '', qty: '' },
+    Others: { id: '', qty: '' }
+  });
+
   const [newMaterial, setNewMaterial] = useState({ name: '', category: 'Polymers', stock_quantity: '', min_level: '' });
 
   const CATEGORIES = [
@@ -57,8 +139,69 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
     XLSX.writeFile(wb, `KSF_Materials_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // --- DATABASE ACTIONS ---
+  // --- AUTOMATED CONSUMPTION DEDUCTION LOGIC ---
+  const handleLogConsumption = async (e) => {
+    e.preventDefault();
+    setIsSaving(true);
 
+    try {
+      const updates = [];
+      const loggedData = {};
+
+      // 1. Strict Stock Validation Check
+      for (const cat of CATEGORIES) {
+        const item = consumedItems[cat.name];
+        const val = parseFloat(item.qty);
+        
+        if (item.id && val > 0) {
+          const dbItem = materials.find(m => m.id === item.id);
+          if (!dbItem) throw new Error(`Material not found in inventory.`);
+          if (val > dbItem.stock_quantity) {
+            throw new Error(`Insufficient stock for ${dbItem.name}. Tried to consume ${val}kg, but only ${dbItem.stock_quantity}kg available.`);
+          }
+          
+          updates.push({
+            id: dbItem.id,
+            stock_quantity: dbItem.stock_quantity - val
+          });
+          
+          loggedData[dbItem.name] = val;
+        }
+      }
+
+      if (updates.length === 0) throw new Error("Please select and enter a weight for at least one material.");
+
+      // 2. Execute Material Deductions
+      const { error: updateError } = await supabase.from('raw_materials').upsert(updates);
+      if (updateError) throw updateError;
+
+      // 3. Log the shift report to consumption_logs as JSONB
+      const { error: logError } = await supabase.from('consumption_logs').insert([{
+        date: consumptionDate,
+        shift: consumptionShift,
+        consumed_data: loggedData
+      }]);
+      if (logError) throw logError;
+
+      // Reset Form
+      setConsumedItems({
+        Polymers: { id: '', qty: '' },
+        Filler: { id: '', qty: '' },
+        Colour: { id: '', qty: '' },
+        Additives: { id: '', qty: '' },
+        Others: { id: '', qty: '' }
+      });
+      alert("Shift consumption successfully logged and stock deducted!");
+      onUpdate();
+      
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // --- DATABASE ACTIONS ---
   const handleAddMaterial = async (e) => {
     e.preventDefault();
     setIsSaving(true);
@@ -108,6 +251,55 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
   return (
     <div className="space-y-4 pb-32 animate-in fade-in duration-500 relative">
       
+      {/* 1. DYNAMIC DAILY SHIFT CONSUMPTION LOG MODULE */}
+      <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100">
+        <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+          <Layers size={14} className="text-blue-600" /> Daily Shift Consumption Log
+        </h3>
+        <form onSubmit={handleLogConsumption} className="space-y-4">
+          <div className="flex gap-2 mb-2">
+            <input 
+              type="date" required
+              className="flex-1 bg-gray-50 border border-gray-100 p-3 rounded-xl font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 uppercase shadow-inner"
+              value={consumptionDate} onChange={e => setConsumptionDate(e.target.value)}
+            />
+            <select 
+              className="flex-1 bg-gray-50 border border-gray-100 p-3 rounded-xl font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 shadow-inner"
+              value={consumptionShift} onChange={e => setConsumptionShift(e.target.value)}
+            >
+              <option value="Day Shift">Day Shift</option>
+              <option value="Night Shift">Night Shift</option>
+            </select>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 bg-gray-50/50 p-3 rounded-2xl border border-gray-50">
+            {CATEGORIES.map(cat => (
+              <div key={cat.name} className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                <label className={`text-[10px] font-black uppercase flex items-center gap-1.5 ${cat.text}`}>
+                  {cat.icon} {cat.name}
+                </label>
+                <MaterialDropdown 
+                  category={cat.name} 
+                  materials={materials} 
+                  selectedId={consumedItems[cat.name].id} 
+                  onSelect={(id) => setConsumedItems(prev => ({ ...prev, [cat.name]: { ...prev[cat.name], id } }))} 
+                />
+                <input 
+                  type="number" placeholder="Weight (kg)"
+                  className="w-full bg-gray-50 border p-2.5 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100" 
+                  value={consumedItems[cat.name].qty} 
+                  onChange={e => setConsumedItems(prev => ({ ...prev, [cat.name]: { ...prev[cat.name], qty: e.target.value } }))} 
+                />
+              </div>
+            ))}
+          </div>
+          
+          <button type="submit" disabled={isSaving} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-gray-200 flex items-center justify-center gap-2 active:scale-[0.99] transition-all">
+            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <><CheckCircle size={16} /> Validate & Deduct Live Inventory</>}
+          </button>
+        </form>
+      </div>
+
       {/* TABS WITH TOTALS */}
       <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto no-scrollbar gap-1">
         {CATEGORIES.map(cat => {
