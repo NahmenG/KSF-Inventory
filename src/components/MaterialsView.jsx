@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { 
   Package, Edit2, X, Loader2, AlertTriangle, 
   Trash2, Bell, Save, Layers, Droplets, Box, Zap, 
-  MoreHorizontal, Plus, Search, Download, CheckCircle, ChevronDown
+  MoreHorizontal, Plus, Search, Download, CheckCircle, ChevronDown, ClipboardList, Database
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -77,6 +77,9 @@ const MaterialDropdown = ({ category, materials, selectedId, onSelect }) => {
 };
 
 const MaterialsView = React.memo(({ materials, onUpdate }) => {
+  // --- TOP LEVEL TAB STATE ---
+  const [mainTab, setMainTab] = useState('inventory'); // 'inventory' or 'consumption'
+
   const [activeTab, setActiveTab] = useState('Polymers');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddPopup, setShowAddPopup] = useState(false);
@@ -87,7 +90,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
   const [consumptionDate, setConsumptionDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [consumptionShift, setConsumptionShift] = useState('Day Shift');
   
-  // State now supports arrays of items per category so users can log multiple materials
   const getInitialEntries = () => ({
     Polymers: [{ uid: 'p1', materialId: '', qty: '' }],
     Filler: [{ uid: 'f1', materialId: '', qty: '' }],
@@ -97,7 +99,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
   });
   
   const [consumedItems, setConsumedItems] = useState(getInitialEntries());
-
   const [newMaterial, setNewMaterial] = useState({ name: '', category: 'Polymers', stock_quantity: '', min_level: '' });
 
   const CATEGORIES = [
@@ -171,7 +172,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
       const updates = [];
       const loggedData = {};
 
-      // 1. Strict Stock Validation Check across all dynamic rows
       for (const cat of CATEGORIES) {
         for (const item of consumedItems[cat.name]) {
           const val = parseFloat(item.qty);
@@ -183,8 +183,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
             }
             
             updates.push({ id: dbItem.id, stock_quantity: dbItem.stock_quantity - val });
-            
-            // Sum up values in case the user selected the same material in two different rows
             loggedData[dbItem.name] = (loggedData[dbItem.name] || 0) + val;
           }
         }
@@ -192,7 +190,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
 
       if (updates.length === 0) throw new Error("Please select and enter a weight for at least one material.");
 
-      // 2. Execute Surgical Material Deductions to avoid NOT NULL constraints
       const updatePromises = updates.map(u => 
         supabase.from('raw_materials')
           .update({ stock_quantity: u.stock_quantity })
@@ -202,7 +199,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
       const updateResults = await Promise.all(updatePromises);
       updateResults.forEach(res => { if (res.error) throw res.error; });
 
-      // 3. Log the shift report to consumption_logs as JSONB
       const { error: logError } = await supabase.from('consumption_logs').insert([{
         date: consumptionDate,
         shift: consumptionShift,
@@ -210,7 +206,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
       }]);
       if (logError) throw logError;
 
-      // Reset Form
       setConsumedItems(getInitialEntries());
       alert("Shift consumption successfully logged and stock deducted!");
       onUpdate();
@@ -272,122 +267,142 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
   return (
     <div className="space-y-4 pb-32 animate-in fade-in duration-500 relative">
       
-      {/* 1. DYNAMIC DAILY SHIFT CONSUMPTION LOG MODULE */}
-      <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100">
-        <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
-          <Layers size={14} className="text-blue-600" /> Daily Shift Consumption Log
-        </h3>
-        <form onSubmit={handleLogConsumption} className="space-y-4">
-          <div className="flex gap-2 mb-2">
-            <input 
-              type="date" required
-              className="flex-1 bg-gray-50 border border-gray-100 p-3 rounded-xl font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 uppercase shadow-inner"
-              value={consumptionDate} onChange={e => setConsumptionDate(e.target.value)}
-            />
-            <select 
-              className="flex-1 bg-gray-50 border border-gray-100 p-3 rounded-xl font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 shadow-inner"
-              value={consumptionShift} onChange={e => setConsumptionShift(e.target.value)}
-            >
-              <option value="Day Shift">Day Shift</option>
-              <option value="Night Shift">Night Shift</option>
-            </select>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 bg-gray-50/50 p-3 rounded-2xl border border-gray-50">
-            {CATEGORIES.map(cat => (
-              <div key={cat.name} className="flex flex-col bg-white p-2.5 rounded-xl shadow-sm border border-gray-100 min-h-[120px]">
-                <label className={`text-[10px] font-black uppercase flex items-center gap-1.5 mb-2 px-1 ${cat.text}`}>
-                  {cat.icon} {cat.name}
-                </label>
-                
-                <div className="space-y-2 flex-1">
-                  {consumedItems[cat.name].map((item) => (
-                    <div key={item.uid} className="flex flex-col gap-1.5 bg-gray-50 p-2 rounded-lg relative group border border-gray-100">
-                      {consumedItems[cat.name].length > 1 && (
-                        <button 
-                          type="button" 
-                          onClick={() => removeRow(cat.name, item.uid)}
-                          className="absolute -top-1.5 -right-1.5 bg-red-100 text-red-600 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-sm"
-                        >
-                          <X size={10} />
-                        </button>
-                      )}
-                      <MaterialDropdown 
-                        category={cat.name} 
-                        materials={materials} 
-                        selectedId={item.materialId} 
-                        onSelect={(id) => handleItemChange(cat.name, item.uid, 'materialId', id)} 
-                      />
-                      <input 
-                        type="number" placeholder="Weight (kg)"
-                        className="w-full bg-white border border-gray-200 p-2.5 rounded-lg text-xs font-bold outline-none focus:border-blue-400" 
-                        value={item.qty} 
-                        onChange={e => handleItemChange(cat.name, item.uid, 'qty', e.target.value)} 
-                      />
-                    </div>
-                  ))}
+      {/* --- TOP MASTER TABS --- */}
+      <div className="flex bg-gray-100 p-1.5 rounded-2xl gap-1 shadow-inner">
+        <button 
+          onClick={() => setMainTab('inventory')}
+          className={`flex-1 py-3 flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${mainTab === 'inventory' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200/50'}`}
+        >
+          <Database size={16} /> RM Inventory Log
+        </button>
+        <button 
+          onClick={() => setMainTab('consumption')}
+          className={`flex-1 py-3 flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${mainTab === 'consumption' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200/50'}`}
+        >
+          <ClipboardList size={16} /> Shift Consumption Log
+        </button>
+      </div>
+
+      {/* --- TAB 1: SHIFT CONSUMPTION LOG --- */}
+      {mainTab === 'consumption' && (
+        <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <form onSubmit={handleLogConsumption} className="space-y-4">
+            <div className="flex gap-2 mb-2">
+              <input 
+                type="date" required
+                className="flex-1 bg-gray-50 border border-gray-100 p-3 rounded-xl font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 uppercase shadow-inner"
+                value={consumptionDate} onChange={e => setConsumptionDate(e.target.value)}
+              />
+              <select 
+                className="flex-1 bg-gray-50 border border-gray-100 p-3 rounded-xl font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 shadow-inner"
+                value={consumptionShift} onChange={e => setConsumptionShift(e.target.value)}
+              >
+                <option value="Day Shift">Day Shift</option>
+                <option value="Night Shift">Night Shift</option>
+              </select>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 bg-gray-50/50 p-3 rounded-2xl border border-gray-50">
+              {CATEGORIES.map(cat => (
+                <div key={cat.name} className="flex flex-col bg-white p-2.5 rounded-xl shadow-sm border border-gray-100 min-h-[120px]">
+                  <label className={`text-[10px] font-black uppercase flex items-center gap-1.5 mb-2 px-1 ${cat.text}`}>
+                    {cat.icon} {cat.name}
+                  </label>
+                  
+                  <div className="space-y-2 flex-1">
+                    {consumedItems[cat.name].map((item) => (
+                      <div key={item.uid} className="flex flex-col gap-1.5 bg-gray-50 p-2 rounded-lg relative group border border-gray-100">
+                        {consumedItems[cat.name].length > 1 && (
+                          <button 
+                            type="button" 
+                            onClick={() => removeRow(cat.name, item.uid)}
+                            className="absolute -top-1.5 -right-1.5 bg-red-100 text-red-600 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-sm"
+                          >
+                            <X size={10} />
+                          </button>
+                        )}
+                        <MaterialDropdown 
+                          category={cat.name} 
+                          materials={materials} 
+                          selectedId={item.materialId} 
+                          onSelect={(id) => handleItemChange(cat.name, item.uid, 'materialId', id)} 
+                        />
+                        <input 
+                          type="number" placeholder="Weight (kg)"
+                          className="w-full bg-white border border-gray-200 p-2.5 rounded-lg text-xs font-bold outline-none focus:border-blue-400" 
+                          value={item.qty} 
+                          onChange={e => handleItemChange(cat.name, item.uid, 'qty', e.target.value)} 
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <button 
+                    type="button" 
+                    onClick={() => addRow(cat.name)}
+                    className="mt-2 w-full py-1.5 border border-dashed border-gray-300 rounded-lg text-[9px] font-bold text-gray-500 uppercase flex items-center justify-center gap-1 hover:bg-gray-50 hover:text-blue-600 transition-colors"
+                  >
+                    <Plus size={10} /> Add
+                  </button>
                 </div>
-                
-                <button 
-                  type="button" 
-                  onClick={() => addRow(cat.name)}
-                  className="mt-2 w-full py-1.5 border border-dashed border-gray-300 rounded-lg text-[9px] font-bold text-gray-500 uppercase flex items-center justify-center gap-1 hover:bg-gray-50 hover:text-blue-600 transition-colors"
-                >
-                  <Plus size={10} /> Add
+              ))}
+            </div>
+            
+            <button type="submit" disabled={isSaving} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-gray-200 flex items-center justify-center gap-2 active:scale-[0.99] transition-all">
+              {isSaving ? <Loader2 size={16} className="animate-spin" /> : <><CheckCircle size={16} /> Validate & Deduct Live Inventory</>}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* --- TAB 2: RM INVENTORY LOG --- */}
+      {mainTab === 'inventory' && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
+          {/* CATEGORY TABS WITH TOTALS */}
+          <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto no-scrollbar gap-1">
+            {CATEGORIES.map(cat => {
+              const isActive = activeTab === cat.name && !searchQuery;
+              return (
+                <button key={cat.name} onClick={() => {setActiveTab(cat.name); setSearchQuery('');}} className={`flex flex-col items-center justify-center px-4 py-2 rounded-xl transition-all min-w-[85px] ${isActive ? `${cat.activeBg} text-white shadow-lg` : 'bg-transparent'}`}>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className={isActive ? 'text-white' : cat.text}>{cat.icon}</span>
+                    <span className={`font-black text-[10px] uppercase tracking-tighter ${isActive ? 'text-white' : cat.text}`}>{cat.name}</span>
+                  </div>
+                  <span className={`text-[9px] font-bold ${isActive ? 'text-white/80' : 'text-gray-400'}`}>{categoryTotals[cat.name].toLocaleString()} <span className="text-[7px]">kg</span></span>
                 </button>
+              );
+            })}
+          </div>
+
+          {/* SEARCH BAR & EXPORT */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input className="w-full bg-white border border-gray-100 rounded-xl py-3 pl-10 pr-4 font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="Search materials..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            </div>
+            <button onClick={handleExport} className="bg-green-600 text-white p-3 rounded-xl shadow-lg shadow-green-100 active:scale-95 transition-all"><Download size={20} /></button>
+          </div>
+
+          {/* COMPACT CARDS */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredItems.map(m => (
+              <div key={m.id} className={`bg-white p-3 rounded-2xl border transition-all ${m.stock_quantity <= m.min_level ? 'border-red-200 bg-red-50/30' : 'border-gray-50 shadow-sm'}`}>
+                <div className="flex justify-between items-start mb-2">
+                  <div className="truncate"><div className="font-black text-gray-800 text-[11px] truncate uppercase tracking-tighter">{m.name}</div></div>
+                  <button onClick={() => setEditItem({...m})} className="p-1.5 rounded-lg bg-gray-50 text-gray-400 hover:text-blue-600"><Edit2 size={12} /></button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className={`text-lg font-black tracking-tighter ${m.stock_quantity <= m.min_level ? 'text-red-600' : 'text-gray-900'}`}>{parseFloat(m.stock_quantity).toLocaleString()} <span className="text-[9px] font-normal opacity-40">kg</span></div>
+                  {m.stock_quantity <= m.min_level && <AlertTriangle size={14} className="text-red-500" />}
+                </div>
               </div>
             ))}
           </div>
-          
-          <button type="submit" disabled={isSaving} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-gray-200 flex items-center justify-center gap-2 active:scale-[0.99] transition-all">
-            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <><CheckCircle size={16} /> Validate & Deduct Live Inventory</>}
-          </button>
-        </form>
-      </div>
 
-      {/* TABS WITH TOTALS */}
-      <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto no-scrollbar gap-1">
-        {CATEGORIES.map(cat => {
-          const isActive = activeTab === cat.name && !searchQuery;
-          return (
-            <button key={cat.name} onClick={() => {setActiveTab(cat.name); setSearchQuery('');}} className={`flex flex-col items-center justify-center px-4 py-2 rounded-xl transition-all min-w-[85px] ${isActive ? `${cat.activeBg} text-white shadow-lg` : 'bg-transparent'}`}>
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className={isActive ? 'text-white' : cat.text}>{cat.icon}</span>
-                <span className={`font-black text-[10px] uppercase tracking-tighter ${isActive ? 'text-white' : cat.text}`}>{cat.name}</span>
-              </div>
-              <span className={`text-[9px] font-bold ${isActive ? 'text-white/80' : 'text-gray-400'}`}>{categoryTotals[cat.name].toLocaleString()} <span className="text-[7px]">kg</span></span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* SEARCH BAR & EXPORT */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <input className="w-full bg-white border border-gray-100 rounded-xl py-3 pl-10 pr-4 font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="Search materials..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          {/* FLOATING ADD BUTTON */}
+          <button onClick={() => setShowAddPopup(true)} className="fixed bottom-24 right-6 bg-blue-600 text-white p-5 rounded-full shadow-2xl shadow-blue-300 active:scale-90 transition-all z-40 border-4 border-white"><Plus size={28} /></button>
         </div>
-        <button onClick={handleExport} className="bg-green-600 text-white p-3 rounded-xl shadow-lg shadow-green-100 active:scale-95 transition-all"><Download size={20} /></button>
-      </div>
-
-      {/* COMPACT CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        {filteredItems.map(m => (
-          <div key={m.id} className={`bg-white p-3 rounded-2xl border transition-all ${m.stock_quantity <= m.min_level ? 'border-red-200 bg-red-50/30' : 'border-gray-50 shadow-sm'}`}>
-            <div className="flex justify-between items-start mb-2">
-              <div className="truncate"><div className="font-black text-gray-800 text-[11px] truncate uppercase tracking-tighter">{m.name}</div></div>
-              <button onClick={() => setEditItem({...m})} className="p-1.5 rounded-lg bg-gray-50 text-gray-400 hover:text-blue-600"><Edit2 size={12} /></button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className={`text-lg font-black tracking-tighter ${m.stock_quantity <= m.min_level ? 'text-red-600' : 'text-gray-900'}`}>{parseFloat(m.stock_quantity).toLocaleString()} <span className="text-[9px] font-normal opacity-40">kg</span></div>
-              {m.stock_quantity <= m.min_level && <AlertTriangle size={14} className="text-red-500" />}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* FLOATING ADD BUTTON */}
-      <button onClick={() => setShowAddPopup(true)} className="fixed bottom-24 right-6 bg-blue-600 text-white p-5 rounded-full shadow-2xl shadow-blue-300 active:scale-90 transition-all z-40 border-4 border-white"><Plus size={28} /></button>
+      )}
 
       {/* POPUP: ADD NEW */}
       {showAddPopup && (

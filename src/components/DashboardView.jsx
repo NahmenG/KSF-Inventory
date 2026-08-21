@@ -89,36 +89,66 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
   }, [processedData.dateMap, todayDate]);
 
-  // 3. DYNAMIC CONSUMPTION CHART PREP
-  const { consumptionChartData, uniqueMaterials } = useMemo(() => {
+  // 3. DYNAMIC CONSUMPTION CHART PREP (Kg values, specific date format, stacking order, excluded items)
+  const { consumptionChartData, uniqueMaterials, cumulativeTotals } = useMemo(() => {
     const dailyMap = {};
     const materialsSet = new Set();
+    const totals = {};
 
     consumptionLogs.forEach(log => {
       if (!dailyMap[log.date]) {
-        dailyMap[log.date] = { date: log.date.slice(5) };
+        // Parse the YYYY-MM-DD date string down to just the two digit day
+        const dayString = parseInt(log.date.split('-')[2], 10).toString();
+        dailyMap[log.date] = { date: log.date, displayDate: dayString };
       }
-      // Process JSONB payload
+      
       if (log.consumed_data && typeof log.consumed_data === 'object') {
         Object.entries(log.consumed_data).forEach(([matName, kgVal]) => {
+          // EXCLUSION: Ignore any item matching "core pipe" from the graph dataset entirely
+          if (matName.toLowerCase().includes('core pipe')) return;
+          
           materialsSet.add(matName);
-          const tons = parseFloat(kgVal) / 1000;
-          dailyMap[log.date][matName] = (dailyMap[log.date][matName] || 0) + tons;
+          const kg = parseFloat(kgVal) || 0;
+          
+          dailyMap[log.date][matName] = (dailyMap[log.date][matName] || 0) + kg;
+          totals[matName] = (totals[matName] || 0) + kg;
         });
       }
     });
 
-    return {
-      consumptionChartData: Object.values(dailyMap).sort((a,b) => a.date.localeCompare(b.date)),
-      uniqueMaterials: Array.from(materialsSet)
+    // Rigid Stacking Order Algorithm (The lower the number, the lower on the bar stack)
+    const getSortValue = (name) => {
+      const lower = name.toLowerCase();
+      // 1. Virgin PP
+      if (lower.includes('pp') && !lower.includes('rpp') && !lower.includes('recycled')) return 10;
+      // 2. Recycled PP
+      if (lower.includes('rpp') || lower.includes('recycled')) return 20;
+      
+      // Fallback category mapping for other dynamic items
+      const mat = materials.find(m => m.name === name);
+      const cat = mat ? mat.category : 'Others';
+      
+      if (cat === 'Filler') return 30; // 3. Filler
+      if (cat === 'Colour') return 40; // 4. Color
+      if (cat === 'Additives') return 50; // 5. Additives
+      return 60; // 6. Everything else on top
     };
-  }, [consumptionLogs]);
+
+    const sortedMaterials = Array.from(materialsSet).sort((a, b) => getSortValue(a) - getSortValue(b));
+    // Sort array chronologically based on the original YYYY-MM-DD date format
+    const sortedData = Object.values(dailyMap).sort((a,b) => a.date.localeCompare(b.date));
+
+    return {
+      consumptionChartData: sortedData,
+      uniqueMaterials: sortedMaterials,
+      cumulativeTotals: totals
+    };
+  }, [consumptionLogs, materials]);
 
   // 4. FACTORY REPORT EXPORT LOGIC
   const downloadFactoryReport = () => {
     const wb = XLSX.utils.book_new();
 
-    // Dynamically unfold JSONB payload for the spreadsheet
     const consumptionSheet = consumptionLogs.map(c => {
       const row = { "Date": c.date, "Shift": c.shift };
       if (c.consumed_data && typeof c.consumed_data === 'object') {
@@ -130,7 +160,6 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(consumptionSheet), "Daily_Consumption");
 
-    // Sheet 2: Production vs Dispatch (KSF Sales)
     const statsSheet = Object.entries(processedData.dateMap).map(([date, data]) => ({
       "Date": date,
       "Total Produced Rolls": data.p,
@@ -196,7 +225,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <div className="flex justify-between items-center mb-4 border-b border-gray-50 pb-3">
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
-            <Layers size={16} className="text-indigo-600"/> Daily Material Consumption (Tons)
+            <Layers size={16} className="text-indigo-600"/> Daily Material Consumption (Kg)
           </h3>
           <button onClick={downloadFactoryReport} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm">
             <FileSpreadsheet size={14} /> Factory Report
@@ -206,17 +235,17 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={consumptionChartData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="date" fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
+              <XAxis dataKey="displayDate" fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
               <YAxis fontSize={9} axisLine={false} tickLine={false} />
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
               <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
               
-              {/* Dynamically render a Bar solely for materials that were actually consumed */}
+              {/* Iterating through strictly sorted list to enforce stacking order */}
               {uniqueMaterials.map((matName, index) => (
                 <Bar 
                   key={matName} 
                   dataKey={matName} 
-                  name={matName} 
+                  name={`${matName} (${cumulativeTotals[matName]} kg)`} 
                   stackId="a" 
                   fill={CHART_COLORS[index % CHART_COLORS.length]} 
                 />
