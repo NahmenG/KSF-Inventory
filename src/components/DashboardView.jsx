@@ -97,14 +97,12 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
 
     consumptionLogs.forEach(log => {
       if (!dailyMap[log.date]) {
-        // Parse the YYYY-MM-DD date string down to just the two digit day
         const dayString = parseInt(log.date.split('-')[2], 10).toString();
         dailyMap[log.date] = { date: log.date, displayDate: dayString };
       }
       
       if (log.consumed_data && typeof log.consumed_data === 'object') {
         Object.entries(log.consumed_data).forEach(([matName, kgVal]) => {
-          // EXCLUSION: Ignore any item matching "core pipe" from the graph dataset entirely
           if (matName.toLowerCase().includes('core pipe')) return;
           
           materialsSet.add(matName);
@@ -116,26 +114,19 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       }
     });
 
-    // Rigid Stacking Order Algorithm (The lower the number, the lower on the bar stack)
     const getSortValue = (name) => {
       const lower = name.toLowerCase();
-      // 1. Virgin PP
       if (lower.includes('pp') && !lower.includes('rpp') && !lower.includes('recycled')) return 10;
-      // 2. Recycled PP
       if (lower.includes('rpp') || lower.includes('recycled')) return 20;
-      
-      // Fallback category mapping for other dynamic items
       const mat = materials.find(m => m.name === name);
       const cat = mat ? mat.category : 'Others';
-      
-      if (cat === 'Filler') return 30; // 3. Filler
-      if (cat === 'Colour') return 40; // 4. Color
-      if (cat === 'Additives') return 50; // 5. Additives
-      return 60; // 6. Everything else on top
+      if (cat === 'Filler') return 30;
+      if (cat === 'Colour') return 40;
+      if (cat === 'Additives') return 50;
+      return 60;
     };
 
     const sortedMaterials = Array.from(materialsSet).sort((a, b) => getSortValue(a) - getSortValue(b));
-    // Sort array chronologically based on the original YYYY-MM-DD date format
     const sortedData = Object.values(dailyMap).sort((a,b) => a.date.localeCompare(b.date));
 
     return {
@@ -145,7 +136,59 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     };
   }, [consumptionLogs, materials]);
 
-  // 4. FACTORY REPORT EXPORT LOGIC
+  // --- 4. SHIFT-ALIGNED EFFICIENCY CALCULATOR (Consumption vs Production vs Wastage) ---
+  const efficiencyChartData = useMemo(() => {
+    const dailyStats = {};
+
+    // 8AM to 8AM Time-Shifter: Forces night shift production (midnight to 8AM) to belong to the previous date
+    const getShiftDateString = (dateString) => {
+      const d = new Date(dateString);
+      if (d.getHours() < 8) d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    // 1. Sum up all shift consumptions per day
+    consumptionLogs.forEach(log => {
+      if (!dailyStats[log.date]) {
+        dailyStats[log.date] = { date: log.date, displayDate: parseInt(log.date.split('-')[2], 10).toString(), Consumption: 0, Production: 0, Wastage: 0 };
+      }
+      if (log.consumed_data && typeof log.consumed_data === 'object') {
+        Object.entries(log.consumed_data).forEach(([matName, kgVal]) => {
+          if (!matName.toLowerCase().includes('core pipe')) {
+            dailyStats[log.date].Consumption += (parseFloat(kgVal) || 0);
+          }
+        });
+      }
+    });
+
+    // 2. Sum up all production weights based on the rigid 8AM-8AM window
+    rolls.forEach(r => {
+      if (r.created_at) {
+        const shiftDate = getShiftDateString(r.created_at);
+        if (!dailyStats[shiftDate]) {
+          dailyStats[shiftDate] = { date: shiftDate, displayDate: parseInt(shiftDate.split('-')[2], 10).toString(), Consumption: 0, Production: 0, Wastage: 0 };
+        }
+        dailyStats[shiftDate].Production += (parseFloat(r.net_weight) || 0);
+      }
+    });
+
+    // 3. Finalize wastage calculation only for days that have logged consumption
+    return Object.values(dailyStats).map(stat => {
+      let w = 0;
+      if (stat.Consumption > 0) {
+         w = stat.Consumption - stat.Production;
+      }
+      return {
+        ...stat,
+        Consumption: parseFloat(stat.Consumption.toFixed(1)),
+        Production: parseFloat(stat.Production.toFixed(1)),
+        Wastage: parseFloat(w.toFixed(1))
+      };
+    }).sort((a,b) => a.date.localeCompare(b.date));
+
+  }, [consumptionLogs, rolls]);
+
+  // 5. FACTORY REPORT EXPORT LOGIC
   const downloadFactoryReport = () => {
     const wb = XLSX.utils.book_new();
 
@@ -240,7 +283,6 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
               <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
               
-              {/* Iterating through strictly sorted list to enforce stacking order */}
               {uniqueMaterials.map((matName, index) => (
                 <Bar 
                   key={matName} 
@@ -250,6 +292,30 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
                   fill={CHART_COLORS[index % CHART_COLORS.length]} 
                 />
               ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* --- NEW FACTORY EFFICIENCY COMPONENT --- */}
+      <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+        <div className="flex justify-between items-center mb-4 border-b border-gray-50 pb-3">
+          <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+            <Activity size={16} className="text-blue-600"/> Daily Efficiency: Consumption vs Production (Kg)
+          </h3>
+        </div>
+        <div className="h-64 min-h-[256px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={efficiencyChartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="displayDate" fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
+              <YAxis fontSize={9} axisLine={false} tickLine={false} />
+              <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
+              
+              <Bar dataKey="Consumption" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Production" fill="#22c55e" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Wastage" fill="#ef4444" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
