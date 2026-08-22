@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Calculator, Activity, Truck, FileSpreadsheet, Layers } from 'lucide-react';
+import { TrendingUp, Clock, AlertCircle, Package, History, BarChart3, PieChart as PieIcon, Edit3, Send, PlusCircle, Calculator, Activity, Truck, FileSpreadsheet, Layers, Calendar } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import * as XLSX from 'xlsx';
 
@@ -13,7 +13,11 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
   const todayDate = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
   
+  // --- UNIFIED REPORTING STATE ---
   const [consumptionLogs, setConsumptionLogs] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    return `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}`;
+  });
   
   useEffect(() => {
     const fetchLogs = async () => {
@@ -23,6 +27,19 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     fetchLogs();
   }, [rolls]);
 
+  // Dynamically calculate available months from the database history
+  const availableMonths = useMemo(() => {
+    const months = new Set();
+    rolls.forEach(r => {
+      if (r.created_at) months.add(r.created_at.substring(0, 7));
+    });
+    consumptionLogs.forEach(c => {
+      if (c.date) months.add(c.date.substring(0, 7));
+    });
+    months.add(`${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}`);
+    return Array.from(months).sort().reverse(); 
+  }, [rolls, consumptionLogs, todayDate]);
+
   // 1. MASTER DATA PROCESSOR
   const processedData = useMemo(() => {
     const inStock = [];
@@ -31,7 +48,6 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     const agedMap = {};
     let totalAgedWeight = 0;
     const dateMap = {};
-    const startOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
 
     rolls.forEach(r => {
       const rDate = new Date(r.created_at);
@@ -53,7 +69,8 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         if (new Date(r.dispatched_at).toLocaleDateString() === todayStr) dispatchedToday.push(r);
       }
 
-      if (rDate >= startOfMonth) {
+      // Universal Date Mapping for historical filtering
+      if (r.created_at) {
         if (!dateMap[rDateStr]) dateMap[rDateStr] = { p: 0, d: 0, pw: 0, dw: 0 };
         dateMap[rDateStr].p += 1;
         dateMap[rDateStr].pw += weight;
@@ -61,25 +78,30 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       
       if (r.status === 'dispatched' && r.dispatched_at) {
         const dDate = new Date(r.dispatched_at);
-        if (dDate >= startOfMonth) {
-          const dStr = dDate.toLocaleDateString();
-          if (!dateMap[dStr]) dateMap[dStr] = { p: 0, d: 0, pw: 0, dw: 0 };
-          dateMap[dStr].d += 1;
-          dateMap[dStr].dw += weight;
-        }
+        const dStr = dDate.toLocaleDateString();
+        if (!dateMap[dStr]) dateMap[dStr] = { p: 0, d: 0, pw: 0, dw: 0 };
+        dateMap[dStr].d += 1;
+        dateMap[dStr].dw += weight;
       }
     });
 
     return { inStock, producedToday, dispatchedToday, agedMap, totalAgedWeight, dateMap };
   }, [rolls, todayStr, todayDate]);
 
-  // 2. TIMELINE CALCULATIONS
+  // 2. TIMELINE CALCULATIONS (Filtered by selectedMonth)
   const { timelineData, totalProdMonth, totalDispMonth } = useMemo(() => {
     const data = [];
     let pSum = 0; let dSum = 0;
-    const start = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+    
+    const [year, month] = selectedMonth.split('-');
+    const start = new Date(year, parseInt(month) - 1, 1);
+    
+    // If selected month is current month, only map up to today. Otherwise, map entire month.
+    const isCurrentMonth = year == todayDate.getFullYear() && parseInt(month) === todayDate.getMonth() + 1;
+    const end = isCurrentMonth ? todayDate : new Date(year, parseInt(month), 0);
+    
     const tempDate = new Date(start);
-    while (tempDate <= todayDate) {
+    while (tempDate <= end) {
       const s = tempDate.toLocaleDateString();
       const day = processedData.dateMap[s] || { p: 0, d: 0, pw: 0, dw: 0 };
       pSum += day.pw; dSum += day.dw;
@@ -87,15 +109,17 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       tempDate.setDate(tempDate.getDate() + 1);
     }
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
-  }, [processedData.dateMap, todayDate]);
+  }, [processedData.dateMap, todayDate, selectedMonth]);
 
-  // 3. DYNAMIC CONSUMPTION CHART PREP (Kg values, specific date format, stacking order, excluded items)
+  // 3. DYNAMIC CONSUMPTION CHART PREP (Filtered by selectedMonth)
   const { consumptionChartData, uniqueMaterials, cumulativeTotals } = useMemo(() => {
     const dailyMap = {};
     const materialsSet = new Set();
     const totals = {};
 
     consumptionLogs.forEach(log => {
+      if (!log.date.startsWith(selectedMonth)) return; // Restrict to selected month
+
       if (!dailyMap[log.date]) {
         const dayString = parseInt(log.date.split('-')[2], 10).toString();
         dailyMap[log.date] = { date: log.date, displayDate: dayString };
@@ -134,21 +158,21 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       uniqueMaterials: sortedMaterials,
       cumulativeTotals: totals
     };
-  }, [consumptionLogs, materials]);
+  }, [consumptionLogs, materials, selectedMonth]);
 
-  // --- 4. SHIFT-ALIGNED EFFICIENCY CALCULATOR (Consumption vs Production vs Wastage) ---
+  // --- 4. SHIFT-ALIGNED EFFICIENCY CALCULATOR (Filtered by selectedMonth) ---
   const efficiencyChartData = useMemo(() => {
     const dailyStats = {};
 
-    // 8AM to 8AM Time-Shifter: Forces night shift production (midnight to 8AM) to belong to the previous date
     const getShiftDateString = (dateString) => {
       const d = new Date(dateString);
       if (d.getHours() < 8) d.setDate(d.getDate() - 1);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
-    // 1. Sum up all shift consumptions per day
     consumptionLogs.forEach(log => {
+      if (!log.date.startsWith(selectedMonth)) return; // Restrict to selected month
+
       if (!dailyStats[log.date]) {
         dailyStats[log.date] = { date: log.date, displayDate: parseInt(log.date.split('-')[2], 10).toString(), Consumption: 0, Production: 0, Wastage: 0 };
       }
@@ -161,10 +185,11 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       }
     });
 
-    // 2. Sum up all production weights based on the rigid 8AM-8AM window
     rolls.forEach(r => {
       if (r.created_at) {
         const shiftDate = getShiftDateString(r.created_at);
+        if (!shiftDate.startsWith(selectedMonth)) return; // Restrict to selected month
+
         if (!dailyStats[shiftDate]) {
           dailyStats[shiftDate] = { date: shiftDate, displayDate: parseInt(shiftDate.split('-')[2], 10).toString(), Consumption: 0, Production: 0, Wastage: 0 };
         }
@@ -172,7 +197,6 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       }
     });
 
-    // 3. Finalize wastage calculation only for days that have logged consumption
     return Object.values(dailyStats).map(stat => {
       let w = 0;
       if (stat.Consumption > 0) {
@@ -186,13 +210,14 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       };
     }).sort((a,b) => a.date.localeCompare(b.date));
 
-  }, [consumptionLogs, rolls]);
+  }, [consumptionLogs, rolls, selectedMonth]);
 
-  // 5. FACTORY REPORT EXPORT LOGIC
+  // 5. FACTORY REPORT EXPORT LOGIC (Filtered by selectedMonth)
   const downloadFactoryReport = () => {
     const wb = XLSX.utils.book_new();
 
-    const consumptionSheet = consumptionLogs.map(c => {
+    const filteredLogs = consumptionLogs.filter(log => log.date.startsWith(selectedMonth));
+    const consumptionSheet = filteredLogs.map(c => {
       const row = { "Date": c.date, "Shift": c.shift };
       if (c.consumed_data && typeof c.consumed_data === 'object') {
         Object.entries(c.consumed_data).forEach(([matName, kgVal]) => {
@@ -201,18 +226,31 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       }
       return row;
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(consumptionSheet), "Daily_Consumption");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(consumptionSheet), `Consumption_${selectedMonth}`);
 
-    const statsSheet = Object.entries(processedData.dateMap).map(([date, data]) => ({
-      "Date": date,
-      "Total Produced Rolls": data.p,
-      "Produced Weight (kg)": data.pw,
-      "Total KSF Sales / Dispatched Rolls": data.d,
-      "Dispatched Weight (kg)": data.dw
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(statsSheet), "Production_Sales_Report");
-
-    XLSX.writeFile(wb, `KSF_Factory_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const statsSheet = [];
+    const [year, month] = selectedMonth.split('-');
+    const start = new Date(year, parseInt(month) - 1, 1);
+    const end = new Date(year, parseInt(month), 0);
+    const tempDate = new Date(start);
+    
+    while (tempDate <= end) {
+      const s = tempDate.toLocaleDateString();
+      const data = processedData.dateMap[s];
+      if (data && (data.p > 0 || data.d > 0)) {
+        statsSheet.push({
+          "Date": s,
+          "Total Produced Rolls": data.p,
+          "Produced Weight (kg)": data.pw,
+          "Total KSF Sales / Dispatched Rolls": data.d,
+          "Dispatched Weight (kg)": data.dw
+        });
+      }
+      tempDate.setDate(tempDate.getDate() + 1);
+    }
+    
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(statsSheet), `Sales_${selectedMonth}`);
+    XLSX.writeFile(wb, `KSF_Factory_Report_${selectedMonth}.xlsx`);
   };
 
   // RECENT ACTIVITY
@@ -264,15 +302,33 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
+      {/* --- MASTER REPORTING CONTROLS --- */}
+      <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center z-10 sticky top-2">
+        <div className="flex items-center gap-2">
+          <Calendar size={18} className="text-indigo-600" />
+          <select 
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-xs font-black text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+          >
+            {availableMonths.map(m => (
+              <option key={m} value={m}>
+                {new Date(m + '-01').toLocaleString('default', { month: 'short', year: 'numeric' })}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button onClick={downloadFactoryReport} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all active:scale-95 shadow-md shadow-indigo-100">
+          <FileSpreadsheet size={14} /> Export Month
+        </button>
+      </div>
+
       {/* --- FACTORY REPORT COMPONENT (DYNAMIC BARS) --- */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <div className="flex justify-between items-center mb-4 border-b border-gray-50 pb-3">
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
             <Layers size={16} className="text-indigo-600"/> Daily Material Consumption (Kg)
           </h3>
-          <button onClick={downloadFactoryReport} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm">
-            <FileSpreadsheet size={14} /> Factory Report
-          </button>
         </div>
         <div className="h-64 min-h-[256px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -297,11 +353,11 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         </div>
       </div>
 
-      {/* --- NEW FACTORY EFFICIENCY COMPONENT --- */}
+      {/* --- FACTORY EFFICIENCY COMPONENT (STACKED) --- */}
       <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
         <div className="flex justify-between items-center mb-4 border-b border-gray-50 pb-3">
           <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
-            <Activity size={16} className="text-blue-600"/> Daily Efficiency: Consumption vs Production (Kg)
+            <Activity size={16} className="text-blue-600"/> Daily Efficiency: C / P / W (Kg)
           </h3>
         </div>
         <div className="h-64 min-h-[256px]">
@@ -313,9 +369,10 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
               <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
               
-              <Bar dataKey="Consumption" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Production" fill="#22c55e" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Wastage" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              {/* StackId="a" forces them to render stacked on top of one another */}
+              <Bar dataKey="Consumption" stackId="a" fill="#3b82f6" />
+              <Bar dataKey="Production" stackId="a" fill="#22c55e" />
+              <Bar dataKey="Wastage" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
