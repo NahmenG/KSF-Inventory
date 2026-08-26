@@ -41,7 +41,7 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // --- UPDATED VALUE CHANGE HANDLER WITH 3KG BOPP CORE LOGIC ---
+  // --- UPDATED VALUE CHANGE HANDLER WITH 3KG BOPP & LAMINATED CORE LOGIC ---
   const handleValueChange = (field, value) => {
     const updatedData = { ...formData, [field]: value };
     
@@ -52,8 +52,8 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
       const q = field === 'quality' ? value : formData.quality;
       
       if (!isNaN(w) && !isNaN(g) && w > 0) {
-        // UPDATED: BOPP uses a 3kg core per 63 inches, others use 1kg per 63 inches
-        const coreFactor = q === 'BOPP Fabric' ? 3 : 1;
+        // UPDATED: BOPP and Laminated Fabric use a 3kg core per 63 inches, others use 1kg per 63 inches
+        const coreFactor = (q === 'BOPP Fabric' || q === 'Laminated Fabric') ? 3 : 1;
         updatedData.net_weight = (g - (coreFactor * w / 63)).toFixed(2);
       }
     }
