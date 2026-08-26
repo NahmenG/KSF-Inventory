@@ -11,12 +11,20 @@ const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0
 
 const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
   const todayDate = useMemo(() => new Date(), []);
-  const todayStr = useMemo(() => todayDate.toLocaleDateString(), [todayDate]);
+  
+  // Shift "Today" backwards if it's currently before 8 AM
+  const shiftedTodayDate = useMemo(() => {
+    const d = new Date(todayDate);
+    if (d.getHours() < 8) d.setDate(d.getDate() - 1);
+    return d;
+  }, [todayDate]);
+  
+  const todayStr = useMemo(() => shiftedTodayDate.toLocaleDateString(), [shiftedTodayDate]);
   
   // --- UNIFIED REPORTING STATE ---
   const [consumptionLogs, setConsumptionLogs] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(() => {
-    return `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}`;
+    return `${shiftedTodayDate.getFullYear()}-${String(shiftedTodayDate.getMonth() + 1).padStart(2, '0')}`;
   });
   
   useEffect(() => {
@@ -27,20 +35,23 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     fetchLogs();
   }, [rolls]);
 
-  // Dynamically calculate available months from the database history
   const availableMonths = useMemo(() => {
     const months = new Set();
     rolls.forEach(r => {
-      if (r.created_at) months.add(r.created_at.substring(0, 7));
+      if (r.created_at) {
+        const d = new Date(r.created_at);
+        if (d.getHours() < 8) d.setDate(d.getDate() - 1);
+        months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
     });
     consumptionLogs.forEach(c => {
       if (c.date) months.add(c.date.substring(0, 7));
     });
-    months.add(`${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}`);
+    months.add(`${shiftedTodayDate.getFullYear()}-${String(shiftedTodayDate.getMonth() + 1).padStart(2, '0')}`);
     return Array.from(months).sort().reverse(); 
-  }, [rolls, consumptionLogs, todayDate]);
+  }, [rolls, consumptionLogs, shiftedTodayDate]);
 
-  // 1. MASTER DATA PROCESSOR
+  // 1. MASTER DATA PROCESSOR (Now entirely 8AM-8AM Shift Aligned)
   const processedData = useMemo(() => {
     const inStock = [];
     const producedToday = [];
@@ -50,13 +61,15 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     const dateMap = {};
 
     rolls.forEach(r => {
-      const rDate = new Date(r.created_at);
-      const rDateStr = rDate.toLocaleDateString();
+      // 8 AM Shift Adjustments for Production
+      const createdD = new Date(r.created_at || todayDate);
+      if (createdD.getHours() < 8) createdD.setDate(createdD.getDate() - 1);
+      const rDateStr = createdD.toLocaleDateString();
       const weight = parseFloat(r.net_weight) || 0;
 
       if (r.status === 'in_stock') {
         inStock.push(r);
-        const diffDays = Math.ceil(Math.abs(todayDate - rDate) / (1000 * 60 * 60 * 24));
+        const diffDays = Math.ceil(Math.abs(shiftedTodayDate - createdD) / (1000 * 60 * 60 * 24));
         if (diffDays > 30) {
           agedMap[r.quality] = (agedMap[r.quality] || 0) + weight;
           totalAgedWeight += weight;
@@ -64,31 +77,31 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       }
 
       if (rDateStr === todayStr) producedToday.push(r);
-      
+
+      // 8 AM Shift Adjustments for Dispatch
       if (r.status === 'dispatched' && r.dispatched_at) {
-        if (new Date(r.dispatched_at).toLocaleDateString() === todayStr) dispatchedToday.push(r);
+        const dispD = new Date(r.dispatched_at);
+        if (dispD.getHours() < 8) dispD.setDate(dispD.getDate() - 1);
+        const dStr = dispD.toLocaleDateString();
+        
+        if (dStr === todayStr) dispatchedToday.push(r);
+
+        if (!dateMap[dStr]) dateMap[dStr] = { p: 0, d: 0, pw: 0, dw: 0 };
+        dateMap[dStr].d += 1;
+        dateMap[dStr].dw += weight;
       }
 
-      // Universal Date Mapping for historical filtering
       if (r.created_at) {
         if (!dateMap[rDateStr]) dateMap[rDateStr] = { p: 0, d: 0, pw: 0, dw: 0 };
         dateMap[rDateStr].p += 1;
         dateMap[rDateStr].pw += weight;
       }
-      
-      if (r.status === 'dispatched' && r.dispatched_at) {
-        const dDate = new Date(r.dispatched_at);
-        const dStr = dDate.toLocaleDateString();
-        if (!dateMap[dStr]) dateMap[dStr] = { p: 0, d: 0, pw: 0, dw: 0 };
-        dateMap[dStr].d += 1;
-        dateMap[dStr].dw += weight;
-      }
     });
 
     return { inStock, producedToday, dispatchedToday, agedMap, totalAgedWeight, dateMap };
-  }, [rolls, todayStr, todayDate]);
+  }, [rolls, todayStr, shiftedTodayDate, todayDate]);
 
-  // 2. TIMELINE CALCULATIONS (Filtered by selectedMonth)
+  // 2. TIMELINE CALCULATIONS (Monthly Activity Graph - Shift Aligned)
   const { timelineData, totalProdMonth, totalDispMonth } = useMemo(() => {
     const data = [];
     let pSum = 0; let dSum = 0;
@@ -96,29 +109,29 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     const [year, month] = selectedMonth.split('-');
     const start = new Date(year, parseInt(month) - 1, 1);
     
-    // If selected month is current month, only map up to today. Otherwise, map entire month.
-    const isCurrentMonth = year == todayDate.getFullYear() && parseInt(month) === todayDate.getMonth() + 1;
-    const end = isCurrentMonth ? todayDate : new Date(year, parseInt(month), 0);
+    const isCurrentMonth = year == shiftedTodayDate.getFullYear() && parseInt(month) === shiftedTodayDate.getMonth() + 1;
+    const end = isCurrentMonth ? shiftedTodayDate : new Date(year, parseInt(month), 0);
     
     const tempDate = new Date(start);
     while (tempDate <= end) {
       const s = tempDate.toLocaleDateString();
       const day = processedData.dateMap[s] || { p: 0, d: 0, pw: 0, dw: 0 };
       pSum += day.pw; dSum += day.dw;
+      
       data.push({ date: tempDate.getDate().toString(), Produced: day.p, Dispatched: day.d });
       tempDate.setDate(tempDate.getDate() + 1);
     }
     return { timelineData: data, totalProdMonth: (pSum / 1000).toFixed(2), totalDispMonth: (dSum / 1000).toFixed(2) };
-  }, [processedData.dateMap, todayDate, selectedMonth]);
+  }, [processedData.dateMap, shiftedTodayDate, selectedMonth]);
 
-  // 3. DYNAMIC CONSUMPTION CHART PREP (Filtered by selectedMonth)
+  // 3. DYNAMIC CONSUMPTION CHART PREP
   const { consumptionChartData, uniqueMaterials, cumulativeTotals } = useMemo(() => {
     const dailyMap = {};
     const materialsSet = new Set();
     const totals = {};
 
     consumptionLogs.forEach(log => {
-      if (!log.date.startsWith(selectedMonth)) return; // Restrict to selected month
+      if (!log.date.startsWith(selectedMonth)) return; 
 
       if (!dailyMap[log.date]) {
         const dayString = parseInt(log.date.split('-')[2], 10).toString();
@@ -160,7 +173,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     };
   }, [consumptionLogs, materials, selectedMonth]);
 
-  // --- 4. SHIFT-ALIGNED EFFICIENCY CALCULATOR (Filtered by selectedMonth) ---
+  // --- 4. SHIFT-ALIGNED EFFICIENCY CALCULATOR ---
   const efficiencyChartData = useMemo(() => {
     const dailyStats = {};
 
@@ -171,7 +184,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     };
 
     consumptionLogs.forEach(log => {
-      if (!log.date.startsWith(selectedMonth)) return; // Restrict to selected month
+      if (!log.date.startsWith(selectedMonth)) return; 
 
       if (!dailyStats[log.date]) {
         dailyStats[log.date] = { date: log.date, displayDate: parseInt(log.date.split('-')[2], 10).toString(), Consumption: 0, Production: 0, Wastage: 0 };
@@ -188,7 +201,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     rolls.forEach(r => {
       if (r.created_at) {
         const shiftDate = getShiftDateString(r.created_at);
-        if (!shiftDate.startsWith(selectedMonth)) return; // Restrict to selected month
+        if (!shiftDate.startsWith(selectedMonth)) return; 
 
         if (!dailyStats[shiftDate]) {
           dailyStats[shiftDate] = { date: shiftDate, displayDate: parseInt(shiftDate.split('-')[2], 10).toString(), Consumption: 0, Production: 0, Wastage: 0 };
@@ -212,7 +225,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
 
   }, [consumptionLogs, rolls, selectedMonth]);
 
-  // 5. FACTORY REPORT EXPORT LOGIC (Filtered by selectedMonth)
+  // 5. FACTORY REPORT EXPORT LOGIC
   const downloadFactoryReport = () => {
     const wb = XLSX.utils.book_new();
 
@@ -369,7 +382,6 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
               <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
               
-              {/* StackId="a" forces them to render stacked on top of one another */}
               <Bar dataKey="Consumption" stackId="a" fill="#3b82f6" />
               <Bar dataKey="Production" stackId="a" fill="#22c55e" />
               <Bar dataKey="Wastage" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
