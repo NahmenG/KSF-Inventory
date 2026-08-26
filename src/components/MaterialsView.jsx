@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { 
   Package, Edit2, X, Loader2, AlertTriangle, 
   Trash2, Bell, Save, Layers, Droplets, Box, Zap, 
-  MoreHorizontal, Plus, Search, Download, CheckCircle, ChevronDown, ClipboardList, Database, Edit
+  MoreHorizontal, Plus, Search, Download, CheckCircle, ChevronDown, ClipboardList, Database, Edit, History
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -92,8 +92,8 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
   
   // --- DAILY LOGS HISTORY STATE ---
   const [dailyLogs, setDailyLogs] = useState([]);
-  const [editConsumptionLog, setEditConsumptionLog] = useState(null); // Tracks the specific log being edited
-  const [editConsumedItems, setEditConsumedItems] = useState(null); // Tracks the modal form data
+  const [editConsumptionLog, setEditConsumptionLog] = useState(null); 
+  const [editConsumedItems, setEditConsumedItems] = useState(null); 
 
   const getInitialEntries = () => ({
     Polymers: [{ uid: 'p1', materialId: '', qty: '' }],
@@ -114,7 +114,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
     { name: 'Others', icon: <MoreHorizontal size={14} />, text: 'text-slate-600', activeBg: 'bg-slate-600' }
   ];
 
-  // Fetch specific logs for the selected date
   const fetchDailyLogs = async () => {
     try {
       const { data, error } = await supabase
@@ -271,7 +270,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
     
     try {
       const updates = [];
-      // Calculate refunds
       Object.entries(consumedData).forEach(([name, oldQty]) => {
         const dbItem = materials.find(m => m.name === name);
         if (dbItem) {
@@ -279,14 +277,12 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
         }
       });
 
-      // Apply refunds
       const updatePromises = updates.map(u => 
         supabase.from('raw_materials').update({ stock_quantity: u.stock_quantity }).eq('id', u.id)
       );
       const updateResults = await Promise.all(updatePromises);
       updateResults.forEach(res => { if (res.error) throw res.error; });
 
-      // Delete the log
       const { error } = await supabase.from('consumption_logs').delete().eq('id', logId);
       if (error) throw error;
 
@@ -299,7 +295,7 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
     }
   };
 
-  // --- 3. OPEN EDIT MODAL (TRANSFORM DB JSON BACK TO FORM ARRAYS) ---
+  // --- 3. OPEN EDIT MODAL ---
   const openEditModal = (log) => {
     const initialState = getInitialEntries();
     
@@ -329,10 +325,9 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
     setIsSaving(true);
 
     try {
-      const netChanges = {}; // negative = refund to stock, positive = deduct from stock
+      const netChanges = {}; 
       const newLoggedData = {};
 
-      // 1. Process Old Data (Theoretical Refund)
       Object.entries(editConsumptionLog.consumed_data).forEach(([name, oldQty]) => {
         const dbItem = materials.find(m => m.name === name);
         if (dbItem) {
@@ -340,7 +335,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
         }
       });
 
-      // 2. Process New Data (Theoretical Deduction)
       for (const cat of CATEGORIES) {
         for (const item of editConsumedItems[cat.name]) {
           const val = parseFloat(item.qty);
@@ -356,7 +350,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
 
       if (Object.keys(newLoggedData).length === 0) throw new Error("Please select and enter a weight for at least one material.");
 
-      // 3. Verify enough stock exists for net changes
       const updates = [];
       for (const [id, change] of Object.entries(netChanges)) {
         if (change === 0) continue; 
@@ -370,17 +363,15 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
         updates.push({ id, stock_quantity: newStock });
       }
 
-      // 4. Apply Live Stock Adjustments
       const updatePromises = updates.map(u => 
         supabase.from('raw_materials').update({ stock_quantity: u.stock_quantity }).eq('id', u.id)
       );
       const updateResults = await Promise.all(updatePromises);
       updateResults.forEach(res => { if (res.error) throw res.error; });
 
-      // 5. Save corrected JSONB to Consumption Logs
       const { error: logError } = await supabase.from('consumption_logs').update({
         consumed_data: newLoggedData,
-        shift: editConsumptionLog.shift // In case shift was updated in the modal
+        shift: editConsumptionLog.shift 
       }).eq('id', editConsumptionLog.id);
       
       if (logError) throw logError;
@@ -397,8 +388,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
     }
   };
 
-
-  // --- STANDARD DATABASE ACTIONS ---
   const handleAddMaterial = async (e) => {
     e.preventDefault();
     setIsSaving(true);
@@ -468,7 +457,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
       {mainTab === 'consumption' && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
           
-          {/* THE ENTRY FORM */}
           <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100">
             <form onSubmit={handleLogConsumption} className="space-y-4">
               <div className="flex gap-2 mb-2">
@@ -538,7 +526,6 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
             </form>
           </div>
 
-          {/* DATE-FILTERED LOG HISTORY TABLE */}
           <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100">
             <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
               <History size={14} className="text-blue-600" /> Shift Logs for {consumptionDate}
