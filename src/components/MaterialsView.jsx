@@ -590,16 +590,23 @@ const MaterialsView = React.memo(({ materials, onUpdate }) => {
             <button onClick={handleExport} className="bg-green-600 text-white p-3 rounded-xl shadow-lg shadow-green-100 active:scale-95 transition-all"><Download size={20} /></button>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="flex flex-col gap-2">
             {filteredItems.map(m => (
-              <div key={m.id} className={`bg-white p-3 rounded-2xl border transition-all ${m.stock_quantity <= m.min_level ? 'border-red-200 bg-red-50/30' : 'border-gray-50 shadow-sm'}`}>
-                <div className="flex justify-between items-start mb-2">
-                  <div className="truncate"><div className="font-black text-gray-800 text-[11px] truncate uppercase tracking-tighter">{m.name}</div></div>
-                  <button onClick={() => setEditItem({...m})} className="p-1.5 rounded-lg bg-gray-50 text-gray-400 hover:text-blue-600"><Edit2 size={12} /></button>
+              <div 
+                key={m.id} 
+                onClick={() => setEditItem({...m})}
+                className={`group flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all active:scale-[0.99] ${m.stock_quantity <= m.min_level ? 'border-red-200 bg-red-50/50 hover:bg-red-100/50' : 'bg-white border-gray-100 shadow-sm hover:border-blue-200 hover:shadow-md'}`}
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="font-black text-gray-800 text-[11px] truncate uppercase tracking-tighter">{m.name}</div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className={`text-lg font-black tracking-tighter ${m.stock_quantity <= m.min_level ? 'text-red-600' : 'text-gray-900'}`}>{parseFloat(m.stock_quantity).toLocaleString()} <span className="text-[9px] font-normal opacity-40">kg</span></div>
-                  {m.stock_quantity <= m.min_level && <AlertTriangle size={14} className="text-red-500" />}
+                
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  {m.stock_quantity <= m.min_level && <AlertTriangle size={14} className="text-red-500 animate-pulse" />}
+                  <div className={`text-sm font-black tracking-tighter text-right min-w-[70px] ${m.stock_quantity <= m.min_level ? 'text-red-600' : 'text-gray-900'}`}>
+                    {parseFloat(m.stock_quantity).toLocaleString()} <span className="text-[9px] font-normal opacity-40">kg</span>
+                  </div>
+                  <Edit2 size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
                 </div>
               </div>
             ))}
