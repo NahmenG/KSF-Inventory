@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Package, Hash, User, Clock, RotateCcw, Loader, AlertTriangle, ChevronDown } from 'lucide-react';
 
-// MASTER LISTS
-const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
+// MASTER LISTS - Added "For Lamination"
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric', 'For Lamination'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
 const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
@@ -41,18 +41,15 @@ const NewProductView = React.memo(({ rolls, deviceName, onSaved, onPrint }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // --- UPDATED VALUE CHANGE HANDLER WITH 3KG BOPP & LAMINATED CORE LOGIC ---
   const handleValueChange = (field, value) => {
     const updatedData = { ...formData, [field]: value };
     
-    // Trigger calculation if Width, Gross Weight, or Quality changes
     if (field === 'width_inches' || field === 'gross_weight' || field === 'quality') {
       const w = parseFloat(field === 'width_inches' ? value : formData.width_inches);
       const g = parseFloat(field === 'gross_weight' ? value : formData.gross_weight);
       const q = field === 'quality' ? value : formData.quality;
       
       if (!isNaN(w) && !isNaN(g) && w > 0) {
-        // UPDATED: BOPP and Laminated Fabric use a 3kg core per 63 inches, others use 1kg per 63 inches
         const coreFactor = (q === 'BOPP Fabric' || q === 'Laminated Fabric') ? 3 : 1;
         updatedData.net_weight = (g - (coreFactor * w / 63)).toFixed(2);
       }
