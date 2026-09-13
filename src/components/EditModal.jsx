@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { X, Save, Trash2, ChevronDown } from 'lucide-react';
 
-// MASTER LISTS - Ensure 'Laminated Fabric' is included
-const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric'];
+// MASTER LISTS - Added 'For Lamination'
+const QUALITIES = ['Virgin', 'Fresh', 'Semi', 'Semi Fresh', 'Semi 2', 'Semi Star', 'UV Fabric', 'BOPP Fabric', 'Laminated Fabric', 'For Lamination'];
 const COLORS = ['White', 'Ivory', 'Red', 'Maroon', 'Orange', 'Lemon Yellow', 'Golden Yellow', 'Parrot Green', 'Bottle Green', 'Sea Green', 'Medical Blue', 'Royal Blue', 'Peacock Blue', 'Navy Blue', 'Pink', 'Baby Pink', 'Beige', 'Coffee Brown', 'Gray', 'Black', 'Colour Change'];
 
 export default function EditModal({ roll, isAdmin, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState({ ...roll });
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // --- UPDATED VALUE CHANGE HANDLER WITH 3KG BOPP CORE LOGIC ---
+  // --- UPDATED VALUE CHANGE HANDLER WITH 3KG CORE LOGIC ---
   const handleValueChange = (field, value) => {
     const updatedData = { ...formData, [field]: value };
     
@@ -20,8 +20,8 @@ export default function EditModal({ roll, isAdmin, onClose, onSave, onDelete }) 
       const q = field === 'quality' ? value : formData.quality;
       
       if (!isNaN(w) && !isNaN(g) && w > 0) {
-        // BOPP uses a 3kg core per 63 inches, others use 1kg per 63 inches
-        const coreFactor = q === 'BOPP Fabric' ? 3 : 1;
+        // Both BOPP and Laminated Fabric use a 3kg core per 63 inches, others use 1kg
+        const coreFactor = (q === 'BOPP Fabric' || q === 'Laminated Fabric') ? 3 : 1;
         updatedData.net_weight = (g - (coreFactor * w / 63)).toFixed(2);
       }
     }
