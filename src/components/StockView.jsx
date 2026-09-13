@@ -41,7 +41,7 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
       .filter(r => r.status === 'in_stock')
       .map(r => r.quality)
       .filter(Boolean);
-    
+
     return [...new Set([...masterQualities, ...currentQualities])].sort();
   }, [rolls]);
 
@@ -53,25 +53,27 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
     return [...new Set(colors)].sort();
   }, [rolls]);
 
-  // 3. MASTER FILTERING & SORTING LOGIC
+  // 3. MASTER FILTERING & SORTING LOGIC (8 AM Shift Aligned)
   const filtered = useMemo(() => {
     return rolls.filter(r => {
       const isStock = r.status === 'in_stock';
-      
+
       const matchCustomer = !filters.customer || 
         (r.customer_name || '').toLowerCase().includes(filters.customer.toLowerCase()) || 
         r.product_id.toLowerCase().includes(filters.customer.toLowerCase());
-      
+
       const matchQuality = !filters.quality || r.quality === filters.quality;
       const matchGSM = !filters.gsm || String(r.gsm) === filters.gsm;
       const matchWidth = !filters.width || String(r.width_inches) === filters.width;
       const matchColor = !filters.color || r.color === filters.color;
-      
-      // Safely parse local date for accurate day matching
+
+      // 8 AM Shift Offset applied to the roll's creation date
       const d = new Date(r.created_at);
+      if (d.getHours() < 8) d.setDate(d.getDate() - 1);
       const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const matchDate = !filters.date || localDate === filters.date;
       
+      const matchDate = !filters.date || localDate === filters.date;
+
       return isStock && matchCustomer && matchQuality && matchGSM && matchWidth && matchColor && matchDate;
     })
     .sort((a,b) => {
@@ -97,7 +99,7 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
       "Status": "In Stock",
       "Device Station": r.device_name || 'N/A'
     }));
-    
+
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Current_Inventory");
@@ -108,13 +110,20 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
     setFilters({ customer: '', quality: '', gsm: '', width: '', color: '', date: '' });
   };
 
+  const handleSetToday = () => {
+    const d = new Date();
+    if (d.getHours() < 8) d.setDate(d.getDate() - 1);
+    const shiftedToday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setFilters({...filters, date: shiftedToday});
+  };
+
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-500">
-      
+
       {/* SECTION 1: SEARCH PANEL */}
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 space-y-2 pb-2">
         <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-gray-100 relative transition-all">
-          
+
           {(filters.customer || filters.quality || filters.gsm || filters.width || filters.color || filters.date) && (
             <button 
               onClick={clearFilters} 
@@ -175,7 +184,7 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
               value={filters.width} 
               onChange={e => setFilters({...filters, width: e.target.value})} 
             />
-            
+
             <div className="relative">
               <select 
                 className="w-full appearance-none border border-gray-100 p-2 pr-6 rounded-xl text-[11px] font-bold bg-gray-50 outline-none focus:ring-2 focus:ring-blue-100 shadow-inner"
@@ -192,12 +201,20 @@ const StockView = React.memo(({ rolls, isAdmin, onPrint, onSelectRoll }) => {
           </div>
 
           <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
-            <input 
-              type="date"
-              className="flex-1 py-1.5 px-2 border border-gray-100 rounded-lg bg-white text-[10px] font-black text-gray-600 shadow-sm outline-none focus:ring-2 focus:ring-blue-100 uppercase text-center"
-              value={filters.date || ''}
-              onChange={e => setFilters({...filters, date: e.target.value})}
-            />
+            <div className="flex flex-1 gap-1">
+              <input 
+                type="date"
+                className="w-full py-1.5 px-2 border border-gray-100 rounded-lg bg-white text-[10px] font-black text-gray-600 shadow-sm outline-none focus:ring-2 focus:ring-blue-100 uppercase text-center"
+                value={filters.date || ''}
+                onChange={e => setFilters({...filters, date: e.target.value})}
+              />
+              <button 
+                onClick={handleSetToday}
+                className="bg-blue-50 text-blue-600 px-3 rounded-lg font-black text-[10px] shadow-sm border border-blue-100 active:scale-95 transition-all"
+              >
+                TODAY
+              </button>
+            </div>
             <button 
               onClick={() => setSort(sort === 'newest' ? 'oldest' : 'newest')} 
               className="flex-1 py-1.5 border border-gray-100 rounded-lg bg-white text-[10px] font-black text-gray-600 flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all"
