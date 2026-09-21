@@ -103,7 +103,7 @@ export default function App() {
       } else {
         // MODE B: INITIAL/RECOVERY MODE (Pagination Loop to handle 1000+ rows)
         let allStock = [];
-        let from = 0;
+        let stockFrom = 0;
         const step = 1000;
 
         while (true) {
@@ -111,27 +111,39 @@ export default function App() {
             .from('rolls')
             .select('*')
             .eq('status', 'in_stock')
-            .range(from, from + step - 1);
+            .range(stockFrom, stockFrom + step - 1);
 
           if (error) throw error;
           if (!data || data.length === 0) break;
           
           allStock = [...allStock, ...data];
           if (data.length < step) break;
-          from += step;
+          stockFrom += step;
         }
 
-        // Fetch Month's Dispatches
-        const { data: monthHistory, error: histErr } = await supabase
-          .from('rolls')
-          .select('*')
-          .eq('status', 'dispatched')
-          .gte('dispatched_at', startOfMonth);
+        // 2. Fetch Month's Dispatches (Pagination + Ordered Newest First)
+        let monthHistory = [];
+        let histFrom = 0;
 
-        if (histErr) throw histErr;
+        while (true) {
+          const { data, error: histErr } = await supabase
+            .from('rolls')
+            .select('*')
+            .eq('status', 'dispatched')
+            .gte('dispatched_at', startOfMonth)
+            .order('dispatched_at', { ascending: false }) // Forces newest rolls to download first
+            .range(histFrom, histFrom + step - 1);
+
+          if (histErr) throw histErr;
+          if (!data || data.length === 0) break;
+          
+          monthHistory = [...monthHistory, ...data];
+          if (data.length < step) break;
+          histFrom += step;
+        }
 
         if (allStock.length > 0) await db.rolls.bulkPut(allStock.map(r => ({ ...r, synced: 1 })));
-        if (monthHistory) await db.rolls.bulkPut(monthHistory.map(r => ({ ...r, synced: 1 })));
+        if (monthHistory.length > 0) await db.rolls.bulkPut(monthHistory.map(r => ({ ...r, synced: 1 })));
       }
 
       const final = await db.rolls.toArray();
@@ -185,25 +197,37 @@ export default function App() {
 
     setLoading(true);
     try {
-      // Build Supabase query
-      let query = supabase
-        .from('rolls')
-        .select('*')
-        .eq('status', 'dispatched')
-        .order('dispatched_at', { ascending: false });
+      // Build Supabase query with pagination loop
+      let rangeDispatches = [];
+      let from = 0;
+      const step = 1000;
 
-      if (startDate) query = query.gte('dispatched_at', new Date(startDate).toISOString());
-      if (endDate)   query = query.lte('dispatched_at', new Date(new Date(endDate).setHours(23, 59, 59, 999)).toISOString());
+      while (true) {
+        let query = supabase
+          .from('rolls')
+          .select('*')
+          .eq('status', 'dispatched')
+          .order('dispatched_at', { ascending: false })
+          .range(from, from + step - 1);
 
-      const { data, error } = await query;
-      if (error) throw error;
+        if (startDate) query = query.gte('dispatched_at', new Date(startDate).toISOString());
+        if (endDate)   query = query.lte('dispatched_at', new Date(new Date(endDate).setHours(23, 59, 59, 999)).toISOString());
 
-      if (data && data.length > 0) {
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        rangeDispatches = [...rangeDispatches, ...data];
+        if (data.length < step) break;
+        from += step;
+      }
+
+      if (rangeDispatches.length > 0) {
         // Merge fetched range into Dexie (don't overwrite unsynced local records)
         const pending = await db.rolls.where({ synced: 0 }).toArray();
         const pendingIds = new Set(pending.map(p => p.product_id));
         await db.rolls.bulkPut(
-          data.map(r => ({ ...r, synced: pendingIds.has(r.product_id) ? 0 : 1 }))
+          rangeDispatches.map(r => ({ ...r, synced: pendingIds.has(r.product_id) ? 0 : 1 }))
         );
       }
 
@@ -214,7 +238,7 @@ export default function App() {
       const start = startDate ? new Date(startDate) : null;
       const end = endDate ? new Date(new Date(endDate).setHours(23, 59, 59, 999)) : null;
 
-      const rangeDispatched = allLocal.filter(r => {
+      const filteredDispatched = allLocal.filter(r => {
         if (r.status !== 'dispatched') return false;
         const d = new Date(r.dispatched_at || r.created_at);
         if (start && d < start) return false;
@@ -223,7 +247,7 @@ export default function App() {
       });
 
       setRolls(
-        [...inStock, ...rangeDispatched].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        [...inStock, ...filteredDispatched].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       );
       setActiveRange('custom');
 
@@ -370,8 +394,8 @@ export default function App() {
           <DashboardView
             rolls={rolls}
             materials={materials}
-            isAdmin={isAdmin}           // FIX: was missing
-            fetchData={fetchData}       // FIX: was missing
+            isAdmin={isAdmin}
+            fetchData={fetchData}
             onOpenSyncList={() => setShowUnsyncedList(true)}
           />
         )}
@@ -403,7 +427,7 @@ export default function App() {
             rolls={rolls.filter(r => r.status === 'dispatched')}
             isAdmin={isAdmin}
             onSelectRoll={setEditRoll}
-            onFetchRange={handleFetchRange}  // FIX: now points to real range handler
+            onFetchRange={handleFetchRange}
             activeRange={activeRange}
           />
         )}
