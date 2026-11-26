@@ -23,6 +23,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
   
   // --- UNIFIED REPORTING STATE ---
   const [consumptionLogs, setConsumptionLogs] = useState([]);
+  const [showAllMaterials, setShowAllMaterials] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     return `${shiftedTodayDate.getFullYear()}-${String(shiftedTodayDate.getMonth() + 1).padStart(2, '0')}`;
   });
@@ -173,8 +174,18 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
     };
   }, [consumptionLogs, materials, selectedMonth]);
 
+  const materialLegendItems = useMemo(() => {
+    return uniqueMaterials
+      .map((matName, index) => ({
+        name: matName,
+        total: cumulativeTotals[matName] || 0,
+        color: CHART_COLORS[index % CHART_COLORS.length],
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [uniqueMaterials, cumulativeTotals]);
+
   // --- 4. SHIFT-ALIGNED EFFICIENCY CALCULATOR ---
-  const efficiencyChartData = useMemo(() => {
+  const { efficiencyChartData, efficiencyTotals } = useMemo(() => {
     const dailyStats = {};
 
     const getShiftDateString = (dateString) => {
@@ -210,7 +221,7 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
       }
     });
 
-    return Object.values(dailyStats).map(stat => {
+    const sorted = Object.values(dailyStats).map(stat => {
       let w = 0;
       if (stat.Consumption > 0) {
          w = stat.Consumption - stat.Production;
@@ -222,6 +233,17 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
         Wastage: parseFloat(w.toFixed(1))
       };
     }).sort((a,b) => a.date.localeCompare(b.date));
+
+    const totals = sorted.reduce(
+      (acc, cur) => ({
+        Consumption: acc.Consumption + cur.Consumption,
+        Production: acc.Production + cur.Production,
+        Wastage: acc.Wastage + cur.Wastage,
+      }),
+      { Consumption: 0, Production: 0, Wastage: 0 }
+    );
+
+    return { efficiencyChartData: sorted, efficiencyTotals: totals };
 
   }, [consumptionLogs, rolls, selectedMonth]);
 
@@ -350,13 +372,12 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
               <XAxis dataKey="displayDate" fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
               <YAxis fontSize={9} axisLine={false} tickLine={false} />
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
               
               {uniqueMaterials.map((matName, index) => (
                 <Bar 
                   key={matName} 
                   dataKey={matName} 
-                  name={`${matName} (${cumulativeTotals[matName]} kg)`} 
+                  name={matName} 
                   stackId="a" 
                   fill={CHART_COLORS[index % CHART_COLORS.length]} 
                 />
@@ -364,6 +385,32 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        {materialLegendItems.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-gray-50">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {(showAllMaterials ? materialLegendItems : materialLegendItems.slice(0, 6)).map((item) => (
+                <div key={item.name} className="flex items-center justify-between gap-2 bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="text-[10px] font-bold text-gray-700 truncate">{item.name}</span>
+                  </div>
+                  <span className="text-[10px] font-black text-gray-900 shrink-0">
+                    {Number(item.total.toFixed(1)).toLocaleString()} kg
+                  </span>
+                </div>
+              ))}
+            </div>
+            {materialLegendItems.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setShowAllMaterials(prev => !prev)}
+                className="mt-2.5 w-full py-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50/70 hover:bg-indigo-100/70 rounded-xl transition-colors"
+              >
+                {showAllMaterials ? 'Show less' : `Show all (${materialLegendItems.length})`}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* --- FACTORY EFFICIENCY COMPONENT (STACKED) --- */}
@@ -380,7 +427,12 @@ const DashboardView = React.memo(({ rolls, materials, isAdmin, fetchData }) => {
               <XAxis dataKey="displayDate" fontSize={9} tick={{fontWeight: 'bold'}} axisLine={false} tickLine={false} />
               <YAxis fontSize={9} axisLine={false} tickLine={false} />
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} />
+              <Legend 
+                verticalAlign="top" 
+                align="right" 
+                wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingBottom: '10px' }} 
+                formatter={(val) => `${val} (${Number((efficiencyTotals[val] || 0).toFixed(1)).toLocaleString()} kg)`}
+              />
               
               <Bar dataKey="Consumption" stackId="a" fill="#3b82f6" />
               <Bar dataKey="Production" stackId="a" fill="#22c55e" />
