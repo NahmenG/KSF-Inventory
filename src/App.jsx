@@ -354,6 +354,12 @@ export default function App() {
   }, [fetchData]);
 
   const handleLogout = async () => {
+    const pendingCount = await db.rolls.where({ synced: 0 }).count();
+    if (pendingCount > 0) {
+      alert(`CRITICAL WARNING: You have ${pendingCount} unsynced roll(s) waiting in your device's memory.\n\nYou CANNOT logout or clear the cache until these rolls are safely uploaded to the cloud. Please restore your internet connection or resolve any sync errors first.`);
+      return;
+    }
+
     if(confirm("Logout and clear local cache?")) { 
       await supabase.auth.signOut(); 
       try { await db.rolls.clear(); await db.materials.clear(); } catch (e) {}
